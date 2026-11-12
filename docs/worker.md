@@ -183,6 +183,12 @@ The SDK replaces the local echo in place instead of adding the event to the time
 
 A rebuild writes events and relations; it does not clear them. The SDK timeline holds only the last pages, so clearing dropped history the projection already had, and a rebuild that raced an echo could drop the message itself.
 
+### Direct messages, members and source
+
+`m.direct` may be missing right after a start, so the worker resolves direct membership from the projection's own copy when the account data has not arrived, and writes it back when it has. Leaving a room removes its record, because a rebuild never clears the room store.
+
+`lazyLoadMembers` only tracks the members the client has seen, so `members` loads the full set for a room before returning it. `eventSource` returns the raw event, plus its decrypted content for an encrypted one, for the View source dialog.
+
 ### Projection reads
 
 The main thread reads the open room only, newest 2000 rows through the `roomTs` index. Every other room is a summary in `rooms`. A delta is applied when its revision is the next one; a gap re-reads the projection, and a delta for another room contributes its room summary but not its events.

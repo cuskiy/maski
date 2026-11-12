@@ -236,12 +236,26 @@ A UIA prompt can arrive before the shell exists, so the dialog host lives on `bo
 | `about.ts` | version/source/credits/privacy |
 | `media.ts` | image/video/audio/file rows and viewers |
 
+## Boot and first paint
+
+The static shell is a single full-screen loading state: the mark, a line and a spinner. The app keeps it while it opens the account database and reads the projection, and replaces it with the shell only when rooms, avatars and the open timeline can be drawn. Nothing is drawn twice, so a reload has no empty list and no letter-to-avatar swap.
+
+Avatars and cached pictures come from the media store on the main thread; the worker is asked only when a blob is missing.
+
+## Stability
+
+One anchor keeps the reader in place. A message row is recorded with its offset before the DOM changes and restored after: a page of history, a window shift, a decoded picture or a row that stops decrypting. Media boxes reserve their size and retry twice before a failure is reported. The sentinel row shows a spinner while a page loads; there is no button.
+
+## Media rows
+
+An image, video or sticker carries no bubble. Its time is a chip on the bottom right corner of the picture. A file keeps its card, because a name needs a surface.
+
 ## Navigation surfaces
 
 Three surfaces, each with one owner and one close path:
 
 - The account card unfolds under the account row inside the navigation. It holds the client actions as a two-column grid and sign out at the end. Escape, an outside press, or any action closes it.
-- The emoji and sticker panel is a single instance mounted on the document, positioned above the composer bar. A second press on the same trigger closes it; a press anywhere else, including the composer field, closes it; Escape closes it and returns focus. Switching tab cross-fades the body.
+- The emoji panel is a single instance mounted on the document, above the button that opened it and aligned to its left edge. It is placed before it paints. One scrolling surface holds emoticons first and stickers below. A second press on the same trigger closes it; a press anywhere else, including the composer field, closes it; Escape closes it and returns focus.
 - The action menu opens at the pointer beside its trigger, below when there is no room above. Arrow keys, Home and End traverse menu items and checkboxes alike.
 
 A room section is a `<details>` whose rows live in a `.room-section-body` box. The box is `display: none` when the section is closed, because a row with an explicit display would otherwise keep its layout and intercept clicks.

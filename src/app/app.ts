@@ -3083,10 +3083,12 @@ export class App {
     };
     const place = (): void => {
       const rect = trigger.getBoundingClientRect();
+      picker.style.visibility = "hidden";
       const width = picker.offsetWidth;
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
       picker.style.left = `${left}px`;
       picker.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+      picker.style.visibility = "";
     };
     type PackImage = { shortcode: string; url: string; body: string; info: Record<string, unknown> };
     const grid = (images: PackImage[], usage: "emoticon" | "sticker"): HTMLElement =>

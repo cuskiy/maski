@@ -133,6 +133,11 @@ When a decision changes, update 0.6, the matching AGENTS section, the matching d
 | E28 | An own message is projected from its remote echo: the SDK replaces the local echo in place, so the timeline never announces it again and only a real id is written. | `worker` |
 | E29 | A rebuild writes events and relations instead of clearing them, because the SDK window only holds the last pages and a rebuild can race an echo. | `worker`, `data` |
 | E30 | A deep link is never rewritten from a projection read; an unknown room shows the empty panel, a partial first sync cannot drop the route. | 12 |
+| E31 | The shell waits for the local projection behind one full-screen loading state that is already in the static HTML, so the first paint contains rooms, avatars and the open timeline. | 33, `ui` |
+| E32 | A rebuild writes rooms, events and relations and never clears them; a room disappears only on an explicit leave. `m.direct` is kept in the projection so a restart cannot reclassify a direct message. | 20, `worker` |
+| E33 | One scroll anchor holds the position: a message row, restored after a page, a window shift, a decoded picture or a row that stops decrypting. Media boxes keep their size through two quiet retries. | 22, `ui` |
+| E34 | Avatars and other cached media are read from the account database on the main thread; the worker is asked only on a miss. A room with an avatar never draws its letter first. | `ui`, `data` |
+| E35 | Media messages carry no bubble; their time is a chip on the picture. The emoji panel is one scrolling surface (emoji then stickers) above the emoji button, and a dialog fades in on open and out on close. | 23, 25 |
 | E27 | The account card, the emoji and sticker panel, and the action menu are three separate surfaces: the card unfolds in the navigation, the panel floats over the composer with one instance at a time, the menu opens at the pointer. | 10, 11, 25 |
 | E22 | Read state is one call: `setRoomReadMarkers` moves the receipt and the fully read marker together, and the timeline draws the marker where it sits. | 20, `worker`, `ui` |
 | E23 | Display names are disambiguated with the MXID when two members of a room share one. The count comes from the room summary, not the locally loaded members. | `data`, `ui` |

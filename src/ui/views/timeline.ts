@@ -40,6 +40,8 @@ export class TimelineView {
   private olderPending = false;
   private room: RoomRecord | null = null;
   private pendingScroll: TimelineScrollState | null = null;
+  private held: { key: string; offset: number; scrollTop: number } | null = null;
+  private readonly resizeObserver: ResizeObserver;
   private readonly signatures = new WeakMap<HTMLElement, string>();
 
   private readonly media: MediaCache;
@@ -63,6 +65,18 @@ export class TimelineView {
       },
       { rootMargin: "240px 0px 0px" },
     );
+    // A picture that decodes after its row exists must not shift what is being read.
+    this.resizeObserver = new ResizeObserver(() => {
+      const held = this.held;
+      if (!held) return;
+      if (Math.abs(this.scroller().scrollTop - held.scrollTop) > 2) {
+        this.held = null;
+        return;
+      }
+      this.restoreAnchor({ key: held.key, offset: held.offset });
+      held.scrollTop = this.scroller().scrollTop;
+    });
+    this.resizeObserver.observe(this.list);
     this.keyed = new KeyedList<TimelineItem>(this.list, {
       key: (item) => item.key,
       create: (item) => {
@@ -84,9 +98,13 @@ export class TimelineView {
     this.empty.hidden = items.length > 0;
     this.list.hidden = items.length === 0;
     this.keyed.render(items);
+    this.held = null;
     if (this.pendingScroll) this.applyPendingScroll();
     else if (atBottom) this.scrollToBottom();
-    else if (anchor) this.restoreAnchor(anchor);
+    else if (anchor) {
+      this.restoreAnchor(anchor);
+      this.held = { ...anchor, scrollTop: this.scroller().scrollTop };
+    }
     this.watchOlder(items);
   }
 
@@ -178,6 +196,7 @@ export class TimelineView {
 
   destroy(): void {
     this.observer.disconnect();
+    this.resizeObserver.disconnect();
     this.keyed.clear();
   }
 
