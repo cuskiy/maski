@@ -38,7 +38,13 @@ src/
     composer.ts     the field, in-place rendering, attachments, sending
     picker.ts       emoji and sticker panel
     media.ts        object URLs, avatars, pictures, viewer
-    dialogs.ts      one dialog host and every dialog
+    dialog-kit.ts   the one dialog frame and the form primitives
+    dialogs.ts      the name -> dialog dispatch and the close path
+    dialogs/
+      settings.ts   account, notifications, security, sessions, verification
+      room.ts       general, avatar, members, invite, mute, leave
+      person.ts     a sender's card and a direct message from it
+      actions.ts    search, join, create and new message
     screens.ts      auth and the key gate
     overlay.ts      menu, toast, copy
     sanitize.ts     the one HTML path
@@ -80,7 +86,8 @@ A feature reuses these; it does not grow its own.
 | Mark model and serialization | `ui/marks.ts` |
 | Draft lifecycle | `ui/composer.ts` |
 | Media fetch, cache and elements | `ui/media.ts`, `worker/api.ts` |
-| Dialog lifecycle | `ui/dialogs.ts` |
+| Dialog lifecycle | `ui/dialog-kit.ts` |
+| Which dialog a name opens | `ui/dialogs.ts` |
 | HTML sanitizing | `ui/sanitize.ts` |
 | Catalogs and formatters | `i18n/index.ts` |
 | Design values | `styles/style.css` `:root` |
