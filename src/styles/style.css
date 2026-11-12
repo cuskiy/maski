@@ -890,6 +890,15 @@ h3 {
   }
 }
 
+.event.mentioned .event-bubble {
+  background: var(--mark);
+}
+
+.event.emoji-only .event-text {
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+
 .event-menu-open {
   background: color-mix(in oklab, var(--ink) 3%, var(--page));
 }

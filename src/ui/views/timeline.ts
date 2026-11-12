@@ -221,8 +221,21 @@ export class TimelineView {
       this.reactionsNode(event),
       el("time", { class: "event-time", text: formatTime(snapshot.ui.locale, event.ts) }),
     ]);
+    const mentioned = Boolean(
+      snapshot.session && event.mentions.some((userId) => userId === snapshot.session?.userId),
+    );
+    const emojiOnly = !event.formattedBody && isEmojiOnly(event.body);
     const row = el("li", {
-      class: `event${item.own ? " own" : ""}${event.redacted ? " redacted" : ""}${item.groupStart ? "" : " grouped"}`,
+      class: [
+        "event",
+        item.own ? "own" : "",
+        event.redacted ? "redacted" : "",
+        item.groupStart ? "" : "grouped",
+        mentioned ? "mentioned" : "",
+        emojiOnly ? "emoji-only" : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       attrs: { "data-event-id": event.eventId, tabindex: "0", "aria-label": `${sender}: ${event.body}` },
     }, [
       avatar,
@@ -334,7 +347,14 @@ export class TimelineView {
     if (event.kind === "image" || event.kind === "video") {
       holder.appendChild(this.previewNode(event));
     } else if (event.kind === "sticker") {
-      const image = el("img", { attrs: { alt: media.filename || t("media.image"), loading: "lazy", decoding: "async" } });
+      const image = el("img", {
+        attrs: {
+          alt: media.filename || event.body || t("media.sticker"),
+          title: event.body,
+          loading: "lazy",
+          decoding: "async",
+        },
+      });
       this.loadMedia(image, media, "src", event);
       image.classList.add("sticker-image");
       holder.appendChild(
@@ -503,6 +523,12 @@ export class TimelineView {
       });
     if (event.kind === "sticker") node.classList.add("sticker-image");
   }
+}
+
+function isEmojiOnly(body: string): boolean {
+  const trimmed = body.trim();
+  if (!trimmed) return false;
+  return /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\s)+$/u.test(trimmed);
 }
 
 function itemSignature(item: TimelineItem): string {

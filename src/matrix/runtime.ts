@@ -509,10 +509,11 @@ export class Runtime {
     const payloadRecord = readRecord(payloadValue, "payload");
     const roomId = readStringField(payloadRecord, "roomId");
     const eventId = readStringField(payloadRecord, "eventId");
-    const room = this.requireClient().getRoom(roomId);
+    const client = this.requireClient();
+    const room = client.getRoom(roomId);
     const event = room?.findEventById(eventId);
     if (room && event) {
-      await this.requireClient().sendReadReceipt(event);
+      await client.setRoomReadMarkers(roomId, eventId, event);
       await this.refreshRoom(room);
     }
     return {};

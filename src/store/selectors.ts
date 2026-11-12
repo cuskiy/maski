@@ -98,10 +98,30 @@ export function memberFor(snapshot: AppSnapshot, roomId: string, userId: string)
   return snapshot.members.find((member) => member.roomId === roomId && member.userId === userId) ?? null;
 }
 
+// Two members may pick the same display name; the spec requires disambiguating
+// before showing them, so a clash appends the full MXID.
 export function displayName(snapshot: AppSnapshot, roomId: string, userId: string): string {
   const member = memberFor(snapshot, roomId, userId);
-  if (member?.displayName && member.displayName !== userId) return member.displayName;
-  return localpart(userId);
+  if (!member?.displayName || member.displayName === userId) return localpart(userId);
+  const clashes = nameCounts(snapshot.members).get(roomId)?.get(member.displayName.toLowerCase()) ?? 0;
+  return clashes > 1 ? `${member.displayName} (${userId})` : member.displayName;
+}
+
+const nameCache = new WeakMap<readonly MemberRecord[], Map<string, Map<string, number>>>();
+
+function nameCounts(members: readonly MemberRecord[]): Map<string, Map<string, number>> {
+  const cached = nameCache.get(members);
+  if (cached) return cached;
+  const byRoom = new Map<string, Map<string, number>>();
+  for (const member of members) {
+    if (!member.displayName) continue;
+    const names = byRoom.get(member.roomId) ?? new Map<string, number>();
+    const key = member.displayName.toLowerCase();
+    names.set(key, (names.get(key) ?? 0) + 1);
+    byRoom.set(member.roomId, names);
+  }
+  nameCache.set(members, byRoom);
+  return byRoom;
 }
 
 export function localpart(userId: string): string {

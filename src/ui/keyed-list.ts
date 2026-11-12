@@ -10,6 +10,11 @@ interface Entry<T> {
   item: T;
 }
 
+function sameOrder(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((key, index) => key === right[index]);
+}
+
 export class KeyedList<T> {
   private readonly entries = new Map<string, Entry<T>>();
   private readonly container: HTMLElement;
@@ -45,13 +50,23 @@ export class KeyedList<T> {
         this.entries.delete(key);
       }
     }
-    const fragment = document.createDocumentFragment();
-    for (const key of nextOrder) {
-      const entry = this.entries.get(key);
-      if (entry) fragment.appendChild(entry.node);
-    }
-    this.container.replaceChildren(fragment);
+    if (!sameOrder(this.order, nextOrder)) this.place(nextOrder);
     this.order = nextOrder;
+  }
+
+  // Moving a node detaches it, which drops focus and restarts media: only touch
+  // the DOM when the order actually differs from what is already there.
+  private place(order: readonly string[]): void {
+    let reference: Node | null = this.container.firstChild;
+    for (const key of order) {
+      const entry = this.entries.get(key);
+      if (!entry) continue;
+      if (entry.node === reference) {
+        reference = reference.nextSibling;
+        continue;
+      }
+      this.container.insertBefore(entry.node, reference);
+    }
   }
 
   get keys(): readonly string[] {

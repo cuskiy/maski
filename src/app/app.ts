@@ -120,6 +120,7 @@ export class App {
   private readOnly = false;
   private locksHeld = false;
   private activating: string | null = null;
+  private roomListKey = "";
   private notificationPermission: NotificationPermission | "unsupported" = "unsupported";
   private settingsSection = "account";
   private searchTimer: number | null = null;
@@ -1403,6 +1404,7 @@ export class App {
       typing,
       composerHost,
     };
+    this.roomListKey = "";
     this.root.replaceChildren(app);
     this.updateShell();
   }
@@ -1562,6 +1564,11 @@ export class App {
     if (!shell) return;
     const snapshot = this.store.getSnapshot();
     const sections = roomSections(snapshot);
+    // Rebuilding the list on every render detaches the row under the pointer, so a
+    // click could land on a node that no longer exists. Only touch it when it differs.
+    const signature = roomListSignature(sections, snapshot.activeRoomId, snapshot.ui.locale);
+    if (signature === this.roomListKey) return;
+    this.roomListKey = signature;
     const nodes: HTMLElement[] = [];
     // Sections start closed; what the user opens is remembered. The section that
     // holds the open room stays open so the current room is never hidden.
@@ -2995,6 +3002,20 @@ function msgtypeForMime(mime: string): string {
   if (mime.startsWith("video/")) return "m.video";
   if (mime.startsWith("audio/")) return "m.audio";
   return "m.file";
+}
+
+function roomListSignature(
+  sections: ReturnType<typeof roomSections>,
+  activeRoomId: string | null,
+  locale: Locale,
+): string {
+  const parts = sections.map(
+    (section) =>
+      `${section.key}:${section.rooms
+        .map((room) => `${room.roomId},${room.lastTs},${room.unreadTotal},${room.unreadHighlight},${room.muted ? 1 : 0}`)
+        .join(";")}`,
+  );
+  return [locale, activeRoomId ?? "", ...parts].join("|");
 }
 
 function emptyRoom(roomId: string): RoomRecord {

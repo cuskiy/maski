@@ -99,6 +99,8 @@ When a decision changes, update 0.6, the matching AGENTS section, the matching d
 | U24 | A message being decrypted says it is decrypting; only a real failure says it cannot be decrypted. Deleted messages leave the timeline. | user |
 | U25 | The composer also offers heading, quote, and code block on whole lines, and the same menu removes a style, with the current state shown. | user |
 | U26 | The composer is three parts: attach, the field with an emoji control inside it, and send. With an empty field the third control offers stickers. No More menu and no format strip. | user |
+| U28 | Sticker images follow the sticker module: shown in the timeline without a lightbox, the body as the accessible name and the shortcode as the tooltip. Mentions of the current user are marked, an emoji-only message takes the next type step, and the timestamp sits in the bubble's bottom right. | user |
+| U29 | The room list is only rebuilt when its content changes, so a click is never lost to a render that detached the row under the pointer. | user |
 | U27 | A styled draft renders in place. The field shows the formatted text when it is not being edited, and editing restores the plain text at the clicked position, so the caret can never drift from a styled copy. | user |
 
 **Settled engineering decisions.**

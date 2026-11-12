@@ -31,6 +31,13 @@ const allowedTags = [
   "h4",
   "h5",
   "h6",
+  "div",
+  "span",
+  "sup",
+  "sub",
+  "caption",
+  "details",
+  "summary",
 ];
 
 let installed = false;
@@ -55,6 +62,14 @@ function installHooks(): void {
         node.removeAttribute(attribute.name);
       }
     }
+    if (node.tagName === "CODE" && node.hasAttribute("class")) {
+      const language = (node.getAttribute("class") ?? "")
+        .split(/\s+/)
+        .filter((name) => name.startsWith("language-"))
+        .join(" ");
+      if (language) node.setAttribute("class", language);
+      else node.removeAttribute("class");
+    }
     if (node.tagName === "A") {
       const href = node.getAttribute("href") ?? "";
       if (!isAllowedLink(href)) {
@@ -67,11 +82,12 @@ function installHooks(): void {
   });
 }
 
+const linkSchemes = ["https://", "http://", "ftp://", "mailto:", "magnet:"];
+
 function isAllowedLink(href: string): boolean {
   if (!href) return false;
-  if (href.startsWith("https://") || href.startsWith("http://")) return true;
   if (href.startsWith("matrix.to/")) return true;
-  return false;
+  return linkSchemes.some((scheme) => href.toLowerCase().startsWith(scheme));
 }
 
 export function sanitizeRich(html: string): string {
@@ -90,10 +106,12 @@ export function sanitizeRich(html: string): string {
       "height",
       "width",
       "data-mx-emoticon",
+      "class",
+      "start",
     ],
     ALLOW_DATA_ATTR: true,
     FORBID_TAGS: ["mx-reply", "script", "style", "iframe", "object", "embed"],
-    FORBID_ATTR: ["style", "class", "id"],
+    FORBID_ATTR: ["style", "id"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mxc|matrix):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/iu,
   });
 }
