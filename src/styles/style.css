@@ -93,7 +93,13 @@
   --picker-cell: 2.9rem;
   --sticker-max: 10rem;
   --emoji-size: 1.35em;
-  --scrim: color-mix(in oklab, var(--ink) 32%, transparent);
+  --scrim: color-mix(in oklab, var(--ink) 28%, transparent);
+  --blur-dialog: 3px;
+  --blur-popover: 10px;
+  --glass-popover: light-dark(
+    color-mix(in oklab, var(--popover) 98%, transparent),
+    color-mix(in oklab, var(--popover) 96%, transparent)
+  );
   --media-chip: rgb(0 0 0 / 48%);
   --media-chip-text: #fff;
   --hover-tint: light-dark(
@@ -347,7 +353,8 @@ h3 {
   block-size: 100dvh;
   min-block-size: 0;
   max-block-size: 100dvh;
-  background: var(--surface);
+  background: color-mix(in oklab, var(--surface) 97%, transparent);
+  backdrop-filter: blur(var(--blur-popover));
 }
 
 .nav-menu {
@@ -1458,7 +1465,8 @@ h3 {
   inline-size: min(calc(100vw - var(--space-6)), var(--picker-max));
   max-block-size: var(--picker-max-block);
   border-radius: var(--radius-lg);
-  background: var(--popover);
+  background: var(--glass-popover);
+  backdrop-filter: blur(var(--blur-popover));
   color: var(--surface-text);
   overflow: hidden;
 }
@@ -1647,7 +1655,7 @@ dialog {
 
 dialog::backdrop {
   background: var(--scrim);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(var(--blur-dialog));
 }
 
 .dialog-card {
