@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectFresh } from "../src/worker/project.ts";
+import { olderEvents, selectFresh } from "../src/worker/project.ts";
 
 const ids = ["$a", "$b", "$c", "$d", "$e"];
 
@@ -22,5 +22,22 @@ describe("selectFresh", () => {
 
   it("stops after the limit", () => {
     expect(selectFresh(ids, undefined, 0, 2)).toEqual([3, 4]);
+  });
+});
+
+describe("olderEvents", () => {
+  const stored = new Set(["$c"]);
+  const db = { get: (_store: string, key: string) => Promise.resolve(stored.has(key) ? { id: key } : undefined) };
+  const events = ["$a", "$b", "$c", "$d"].map((id) => ({ getId: () => id }));
+
+  it("takes the events before the oldest stored row", async () => {
+    const list = await olderEvents(db, events);
+    expect(list.map((event) => event.getId())).toEqual(["$a", "$b"]);
+  });
+
+  it("stops at a local echo", async () => {
+    const echo = [{ getId: () => "$x" }, { getId: () => "~r:1" }, { getId: () => "$y" }];
+    const list = await olderEvents({ get: () => Promise.resolve(undefined) }, echo);
+    expect(list.map((event) => event.getId())).toEqual(["$x"]);
   });
 });

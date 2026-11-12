@@ -32,6 +32,8 @@ export class App implements UiContext {
   private loadingRoom: string | null = null;
   private seen = new Map<string, number>();
   private started = false;
+  /** The last stored key status, so a returning device does not flash the gate. */
+  private keyGuess = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -43,6 +45,7 @@ export class App implements UiContext {
     const settings = await this.local.settings();
     const locale = settings.locale ?? localeFromPath(location.pathname);
     setLocale(locale);
+    this.keyGuess = settings.keysReady;
     setState({ settings, locale });
     this.worker.start();
     this.worker.onEvent((event) => void this.onWorkerEvent(event));
@@ -72,7 +75,7 @@ export class App implements UiContext {
         this.mount();
         return;
       }
-      if (state.phase === "boot") await this.applySession(result.session, settings.keysReady);
+      if (state.phase === "boot") await this.applySession(result.session, this.keyGuess);
     } catch (error) {
       setState({ phase: "auth", notice: error instanceof Error ? error.message : "" });
       this.mount();
@@ -103,6 +106,8 @@ export class App implements UiContext {
     const rooms = await this.local.rooms();
     this.remember(rooms);
     setState({ session, rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: keysReady ? "ready" : "gate" });
+    // The frame comes first; the stored settings only have to be right before the next start.
+    this.mount();
     await this.local.saveSettings({
       keysReady,
       lastAccount: {
@@ -113,7 +118,6 @@ export class App implements UiContext {
         baseUrl: session.baseUrl,
       },
     });
-    this.mount();
     void this.settleKeys();
   }
 
@@ -127,6 +131,7 @@ export class App implements UiContext {
       return;
     }
     if (state.session?.accountHash !== session.accountHash) return;
+    this.keyGuess = status.ready;
     setState({ keys: status });
     await this.local.saveSettings({ keysReady: status.ready });
     if (status.ready === (state.phase === "ready")) return;
@@ -176,7 +181,8 @@ export class App implements UiContext {
   private async onWorkerEvent(event: WorkerEvent): Promise<void> {
     switch (event.event) {
       case "ready":
-        if (event.session) await this.applySession(event.session, false);
+        // The guess only holds for the account it was stored for; a new device starts locked.
+        if (event.session) await this.applySession(event.session, event.session.accountHash === state.session?.accountHash && this.keyGuess);
         else {
           setState({ phase: "auth" });
           this.mount();

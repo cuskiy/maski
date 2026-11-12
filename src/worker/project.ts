@@ -23,16 +23,42 @@ export async function refreshDirect(db: AccountDb, client: MatrixClient): Promis
   if (next) await db.setMeta("direct", next);
 }
 
-export async function projectRooms(db: AccountDb, client: MatrixClient, roomIds: string[]): Promise<string[]> {
+/**
+ * Two directions. A sync only adds to the end, so a pass reads after the room's cursor
+ * and the last rows again. Backfill adds to the start, where the cursor cannot see.
+ */
+export type Pass = "fresh" | "older";
+
+export async function projectRooms(db: AccountDb, client: MatrixClient, roomIds: string[], pass: Pass = "fresh"): Promise<string[]> {
   const self = client.getUserId() ?? "";
   const direct = await directMap(db, client);
   const changed: string[] = [];
   for (const roomId of roomIds) {
     const room = client.getRoom(roomId);
     if (!room) continue;
-    if (await projectRoom(db, room, direct, self)) changed.push(roomId);
+    if (await projectRoom(db, room, direct, self, pass)) changed.push(roomId);
   }
   return changed;
+}
+
+/** The one read this scan needs, so the rule can be tested without a database. */
+interface KnownRows {
+  get(store: string, key: string): Promise<unknown>;
+}
+
+/** The events before the oldest stored row; the first known id ends the scan. */
+export async function olderEvents<T extends { getId(): string | undefined | null }>(
+  db: KnownRows,
+  events: T[],
+): Promise<T[]> {
+  const chosen: T[] = [];
+  for (const event of events) {
+    const id = event.getId();
+    if (!id || id.startsWith("~")) break;
+    if (await db.get(STORE.events, id)) break;
+    chosen.push(event);
+  }
+  return chosen;
 }
 
 /**
@@ -54,7 +80,7 @@ export function selectFresh(ids: string[], cursor: string | undefined, tail = 30
   return chosen;
 }
 
-async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string>, self: string): Promise<boolean> {
+async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string>, self: string, pass: Pass): Promise<boolean> {
   // A room that was left or banned is not part of the account any more, so its local
   // copy goes with it.
   const membership = room.getMyMembership();
@@ -67,7 +93,12 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
   const cursors = await db.meta<Record<string, string>>("cursors", {});
   const cursor = cursors[room.roomId];
   const events = room.getLiveTimeline().getEvents();
-  const fresh = selectFresh(events.map((event) => event.getId() ?? ""), cursor).map((index) => events[index]).filter((event): event is MatrixEvent => Boolean(event));
+  const fresh: MatrixEvent[] =
+    pass === "older"
+      ? await olderEvents(db, events)
+      : selectFresh(events.map((event) => event.getId() ?? ""), cursor)
+          .map((index) => events[index])
+          .filter((event): event is MatrixEvent => Boolean(event));
 
   let changed = false;
   let membersChanged = false;

@@ -40,7 +40,10 @@ row moves to its final place once and only once.
 
 ## The projection pass
 
-`worker/project.ts` runs after each sync for the rooms the sync touched:
+`worker/project.ts` runs after each sync for the rooms the sync touched. The pass has two
+directions, because sync and backfill add to opposite ends of a timeline.
+
+Forward (`fresh`), once per sync:
 
 1. read the per-room cursor from `meta`;
 2. take every timeline event after the cursor, plus the last thirty rows, because an edit
@@ -48,6 +51,13 @@ row moves to its final place once and only once.
 3. normalize each event; a redacted event deletes its row instead of rewriting it;
 4. resolve replies against the stored target;
 5. write members, recompute the room summary, store the cursor.
+
+Backward (`older`), after a `scrollback`: walk from the start of the live timeline and stop
+at the first id that is already stored. The cursor marks the newest row, so it cannot see
+this direction, and deleting it would re-project a fixed window and lose everything past it.
+
+Reactions are counted once per sender per key: a second annotation with the same key
+replaces the first rather than adding a vote.
 
 A local echo (`~room:txn`) is skipped: it is the queued row the main thread wrote, and the
 remote echo replaces that row by transaction id.

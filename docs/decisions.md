@@ -27,6 +27,11 @@ function instead of a subsystem. The limit is honest: a relation to a message th
 the SDK's window cannot be recomputed, so the projection re-reads the last thirty rows each
 pass and accepts that older history settles when it is next touched.
 
+The same asymmetry decides pagination. A backward pass cannot use the cursor, and clearing
+the cursor to force a re-read only re-projects a fixed window from the end, so every page
+after the first would fall off the start. `olderEvents` walks from the start of the live
+timeline and stops at the first stored id: one page costs one page of writes.
+
 ## Why the worker
 
 Encryption, sync and uploads are long, blocking and secret-bearing. On the main thread they

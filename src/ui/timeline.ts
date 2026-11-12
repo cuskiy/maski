@@ -1,7 +1,7 @@
 import type { Message, RoomSummary } from "../core/types.ts";
 import { t, timeOfDay } from "../i18n/index.ts";
 import { timelineItems, type TimelineItem } from "../store/select.ts";
-import { state } from "../store/state.ts";
+import { setState, state } from "../store/state.ts";
 import type { UiContext } from "./context.ts";
 import { el, icon, ICON, keyed } from "./dom.ts";
 import { avatar, fileCard, picture } from "./media.ts";
@@ -201,7 +201,8 @@ export class TimelineView {
     this.older.classList.add("is-loading");
     this.anchor = { height: this.root.scrollHeight, top: this.root.scrollTop, count: this.list.childElementCount };
     try {
-      await this.ctx.worker.send({ type: "paginate", roomId: room.roomId });
+      const result = await this.ctx.worker.send<{ messages: Message[] }>({ type: "paginate", roomId: room.roomId, want: state.messages.length + 60 });
+      if (result.messages.length > 0) setState({ messages: result.messages });
     } finally {
       this.loading = false;
       this.older.classList.remove("is-loading");
@@ -247,7 +248,9 @@ export class TimelineView {
       },
     );
     const anchor = this.anchor;
-    if (anchor && this.list.childElementCount > anchor.count) {
+    if (anchor) {
+      // The list grew upwards, or the server had nothing older: either way the reading
+      // position stays put, measured from the bottom of the list.
       this.anchor = null;
       requestAnimationFrame(() => {
         this.root.scrollTop = anchor.top + (this.root.scrollHeight - anchor.height);

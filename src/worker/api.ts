@@ -218,7 +218,7 @@ export class WorkerApi {
       case "openRoom":
         return this.openRoom(command.roomId);
       case "paginate":
-        return this.paginate(command.roomId);
+        return this.paginate(command.roomId, command.want);
       case "members":
         return this.members(command.roomId);
       case "text":
@@ -726,18 +726,16 @@ export class WorkerApi {
     return { room: stored ?? null, messages, hasOlder: stored?.hasOlder ?? false };
   }
 
-  private async paginate(roomId: string): Promise<{ messages: Message[]; hasOlder: boolean }> {
+  private async paginate(roomId: string, want: number): Promise<{ messages: Message[]; hasOlder: boolean }> {
     const client = this.requireClient();
     const db = this.requireDb();
     const room = client.getRoom(roomId);
     if (!room) return { messages: [], hasOlder: false };
     await client.scrollback(room, 50);
-    const cursors = await db.meta<Record<string, string>>("cursors", {});
-    delete cursors[roomId];
-    await db.setMeta("cursors", cursors);
-    await projectRooms(db, client, [roomId]);
+    // Backfill lands at the start of the timeline, before the cursor, so it needs its own pass.
+    await projectRooms(db, client, [roomId], "older");
     const stored = await db.getRoom(roomId);
-    const messages = await db.roomWindow(roomId, 400);
+    const messages = await db.roomWindow(roomId, Math.max(want, 80));
     this.revision += 1;
     await db.setMeta("revision", this.revision);
     this.post({ event: "sync", revision: this.revision, rooms: [roomId], active: roomId, removed: [] });

@@ -12,18 +12,19 @@ function reactionsOf(room: Room, eventId: string, self: string): Reaction[] {
   const container = room.relations.getChildEventsForEvent(eventId, "m.annotation", "m.reaction");
   const bySender = container?.getAnnotationsBySender();
   if (!bySender) return [];
-  const counts = new Map<string, { count: number; me: boolean }>();
+  const counts = new Map<string, { senders: Set<string>; me: boolean }>();
   for (const [sender, events] of Object.entries(bySender)) {
     for (const event of events) {
       const key = asString(event.getContent()["key"]) || asString(event.getContent()["body"]);
       if (!key) continue;
-      const entry = counts.get(key) ?? { count: 0, me: false };
-      entry.count += 1;
+      const entry = counts.get(key) ?? { senders: new Set<string>(), me: false };
+      // One user counts once per key: a repeated annotation replaces the first.
+      entry.senders.add(sender);
       if (sender === self) entry.me = true;
       counts.set(key, entry);
     }
   }
-  return [...counts.entries()].map(([key, value]) => ({ key, count: value.count, me: value.me }));
+  return [...counts.entries()].map(([key, value]) => ({ key, count: value.senders.size, me: value.me }));
 }
 
 const TOKEN_SPLIT = /[^\p{L}\p{N}]+/u;
@@ -140,7 +141,7 @@ export async function normalize(event: MatrixEvent, room: Room): Promise<StoredM
     reply: null,
     mentions,
     edited,
-    reactions: reactionsOf(room, eventId, sender),
+    reactions: reactionsOf(room, eventId, room.myUserId),
     status: "sent",
     error: kindFinal === "error" ? "decrypt" : null,
     encrypted: event.isEncrypted(),

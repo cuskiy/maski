@@ -30,6 +30,11 @@ schedules one pass after 60 ms. The pass touches:
 
 `RoomMemberEvent.Typing` posts a `typing` event instead of a pass; typing is not state.
 
+`paginate` scrolls back fifty events and then runs a backward pass (see `docs/data.md`), so
+the rows it adds are new rather than the last window written again. It returns the window
+the interface asked for, and the timeline applies it: the interface grows a window, it never
+re-reads one and hopes the size is enough.
+
 ## The key gate
 
 Opening an existing account without keys shows the gate. Unlocking follows the same order
@@ -104,8 +109,9 @@ transaction id. The worker:
 
 `media` fetches `/_matrix/client/v1/media/thumbnail` or `/download` with the access token,
 decrypts with `Attachment.decrypt` when the record carries a `file` object, caches the
-blob under `mxc@size/method` and returns it. An encrypted original has no usable thumbnail,
-so the media element asks for the original when `file` is present.
+blob under `mxc@size/method` and returns it. A thumbnail of an encrypted original is
+ciphertext, so an image, a video and a sticker all ask for size 0 when `file` is present:
+the server cannot scale what it cannot read.
 
 Every send goes through `deliver`, which posts the `outbox` status and rethrows, so the
 three send paths share one failure behaviour.

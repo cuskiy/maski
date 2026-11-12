@@ -23,7 +23,7 @@ export type Command =
   | { type: "unlock"; recoveryKey: string }
   | { type: "resetKey"; password: string }
   | { type: "openRoom"; roomId: string }
-  | { type: "paginate"; roomId: string }
+  | { type: "paginate"; roomId: string; want: number }
   | { type: "members"; roomId: string }
   | { type: "text"; roomId: string; txnId: string; body: string; html: string | null; replyTo: string | null }
   | { type: "sticker"; roomId: string; txnId: string; body: string; url: string; replyTo: string | null }

@@ -18,12 +18,15 @@ export class MediaCache {
   }
 
   async url(ref: MediaRef, size: number, method: "scale" | "crop" = "scale"): Promise<string | null> {
-    const key = `${ref.mxc}@${size}/${method}`;
+    // A thumbnail of an encrypted original is ciphertext, so the original is the only
+    // fetchable size and every caller shares that one entry.
+    const chosen = ref.file ? 0 : size;
+    const key = `${ref.mxc}@${chosen}/${method}`;
     const cached = this.urls.get(key);
     if (cached) return cached;
     const running = this.pending.get(key);
     if (running) return running;
-    const task = this.load(key, ref, size, method);
+    const task = this.load(key, ref, chosen, method);
     this.pending.set(key, task);
     try {
       return await task;
@@ -112,7 +115,7 @@ export function picture(ref: MediaRef, kind: "image" | "video" | "sticker"): HTM
   }
   const placeholder = el("div", { class: "media-placeholder" });
   box.appendChild(placeholder);
-  void cache?.url(ref, ref.file ? 0 : kind === "sticker" ? 320 : 640).then((url) => {
+  void cache?.url(ref, kind === "sticker" ? 320 : 640).then((url) => {
     if (!url) {
       box.classList.add("media-failed");
       placeholder.textContent = ref.name;

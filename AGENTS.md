@@ -86,7 +86,7 @@ discussion turns on a specific API.
 | E1 | The interface reads a projection and never the SDK; the worker owns sync, crypto and the projection writes. |
 | E2 | A queued message is an ordinary message with a status, written by the main thread and deleted by the worker when the echo lands. No second pending model. |
 | E3 | Relations are read from the room aggregate, not replayed from a relation store. |
-| E4 | One projection pass per sync revisits the events after the room cursor plus the last rows, because a relation changes an older event in place. |
+| E4 | One projection pass per sync revisits the events after the room cursor plus the last rows, because a relation changes an older event in place; backfill is a second, backward pass. |
 | E5 | Search runs in the worker against the database index. |
 | E6 | Media is fetched with the access token in the worker, decrypted there, cached in the account database. |
 | E7 | The build fails on inline script, inline style, `!important`, a vendor prefix, or the SDK in the main bundle. |
@@ -246,6 +246,17 @@ as `~room:txn`; the projection skips it, and the echo replaces the queued row.
 
 **A keyed row is updated in place.** An edit, a reaction or a status change rebuilds the
 row's content while keeping its node, so what the reader is looking at never disappears.
+
+**The projection reads in two directions.** A sync appends, so a forward pass reads after
+the room cursor and revisits the last thirty rows; backfill prepends, where the cursor is
+blind, so `olderEvents` walks from the start and stops at the first stored id. Clearing the
+cursor instead would re-project a fixed window from the end and drop every page after the
+first.
+
+**The timeline keeps the reading position by hand.** Backfill lands above the viewport, so
+`loadOlder` records height and offset and `render` restores them in a frame. It also clears
+the record when the server had nothing older, or the next pass would scroll to a stale
+position.
 
 **The composer is not store state.** A keystroke writes a debounced draft and nothing else;
 putting the text in the store would repaint the whole shell per character.
