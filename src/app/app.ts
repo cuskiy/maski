@@ -64,9 +64,6 @@ interface ShellRefs {
   app: HTMLElement;
   nav: HTMLElement;
   rooms: HTMLElement;
-  userName: HTMLElement;
-  userSub: HTMLElement;
-  userAvatar: HTMLElement;
   content: HTMLElement;
   headerTitle: HTMLElement;
   headerSubtitle: HTMLElement;
@@ -1360,12 +1357,9 @@ export class App {
       this.composer?.destroy();
     }
     const nav = el("nav", { class: "nav", attrs: { "aria-label": t("nav.rooms") } });
-    const navHead = el("div", { class: "nav-head" }, [
-      el("div", { class: "nav-brand" }, [icon("message"), config.app.name]),
-    ]);
     const rooms = el("div", { class: "rooms" });
-    const account = this.accountBlock(snapshot);
-    nav.append(navHead, account.element, rooms);
+    const menu = this.menuBlock();
+    nav.append(menu.element, rooms);
 
     const headerAvatar = el("div", { class: "avatar" });
     const headerTitle = el("h1", { text: "" });
@@ -1414,11 +1408,8 @@ export class App {
       app,
       nav,
       rooms,
-      userName: account.name,
-      userSub: account.sub,
-      userAvatar: account.avatar,
-      accountButton: account.button,
-      accountCard: account.card,
+      accountButton: menu.button,
+      accountCard: menu.card,
       content,
       headerTitle,
       headerSubtitle,
@@ -1433,33 +1424,24 @@ export class App {
     this.updateShell();
   }
 
-  // The account is a card that unfolds under its row, not a floating menu: what it
-  // offers belongs to the same column and stays put while it is used.
-  private accountBlock(snapshot: AppSnapshot): {
+  // The navigation opens with actions, not with an identity: the account lives in
+  // settings, and what is left is one button that unfolds a panel of controls.
+  private menuBlock(): {
     element: HTMLElement;
     button: HTMLButtonElement;
     card: HTMLElement;
-    name: HTMLElement;
-    sub: HTMLElement;
-    avatar: HTMLElement;
   } {
-    const name = snapshot.session?.displayName ?? t("nav.profile");
-    const avatar = el("div", { class: "avatar" }, [el("span", { text: initial(name) })]);
-    this.loadAvatar(avatar, snapshot.session?.avatarMxc ?? null, 48);
-    const nameEl = el("span", { class: "nav-user-name", text: name });
-    const subEl = el("span", { class: "nav-user-sub", text: snapshot.session?.userId ?? "" });
     const button = el("button", {
-      class: "nav-user",
+      class: "nav-menu-button",
       attrs: {
         type: "button",
         "aria-expanded": "false",
-        "aria-controls": "account-card",
-        "aria-label": t("nav.account", { name }),
+        "aria-controls": "menu-card",
       },
     }, [
-      avatar,
-      el("div", { class: "nav-user-text" }, [nameEl, subEl]),
-      el("span", { class: "nav-user-chevron" }, [icon("chevron")]),
+      icon("menu"),
+      el("span", { text: t("nav.menu") }),
+      el("span", { class: "nav-menu-chevron" }, [icon("chevron")]),
     ]);
 
     const actions: { label: string; icon: string; run: () => void }[] = [
@@ -1477,7 +1459,7 @@ export class App {
         },
       },
     ];
-    const card = el("div", { class: "nav-card", attrs: { id: "account-card", hidden: true } }, [
+    const card = el("div", { class: "nav-card", attrs: { id: "menu-card", hidden: true } }, [
       el(
         "div",
         { class: "nav-card-grid" },
@@ -1494,18 +1476,6 @@ export class App {
           }, [icon(action.icon), el("span", { text: action.label })]),
         ),
       ),
-      el("div", { class: "nav-card-foot" }, [
-        el("button", {
-          class: "nav-action danger",
-          attrs: { type: "button" },
-          on: {
-            click: () => {
-              close();
-              void this.logout();
-            },
-          },
-        }, [icon("logout"), el("span", { text: t("nav.logout") })]),
-      ]),
     ]);
 
     const outside = (event: Event): void => {
@@ -1540,14 +1510,7 @@ export class App {
       } else close();
     });
 
-    return {
-      element: el("div", { class: "nav-account" }, [button, card]),
-      button,
-      card,
-      name: nameEl,
-      sub: subEl,
-      avatar,
-    };
+    return { element: el("div", { class: "nav-menu" }, [button, card]), button, card };
   }
 
   private updateShell(): void {
@@ -1555,17 +1518,6 @@ export class App {
     const shell = this.shell;
     if (!shell) return;
     shell.app.dataset.view = snapshot.activeRoomId ? "room" : "home";
-    const name = snapshot.session?.displayName ?? t("nav.profile");
-    if (shell.userName.textContent !== name) shell.userName.textContent = name;
-    const id = snapshot.session?.userId ?? "";
-    if (shell.userSub.textContent !== id) shell.userSub.textContent = id;
-    const ownMember = snapshot.members.find(
-      (member) => member.userId === snapshot.session?.userId && member.avatarMxc,
-    );
-    const ownAvatar = snapshot.session?.avatarMxc ?? ownMember?.avatarMxc ?? null;
-    if (ownAvatar && !shell.userAvatar.querySelector("img")) {
-      this.loadAvatar(shell.userAvatar, ownAvatar, 48);
-    }
     this.updateRoomList();
     const room = snapshot.activeRoomId ? activeRoom(snapshot) : null;
     if (!room) {
@@ -2458,6 +2410,18 @@ export class App {
       el("div", { class: "settings-row" }, [
         el("span", { class: "settings-row-text" }, [el("strong", { text: t("settings.privacy") }), el("small", { text: t("settings.privacyBody") })]),
       ]),
+      el("button", {
+        class: "button",
+        text: t("nav.logout"),
+        attrs: { type: "button" },
+        on: {
+          click: () => {
+            this.dialogs.close();
+            this.dialogName = null;
+            void this.logout();
+          },
+        },
+      }),
     ]);
   }
 
@@ -3054,22 +3018,7 @@ export class App {
       attrs: { placeholder: t("picker.search"), "aria-label": t("picker.search") },
     });
     const body = el("div", { class: "picker-body" });
-    const clearSearch = iconButton(
-      t("composer.clear"),
-      "close",
-      () => {
-        search.value = "";
-        clearSearch.hidden = true;
-        renderList("");
-        search.focus();
-      },
-      "icon-button search-clear",
-    );
-    clearSearch.hidden = true;
-    const head = el("div", { class: "picker-head" }, [
-      el("span", { class: "picker-title", text: reactTo ? t("room.react") : t("picker.title") }),
-      iconButton(t("common.close"), "close", () => close(), "icon-button picker-close"),
-    ]);
+    const closeButton = iconButton(t("common.close"), "close", () => close(), "icon-button picker-close");
     const close = (): void => {
       if (this.picker?.element !== picker) return;
       this.picker = null;
@@ -3186,20 +3135,18 @@ export class App {
       }
       if (!body.hasChildNodes()) body.appendChild(el("div", { class: "empty", text: t("picker.empty") }));
     };
-    search.addEventListener("input", () => {
-      clearSearch.hidden = search.value.length === 0;
-      renderList(search.value.trim());
-    });
-    picker.append(
-      head,
-      el("div", { class: "picker-search" }, [search, clearSearch]),
-      body,
-    );
+    search.addEventListener("input", () => renderList(search.value.trim()));
+    picker.append(el("div", { class: "picker-search" }, [search, closeButton]), body);
     document.body.appendChild(picker);
     renderList("");
     this.picker = { element: picker, trigger, close };
     trigger.setAttribute("aria-expanded", "true");
     place();
+    // One entrance, started here: a declarative animation would restart whenever
+    // the panel is re-inserted, which is what made it blink.
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      picker.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "ease-out" });
+    }
     document.addEventListener("pointerdown", outside, true);
     document.addEventListener("keydown", escape);
     window.addEventListener("resize", place);
