@@ -51,6 +51,10 @@ The list is keyed by message id; an update rebuilds the row's children and keeps
 a reaction or an edit never removes what the reader is looking at. A signature string decides
 whether the rebuild is needed at all.
 
+Two display items interrupt the rows: a day separator, and one hairline under the row the
+user's receipt points at, which is where reading stopped. A jump control floats at the bottom
+edge of the scroller as soon as the newest row is out of view.
+
 ## Composer
 
 Three parts in one row: attach, the field group (textarea plus emoji control), send. The field
