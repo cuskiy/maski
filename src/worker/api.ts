@@ -26,7 +26,7 @@ import { fetchMedia, uploadAttachment } from "./media.ts";
 import { searchTokens } from "./normalize.ts";
 import { Rooms } from "./rooms.ts";
 import { Verification } from "./verify.ts";
-import type { DeviceEntry } from "../core/types.ts";
+import type { DeviceEntry, Member } from "../core/types.ts";
 import { escapeText } from "../core/text.ts";
 
 interface StoredSession {
@@ -281,6 +281,8 @@ export class WorkerApi {
         return this.signOutOthers(command.password);
       case "signOutDevice":
         return this.signOutDevice(command.deviceId, command.password);
+      case "moderate":
+        return this.moderate(command.roomId, command.userId, command.action);
       default:
         return Promise.reject(new Error("unknown command"));
     }
@@ -719,21 +721,19 @@ export class WorkerApi {
     return { messages, hasOlder: stored?.hasOlder ?? false };
   }
 
-  private async members(roomId: string): Promise<unknown> {
+  /** The stored members answer the dialog; the SDK is asked to refresh when it has the room. */
+  private async members(roomId: string): Promise<{ members: Member[] }> {
     const client = this.requireClient();
     const db = this.requireDb();
     const room = client.getRoom(roomId);
-    if (!room) return { members: [] };
-    if (room.getMembers().length <= 1) {
-      try {
-        await room.loadMembersIfNeeded();
-      } catch {
-        // A room whose members cannot be fetched still lists who is known.
+    if (room) {
+      if (room.getMembers().length <= 1) {
+        await room.loadMembersIfNeeded().catch(() => undefined);
       }
+      await projectRooms(db, client, [roomId]);
     }
-    await projectRooms(db, client, [roomId]);
-    const members = await db.getAll<{ roomId: string }>(STORE.members);
-    return { members: members.filter((member) => member.roomId === roomId) };
+    const stored = await db.getAll<Member>(STORE.members);
+    return { members: stored.filter((member) => member.roomId === roomId) };
   }
 
   private replyContent(replyTo: string | null, roomId: string): Record<string, unknown> {
@@ -1029,6 +1029,11 @@ export class WorkerApi {
 
   private async direct(userId: string): Promise<unknown> {
     return this.rooms().direct(userId);
+  }
+
+  private async moderate(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<unknown> {
+    await this.rooms().moderate(roomId, userId, action);
+    return {};
   }
 
   private async tag(roomId: string, tag: string, on: boolean): Promise<unknown> {

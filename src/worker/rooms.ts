@@ -61,6 +61,13 @@ export class Rooms {
     return { roomId: result.room_id };
   }
 
+  async moderate(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<void> {
+    if (action === "kick") await this.client.kick(roomId, userId);
+    else if (action === "ban") await this.client.ban(roomId, userId);
+    else await this.client.unban(roomId, userId);
+    await projectRooms(this.db, this.client, [roomId]);
+  }
+
   async tag(roomId: string, tag: string, on: boolean): Promise<void> {
     if (on) await this.client.setRoomTag(roomId, tag, { order: 0.5 });
     else await this.client.deleteRoomTag(roomId, tag);

@@ -1,5 +1,5 @@
 import { config } from "../app/config.ts";
-import type { Message, RoomSummary, SectionId } from "../core/types.ts";
+import type { Member, Message, RoomSummary, SectionId } from "../core/types.ts";
 import { dayLabel, t } from "../i18n/index.ts";
 import { sortRooms, state } from "./state.ts";
 
@@ -55,6 +55,10 @@ export function sections(): Section[] {
     grouped.get(section)?.push(room);
   }
   return config.sections.map((id) => ({ id, rooms: sortRooms(grouped.get(id) ?? []) }));
+}
+
+export function canModerate(room: RoomSummary, member: Member, self: string): boolean {
+  return room.membership === "join" && room.myPower >= 50 && member.userId !== self && member.power < room.myPower;
 }
 
 export function roomPreview(room: RoomSummary): string {

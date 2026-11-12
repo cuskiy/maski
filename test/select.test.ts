@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Message, RoomSummary } from "../src/core/types.ts";
-import { roomPreview, sectionOf, sections, timelineItems } from "../src/store/select.ts";
+import type { Member, Message, RoomSummary } from "../src/core/types.ts";
+import { canModerate, roomPreview, sectionOf, sections, timelineItems } from "../src/store/select.ts";
 import { state } from "../src/store/state.ts";
 
 const room = (overrides: Partial<RoomSummary>): RoomSummary => ({
@@ -117,5 +117,31 @@ describe("roomPreview", () => {
 
   it("is empty without a last message", () => {
     expect(roomPreview(room({}))).toBe("");
+  });
+});
+
+describe("canModerate", () => {
+  const member = (overrides: Partial<Member>): Member => ({
+    roomId: "!room",
+    userId: "@b:example.org",
+    name: "B",
+    avatar: null,
+    membership: "join",
+    power: 0,
+    ...overrides,
+  });
+
+  it("needs the power to act and a member below it", () => {
+    expect(canModerate(room({ myPower: 100 }), member({}), "@me:example.org")).toBe(true);
+    expect(canModerate(room({ myPower: 50 }), member({ power: 50 }), "@me:example.org")).toBe(false);
+    expect(canModerate(room({ myPower: 0 }), member({}), "@me:example.org")).toBe(false);
+  });
+
+  it("never acts on the user themself", () => {
+    expect(canModerate(room({ myPower: 100 }), member({ userId: "@me:example.org" }), "@me:example.org")).toBe(false);
+  });
+
+  it("needs a room the user is in", () => {
+    expect(canModerate(room({ myPower: 100, membership: "invite" }), member({}), "@me:example.org")).toBe(false);
   });
 });

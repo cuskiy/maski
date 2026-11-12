@@ -54,7 +54,8 @@ export type Command =
   | { type: "verifyMismatch" }
   | { type: "verifyCancel" }
   | { type: "signOutOthers"; password: string }
-  | { type: "signOutDevice"; deviceId: string; password: string };
+  | { type: "signOutDevice"; deviceId: string; password: string }
+  | { type: "moderate"; roomId: string; userId: string; action: "kick" | "ban" | "unban" };
 
 export type CommandType = Command["type"];
 

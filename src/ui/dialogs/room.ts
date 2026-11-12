@@ -1,12 +1,12 @@
 import type { App } from "../../app/app.ts";
 import type { Member } from "../../core/types.ts";
 import { t } from "../../i18n/index.ts";
-import { activeRoom } from "../../store/select.ts";
+import { activeRoom, canModerate } from "../../store/select.ts";
 import { state } from "../../store/state.ts";
-import { el } from "../dom.ts";
 import { button, openDialogFrame, row, textField, uploadButton } from "../dialog-kit.ts";
+import { el, icon, ICON } from "../dom.ts";
 import { avatar } from "../media.ts";
-import { toast } from "../overlay.ts";
+import { iconButton, openMenu, toast } from "../overlay.ts";
 
 export function roomSettingsDialog(app: App, roomId: string): void {
   const room = state.rooms.get(roomId) ?? activeRoom();
@@ -15,20 +15,52 @@ export function roomSettingsDialog(app: App, roomId: string): void {
   const topicInput = textField(t("roomSettings.topic"), room.topic);
   const members = el("div", { class: "member-list" }, [el("p", { class: "dialog-note", text: t("common.loading") })]);
   const canEdit = room.membership === "join" && room.myPower >= 50;
-  void app.worker.send<{ members: Member[] }>({ type: "members", roomId }).then((result) => {
-    const sorted = result.members.toSorted((a, b) => b.power - a.power || a.name.localeCompare(b.name));
-    members.replaceChildren(
-      ...sorted.map((member) =>
-        el("div", { class: "member-row" }, [
-          avatar(member.avatar, member.name, 32),
-          el("span", { class: "member-name", text: member.name }),
-          member.power >= 100 ? el("span", { class: "tag", text: t("profile.admin") }) : member.power >= 50 ? el("span", { class: "tag", text: t("profile.moderator") }) : null,
-        ]),
-      ),
-    );
-  }).catch(() => {
-    members.replaceChildren(el("p", { class: "dialog-note", text: t("error.network") }));
-  });
+  const reload = (): void => {
+    void app.worker.send<{ members: Member[] }>({ type: "members", roomId }).then((result) => {
+      const sorted = result.members.toSorted((a, b) => b.power - a.power || a.name.localeCompare(b.name));
+      const self = state.session?.userId ?? "";
+      members.replaceChildren(
+        ...sorted.map((member) => {
+          const banned = member.membership === "ban";
+          const moderatable = canModerate(room, member, self);
+          return el("div", { class: "member-row" }, [
+            avatar(member.avatar, member.name, 32),
+            el("span", { class: "member-name", text: member.name }),
+            banned ? el("span", { class: "tag", text: t("roomSettings.banned") }) : null,
+            member.power >= 100 ? el("span", { class: "tag", text: t("profile.admin") }) : member.power >= 50 ? el("span", { class: "tag", text: t("profile.moderator") }) : null,
+            banned && moderatable
+              ? iconButton(ICON.chevron, t("roomSettings.unban"), () => void moderate("unban", member.userId))
+              : moderatable
+                ? el("button", {
+                    class: "icon-button",
+                    attrs: { type: "button", "aria-label": t("roomSettings.moderate") },
+                    on: {
+                      click: (event) => {
+                        const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                        openMenu(box.left, box.bottom, [
+                          { label: t("roomSettings.kick"), action: () => moderate("kick", member.userId) },
+                          { label: t("roomSettings.ban"), danger: true, action: () => moderate("ban", member.userId) },
+                        ]);
+                      },
+                    },
+                  }, [icon(ICON.more, 18)])
+                : null,
+          ]);
+        }),
+      );
+    }).catch(() => {
+      members.replaceChildren(el("p", { class: "dialog-note", text: t("error.network") }));
+    });
+  };
+  const moderate = (action: "kick" | "ban" | "unban", userId: string): Promise<void> =>
+    app.worker
+      .send({ type: "moderate", roomId, userId, action })
+      .then(() => {
+        toast(action === "kick" ? t("toast.kicked") : action === "ban" ? t("toast.banned") : t("toast.unbanned"));
+        reload();
+      })
+      .catch(() => toast(t("error.forbidden")));
+  reload();
 
   const inviteField = textField(t("roomSettings.invite"), "@user:server");
   const body = el("div", { class: "dialog-sections" }, [
