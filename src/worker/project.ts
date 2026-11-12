@@ -36,6 +36,15 @@ export async function projectRooms(db: AccountDb, client: MatrixClient, roomIds:
 }
 
 async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string>, self: string): Promise<boolean> {
+  // A room that was left or banned is not part of the account any more, so its local
+  // copy goes with it.
+  const membership = room.getMyMembership();
+  if (membership === "leave" || membership === "ban" || membership === "knock") {
+    await db.del(STORE.rooms, room.roomId);
+    await db.delMatching(STORE.events, "room", room.roomId);
+    await db.delMatching(STORE.members, "room", room.roomId);
+    return true;
+  }
   const cursors = await db.meta<Record<string, string>>("cursors", {});
   const cursor = cursors[room.roomId];
   const events = room.getLiveTimeline().getEvents();

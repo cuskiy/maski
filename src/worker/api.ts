@@ -4,7 +4,6 @@ import {
   RoomEvent,
   RoomMemberEvent,
   RoomStateEvent,
-  PushRuleKind,
   SyncState,
   createClient,
   type MatrixClient,
@@ -15,7 +14,6 @@ import {
 import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api/recovery-key.js";
 import { deriveRecoveryKeyFromPassphrase } from "matrix-js-sdk/lib/crypto-api/key-passphrase.js";
 import type { CryptoApi } from "matrix-js-sdk/lib/crypto-api/index.js";
-import { Attachment, EncryptedAttachment } from "@matrix-org/matrix-sdk-crypto-wasm";
 import { accountHash } from "../core/id.ts";
 import { STORE } from "../core/schema.ts";
 import { asArray, asString, isRecord } from "../core/guard.ts";
@@ -23,8 +21,10 @@ import type { KeyStatus, MediaRef, Message, RoomSummary, Session } from "../core
 import type { Command, Event, UiaStage } from "../protocol/messages.ts";
 import { AccountDb } from "./db.ts";
 import type { StoredMessage } from "./normalize.ts";
-import { projectPacks, projectRooms, readDirect, refreshDirect } from "./project.ts";
+import { projectPacks, projectRooms, refreshDirect } from "./project.ts";
+import { fetchMedia, uploadAttachment } from "./media.ts";
 import { searchTokens } from "./normalize.ts";
+import { Rooms } from "./rooms.ts";
 import { Verification } from "./verify.ts";
 import type { DeviceEntry } from "../core/types.ts";
 import { escapeText } from "../core/text.ts";
@@ -37,7 +37,6 @@ interface StoredSession {
 type Post = (event: Event) => void;
 
 const DEVICE_NAME = "maski";
-const MEDIA_LIMIT = 16 * 1024 * 1024;
 
 function reason(error: unknown): string {
   if (error instanceof MatrixError) return error.message;
@@ -782,30 +781,25 @@ export class WorkerApi {
     const room = client.getRoom(roomId);
     if (!room) throw new Error("unknown room");
     const msgtype = msgTypeOf(mime);
-    let content: Record<string, unknown>;
     return this.deliver(txnId, async () => {
-      if (room.hasEncryptionStateEvent()) {
-        const attachment = Attachment.encrypt(new Uint8Array(data));
-        const file = JSON.parse(attachment.mediaEncryptionInfo ?? "{}") as Record<string, unknown>;
-        const blob = new Blob([new Uint8Array(attachment.encryptedData).buffer as ArrayBuffer], { type: "application/octet-stream" });
-        const uploaded = await client.uploadContent(new File([blob], name, { type: mime }));
-        content = { msgtype, body: name, file: { ...file, url: uploaded.content_uri }, info: { mimetype: mime, size: data.byteLength } };
-      } else {
-        const uploaded = await client.uploadContent(new File([data], name, { type: mime }));
-        content = { msgtype, body: name, url: uploaded.content_uri, info: { mimetype: mime, size: data.byteLength } };
-      }
+      const uploaded = await uploadAttachment(client, name, mime, data, room.hasEncryptionStateEvent());
+      const content: Record<string, unknown> = {
+        msgtype,
+        body: name,
+        info: { mimetype: mime, size: data.byteLength },
+        ...(uploaded.file ? { file: uploaded.file } : { url: uploaded.url }),
+      };
       const pending = await db.get<StoredMessage>(STORE.events, txnId);
       if (pending) {
-        const file = isRecord(content["file"]) ? content["file"] : null;
         const media: MediaRef = {
-          mxc: asString(file ? file["url"] : content["url"]),
+          mxc: uploaded.url,
           mime,
           size: data.byteLength,
           width: null,
           height: null,
           duration: null,
           name,
-          file,
+          file: uploaded.file,
         };
         await db.putMessage({ ...pending, kind: kindOfMime(mime), body: name, media });
       }
@@ -971,144 +965,60 @@ export class WorkerApi {
   }
 
   private async media(mxc: string, size: number, method: "scale" | "crop", file: Record<string, unknown> | null): Promise<{ blob: Blob; mime: string }> {
-    const db = this.requireDb();
-    const client = this.requireClient();
-    const key = `${mxc}@${size}/${method}`;
-    const cached = await db.media(key);
-    if (cached) return { blob: cached.data, mime: cached.mime };
-    const match = /^mxc:\/\/([^/]+)\/(.+)$/.exec(mxc);
-    if (!match) throw new Error("bad media id");
-    const server = match[1] ?? "";
-    const id = match[2] ?? "";
-    const token = client.getAccessToken() ?? "";
-    const base = client.getHomeserverUrl();
-    const path =
-      size > 0
-        ? `/_matrix/client/v1/media/thumbnail/${encodeURIComponent(server)}/${encodeURIComponent(id)}?width=${size}&height=${size}&method=${method}`
-        : `/_matrix/client/v1/media/download/${encodeURIComponent(server)}/${encodeURIComponent(id)}`;
-    const response = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error(`media ${response.status}`);
-    const raw = new Uint8Array(await response.arrayBuffer());
-    const mime = response.headers.get("content-type") ?? "application/octet-stream";
-    let bytes = raw;
-    if (file) {
-      try {
-        bytes = new Uint8Array(Attachment.decrypt(new EncryptedAttachment(raw, JSON.stringify(file))));
-      } catch {
-        throw new Error("cannot decrypt media");
-      }
-    }
-    if (bytes.byteLength > MEDIA_LIMIT) throw new Error("media too large");
-    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
-    await db.putMedia({ key, mxc, mime, data: blob, lastUsed: Date.now() });
-    return { blob, mime };
+    return fetchMedia(this.requireDb(), this.requireClient(), mxc, size, method, file);
+  }
+
+  private rooms(): Rooms {
+    return new Rooms(this.requireDb(), this.requireClient());
   }
 
   private async join(target: string): Promise<unknown> {
-    const room = await this.requireClient().joinRoom(target);
-    await projectRooms(this.requireDb(), this.requireClient(), [room.roomId]);
-    return { roomId: room.roomId };
+    return this.rooms().join(target);
   }
 
   private async leave(roomId: string): Promise<unknown> {
-    const client = this.requireClient();
-    await client.leave(roomId);
-    const db = this.requireDb();
-    await db.del(STORE.rooms, roomId);
-    await db.delMatching(STORE.events, "room", roomId);
-    await db.delMatching(STORE.members, "room", roomId);
+    await this.rooms().leave(roomId);
     if (this.activeRoomId === roomId) this.activeRoomId = null;
     this.revision += 1;
-    await db.setMeta("revision", this.revision);
+    await this.requireDb().setMeta("revision", this.revision);
     this.post({ event: "sync", revision: this.revision, rooms: [], active: null, removed: [roomId] });
     return {};
   }
 
   private async create(name: string, topic: string, isPublic: boolean, encrypted: boolean, invites: string[]): Promise<unknown> {
-    const client = this.requireClient();
-    const options: Record<string, unknown> = {
-      name,
-      topic,
-      visibility: isPublic ? "public" : "private",
-      preset: isPublic ? "public_chat" : "private_chat",
-      invite: invites.filter(Boolean),
-    };
-    if (encrypted) {
-      options["initial_state"] = [{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }];
-    }
-    const result = await client.createRoom(options as never);
-    await projectRooms(this.requireDb(), client, [result.room_id]);
-    return { roomId: result.room_id };
+    return this.rooms().create(name, topic, isPublic, encrypted, invites);
   }
 
   private async direct(userId: string): Promise<unknown> {
-    const client = this.requireClient();
-    const existing = readDirect(client);
-    const rooms = existing?.[userId] ?? [];
-    for (const roomId of rooms) {
-      const room = client.getRoom(roomId);
-      if (room && room.getMyMembership() === "join") return { roomId };
-    }
-    const result = await client.createRoom({
-      is_direct: true,
-      invite: [userId],
-      preset: "trusted_private_chat",
-      initial_state: [{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }],
-    } as never);
-    const next = { ...existing, [userId]: [...rooms, result.room_id] };
-    await client.setAccountData("m.direct" as never, next as never);
-    await refreshDirect(this.requireDb(), client);
-    await projectRooms(this.requireDb(), client, [result.room_id]);
-    return { roomId: result.room_id };
+    return this.rooms().direct(userId);
   }
 
   private async tag(roomId: string, tag: string, on: boolean): Promise<unknown> {
-    const client = this.requireClient();
-    if (on) await client.setRoomTag(roomId, tag, { order: 0.5 });
-    else await client.deleteRoomTag(roomId, tag);
+    await this.rooms().tag(roomId, tag, on);
     return {};
   }
 
   private async mute(roomId: string, on: boolean): Promise<unknown> {
-    const client = this.requireClient();
-    if (on) {
-      await client.addPushRule("global", PushRuleKind.Override, roomId, {
-        actions: ["dont_notify"],
-        conditions: [{ kind: "event_match", key: "room_id", pattern: roomId }],
-      } as never);
-    } else {
-      await client.deletePushRule("global", PushRuleKind.Override, roomId);
-    }
+    await this.rooms().mute(roomId, on);
     return {};
   }
 
   private async profile(name?: string, avatar?: string): Promise<unknown> {
-    const client = this.requireClient();
-    if (name !== undefined) await client.setDisplayName(name);
-    if (avatar !== undefined) await client.setAvatarUrl(avatar);
+    await this.rooms().profile(name, avatar);
     return {};
   }
 
-  private async uploadAvatar(data: ArrayBuffer, mime: string): Promise<{ url: string }> {
-    const client = this.requireClient();
-    const uploaded = await client.uploadContent(new File([data], "avatar", { type: mime }));
-    await client.setAvatarUrl(uploaded.content_uri);
-    return { url: uploaded.content_uri };
+  private async uploadAvatar(data: ArrayBuffer, mime: string): Promise<unknown> {
+    return this.rooms().uploadAvatar(data, mime);
   }
 
-  private async uploadRoomAvatar(roomId: string, data: ArrayBuffer, mime: string): Promise<{ url: string }> {
-    const client = this.requireClient();
-    const uploaded = await client.uploadContent(new File([data], "room-avatar", { type: mime }));
-    await client.sendStateEvent(roomId, "m.room.avatar" as never, { url: uploaded.content_uri } as never, "");
-    await projectRooms(this.requireDb(), client, [roomId]);
-    return { url: uploaded.content_uri };
+  private async uploadRoomAvatar(roomId: string, data: ArrayBuffer, mime: string): Promise<unknown> {
+    return this.rooms().uploadRoomAvatar(roomId, data, mime);
   }
 
   private async setRoomState(roomId: string, name?: string, topic?: string, avatarUrl?: string): Promise<unknown> {
-    const client = this.requireClient();
-    if (name !== undefined) await client.setRoomName(roomId, name);
-    if (topic !== undefined) await client.setRoomTopic(roomId, topic);
-    if (avatarUrl !== undefined) await client.sendStateEvent(roomId, "m.room.avatar" as never, { url: avatarUrl } as never, "");
+    await this.rooms().setRoomState(roomId, name, topic, avatarUrl);
     return {};
   }
+
 }

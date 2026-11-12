@@ -77,7 +77,16 @@ export class Verification {
     switch (request.phase) {
       case VerificationPhase.Ready:
         this.post({ state: "ready" });
+        // The side that asked normally sends the start. When it does not, or when the
+        // other side clearly speaks SAS, this side starts instead of waiting forever.
         if (request.initiatedByMe) await this.begin(request);
+        else {
+          setTimeout(() => {
+            if (this.request === request && request.phase === VerificationPhase.Ready && !this.verifier) {
+              void this.begin(request);
+            }
+          }, 2500);
+        }
         break;
       case VerificationPhase.Started:
         this.verifier ??= request.verifier ?? null;
