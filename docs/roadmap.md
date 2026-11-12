@@ -2,10 +2,10 @@
 
 Ordered by what removes the most uncertainty per unit of work.
 
-1. **Device verification by SAS.** The gate and the settings security page name it; two
-   devices comparing emoji is the missing half of a trustworthy key story.
-2. **Sessions in settings.** List, verify and sign out other devices through the SDK's
-   device API, with UIA for the bulk sign-out.
+1. **SAS verification, tested between two real devices.** The flow exists; what is missing
+   is a second client on hand to compare the emoji with.
+2. **Sessions.** Listing and signing out other sessions works; a user can still not rename a
+   session or see where it came from.
 3. **Notifications.** The in-page path exists; a service worker and a push gateway are
    needed for a closed page, which needs a server component and an explicit decision.
 4. **Media coverage.** Video posters, audio duration, upload progress and cancellation.

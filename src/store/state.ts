@@ -1,5 +1,6 @@
 import type {
   Connection,
+  DeviceEntry,
   Draft,
   KeyStatus,
   Locale,
@@ -9,6 +10,7 @@ import type {
   SectionId,
   Session,
   TypingUser,
+  VerifyState,
 } from "../core/types.ts";
 import type { Settings } from "./db.ts";
 
@@ -24,6 +26,8 @@ export interface AppState {
   draft: Draft;
   typing: TypingUser[];
   keys: KeyStatus | null;
+  devices: DeviceEntry[];
+  verify: VerifyState | null;
   locale: Locale;
   settings: Settings;
   dialog: string | null;
@@ -44,6 +48,8 @@ export const state: AppState = {
   draft: EMPTY_DRAFT,
   typing: [],
   keys: null,
+  devices: [],
+  verify: null,
   locale: "en",
   settings: {
     locale: null,
@@ -62,8 +68,11 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let frame = 0;
 
-export function subscribe(listener: Listener): void {
+export function subscribe(listener: Listener): () => void {
   listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function touch(): void {

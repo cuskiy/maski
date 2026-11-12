@@ -25,6 +25,8 @@ import { AccountDb } from "./db.ts";
 import type { StoredMessage } from "./normalize.ts";
 import { projectPacks, projectRooms, readDirect, refreshDirect } from "./project.ts";
 import { searchTokens } from "./normalize.ts";
+import { Verification } from "./verify.ts";
+import type { DeviceEntry } from "../core/types.ts";
 import { escapeText } from "../core/text.ts";
 
 interface StoredSession {
@@ -179,6 +181,7 @@ export class WorkerApi {
   private touched = new Set<string>();
   private activeRoomId: string | null = null;
   private ready: Promise<{ session: Session | null }> = Promise.resolve({ session: null });
+  private verification: Verification | null = null;
   private booting: Promise<void> | null = null;
 
   constructor(post: Post) {
@@ -262,6 +265,22 @@ export class WorkerApi {
         return this.setRoomState(command.roomId, command.name, command.topic, command.avatarUrl);
       case "search":
         return this.search(command.query, command.roomId);
+      case "devices":
+        return this.devices();
+      case "verifyStart":
+        return this.verifyStart(command.deviceId);
+      case "verifyAccept":
+        return this.verifyAccept();
+      case "verifyConfirm":
+        return this.verifyConfirm();
+      case "verifyMismatch":
+        return this.verifyMismatch();
+      case "verifyCancel":
+        return this.verifyCancel();
+      case "signOutOthers":
+        return this.signOutOthers(command.password);
+      case "signOutDevice":
+        return this.signOutDevice(command.deviceId, command.password);
       default:
         return Promise.reject(new Error("unknown command"));
     }
@@ -339,6 +358,8 @@ export class WorkerApi {
     this.client = client;
     await client.initRustCrypto({ cryptoDatabasePrefix: `maski-rust-${stored.session.accountHash}` });
     this.attach(client);
+    this.verification = new Verification(client, (update) => this.post({ event: "verify", update }));
+    this.verification.attach();
     this.post({ event: "connection", connection: "connecting", message: "" });
     client.startClient({ initialSyncLimit: 20, lazyLoadMembers: true }).catch((error: unknown) => {
       this.post({ event: "connection", connection: "error", message: reason(error) });
@@ -854,6 +875,91 @@ export class WorkerApi {
     const id = eventId || lastMessageId(client.getRoom(roomId));
     if (!id) return {};
     await client.setRoomReadMarkers(roomId, id);
+    return {};
+  }
+
+  private async signOutOthers(password: string): Promise<{ signedOut: number }> {
+    const client = this.requireClient();
+    const current = client.getDeviceId();
+    const list = await client.getDevices();
+    const others = list.devices.map((device) => device.device_id).filter((deviceId) => deviceId !== current);
+    if (others.length === 0) return { signedOut: 0 };
+    await this.deleteDevices(others, password);
+    return { signedOut: others.length };
+  }
+
+  private async signOutDevice(deviceId: string, password: string): Promise<unknown> {
+    await this.deleteDevices([deviceId], password);
+    return {};
+  }
+
+  /** The first request asks the server for a user-interactive auth session. */
+  private async deleteDevices(deviceIds: string[], password: string): Promise<void> {
+    const client = this.requireClient();
+    const userId = client.getUserId() ?? "";
+    const auth = (session?: string): Record<string, unknown> => ({
+      type: "m.login.password",
+      identifier: { type: "m.id.user", user: userId },
+      password,
+      ...(session ? { session } : {}),
+    });
+    try {
+      await client.deleteMultipleDevices(deviceIds, auth() as never);
+    } catch (error) {
+      if (!(error instanceof MatrixError) || !isRecord(error.data) || !asArray(error.data["flows"]).length) throw error;
+      const session = asString(error.data["session"]);
+      await client.deleteMultipleDevices(deviceIds, auth(session) as never);
+    }
+  }
+
+  private async devices(): Promise<{ devices: DeviceEntry[] }> {
+    const client = this.requireClient();
+    const crypto = client.getCrypto();
+    if (!crypto) return { devices: [] };
+    const self = client.getUserId() ?? "";
+    const current = client.getDeviceId();
+    const list = await client.getDevices();
+    const devices: DeviceEntry[] = [];
+    for (const device of list.devices) {
+      const status = await crypto.getDeviceVerificationStatus(self, device.device_id).catch(() => null);
+      devices.push({
+        deviceId: device.device_id,
+        name: device.display_name ?? device.device_id,
+        lastSeenTs: device.last_seen_ts ?? 0,
+        current: device.device_id === current,
+        verified: status?.crossSigningVerified ?? false,
+      });
+    }
+    return { devices: devices.toSorted((a, b) => Number(b.current) - Number(a.current) || b.lastSeenTs - a.lastSeenTs) };
+  }
+
+  private requireVerification(): Verification {
+    if (!this.verification) throw new Error("encryption is not ready");
+    return this.verification;
+  }
+
+  private async verifyStart(deviceId: string): Promise<unknown> {
+    await this.requireVerification().start(deviceId);
+    return {};
+  }
+
+  private async verifyAccept(): Promise<unknown> {
+    await this.requireVerification().accept();
+    return {};
+  }
+
+  private async verifyConfirm(): Promise<unknown> {
+    this.requireVerification().confirm();
+    return {};
+  }
+
+  private async verifyMismatch(): Promise<unknown> {
+    this.requireVerification().mismatch();
+    return {};
+  }
+
+  private async verifyCancel(): Promise<unknown> {
+    this.requireVerification().cancel();
     return {};
   }
 

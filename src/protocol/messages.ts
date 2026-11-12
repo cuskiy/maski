@@ -1,4 +1,5 @@
 import type { KeyStatus, Message, RoomSummary, SendStatus, Session } from "../core/types.ts";
+import type { VerifyState } from "../core/types.ts";
 
 export interface UiaStage {
   stage: "terms" | "token" | "password" | "dummy";
@@ -45,7 +46,15 @@ export type Command =
   | { type: "uploadAvatar"; data: ArrayBuffer; mime: string }
   | { type: "uploadRoomAvatar"; roomId: string; data: ArrayBuffer; mime: string }
   | { type: "setRoomState"; roomId: string; name?: string; topic?: string; avatarUrl?: string }
-  | { type: "search"; query: string; roomId: string | null };
+  | { type: "search"; query: string; roomId: string | null }
+  | { type: "devices" }
+  | { type: "verifyStart"; deviceId: string }
+  | { type: "verifyAccept" }
+  | { type: "verifyConfirm" }
+  | { type: "verifyMismatch" }
+  | { type: "verifyCancel" }
+  | { type: "signOutOthers"; password: string }
+  | { type: "signOutDevice"; deviceId: string; password: string };
 
 export type CommandType = Command["type"];
 
@@ -59,6 +68,7 @@ export type Event =
   | { event: "outbox"; txnId: string; status: SendStatus; error: string }
   | { event: "keys"; status: KeyStatus }
   | { event: "typing"; roomId: string; users: { userId: string; name: string }[] }
+  | { event: "verify"; update: VerifyState }
   | { event: "fatal"; message: string };
 
 export interface RoomWindow {

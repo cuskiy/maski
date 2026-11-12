@@ -3,7 +3,7 @@ import { config } from "../app/config.ts";
 import type { Member, Message } from "../core/types.ts";
 import { setLocale, t, timeOfDay } from "../i18n/index.ts";
 import { activeRoom } from "../store/select.ts";
-import { setState, state } from "../store/state.ts";
+import { setState, state, subscribe } from "../store/state.ts";
 import { el } from "./dom.ts";
 import { avatar } from "./media.ts";
 import { closeIcon, copyText, toast } from "./overlay.ts";
@@ -38,6 +38,118 @@ function shell(title: string, body: HTMLElement, app: App, footer?: HTMLElement)
 
 function row(label: string, ...children: (Node | string)[]): HTMLElement {
   return el("div", { class: "setting-row" }, [el("span", { class: "setting-label", text: label }), el("div", { class: "setting-value" }, children)]);
+}
+
+function securitySection(app: App): HTMLElement {
+  const body = el("div", { class: "security" });
+  const render = (): void => {
+    const card = verifyCard(app);
+    body.replaceChildren(...(card ? [card, deviceList(app), signOutOthers(app)] : [deviceList(app), signOutOthers(app)]));
+  };
+  render();
+  void app.loadDevices();
+  const stop = subscribe(() => {
+    if (!body.isConnected) {
+      stop();
+      return;
+    }
+    render();
+  });
+  return body;
+}
+
+function verifyCard(app: App): HTMLElement | null {
+  const verify = state.verify;
+  if (!verify) return null;
+  const card = el("div", { class: "verify-card" });
+  const send = (command: "verifyAccept" | "verifyConfirm" | "verifyMismatch" | "verifyCancel"): void => {
+    void app.worker.send({ type: command }).catch(() => app.toast(t("error.unknown")));
+  };
+  switch (verify.state) {
+    case "requested":
+      card.append(
+        el("p", { class: "verify-text", text: t("profile.verifyRequest") }),
+        el("p", { class: "dialog-note", text: verify.from }),
+        el("div", { class: "dialog-actions" }, [
+          button(t("profile.verifyAccept"), () => send("verifyAccept"), true),
+          button(t("profile.verifyDecline"), () => send("verifyCancel")),
+        ]),
+      );
+      return card;
+    case "ready":
+      card.append(el("p", { class: "verify-text", text: t("profile.verifyWaiting") }));
+      return card;
+    case "sas":
+      card.append(
+        el("p", { class: "verify-text", text: t("profile.verifyIntro") }),
+        el("div", { class: "verify-emoji" }, verify.emoji.map((emoji) =>
+          el("div", { class: "verify-emoji-cell" }, [
+            el("span", { class: "verify-symbol", text: emoji.symbol }),
+            el("span", { class: "verify-name", text: emoji.name }),
+          ]),
+        )),
+        el("div", { class: "dialog-actions" }, [
+          button(t("profile.verifyMatch"), () => send("verifyConfirm"), true),
+          button(t("profile.verifyNoMatch"), () => send("verifyMismatch")),
+        ]),
+      );
+      return card;
+    case "done":
+      card.append(el("p", { class: "verify-text", text: t("profile.verifyDone") }));
+      void app.loadDevices();
+      return card;
+    default:
+      card.append(
+        el("p", { class: "verify-text", text: t("profile.verifyCancelled") }),
+        el("div", { class: "dialog-actions" }, [button(t("common.close"), () => setState({ verify: null }))]),
+      );
+      return card;
+  }
+}
+
+function signOutOthers(app: App): HTMLElement {
+  const block = el("div", { class: "setting-value" });
+  const others = state.devices.filter((device) => !device.current).length;
+  const start = (): void => {
+    const password = textField(t("gate.password"), "", "password");
+    const confirm = button(t("settings.signOutOthersAction"), () => {
+      void app.worker
+        .send<{ signedOut: number }>({ type: "signOutOthers", password: password.value })
+        .then(() => {
+          toast(t("toast.signedOut"));
+          void app.loadDevices();
+        })
+        .catch(() => app.toast(t("error.credentials")));
+    }, true);
+    block.replaceChildren(password, confirm, button(t("common.cancel"), () => setState({ devices: state.devices })));
+    password.focus();
+  };
+  block.append(
+    el("span", { class: "status-text", text: t("settings.signOutOthersHint", { n: others }) }),
+    button(t("settings.signOutOthers"), start),
+  );
+  return block;
+}
+
+function deviceList(app: App): HTMLElement {
+  const list = el("div", { class: "device-list" }, [el("p", { class: "dialog-note", text: t("common.loading") })]);
+  if (state.devices.length > 0) {
+    list.replaceChildren(
+      ...state.devices.map((device) =>
+        el("div", { class: "device-row" }, [
+          el("span", { class: "device-name", text: device.name }),
+          device.current ? el("span", { class: "tag", text: t("profile.thisDevice") }) : null,
+          device.verified ? el("span", { class: "tag", text: t("profile.verified") }) : null,
+          !device.current && state.verify?.state !== "sas"
+            ? button(t("profile.verifyAction"), () => {
+                void app.worker.send({ type: "verifyStart", deviceId: device.deviceId }).catch(() => app.toast(t("error.unknown")));
+              })
+            : null,
+        ]),
+      ),
+    );
+  }
+  return list;
 }
 
 function avatarRow(app: App, name: string, existing: string | null): HTMLElement {
@@ -197,6 +309,8 @@ function settingsDialog(app: App): void {
       el("h2", { class: "section-title", text: t("settings.security") }),
       row(t("settings.securityDevice"), el("span", { class: "status-text", text: state.keys?.ready ? t("settings.securityReady") : t("settings.securityMissing") })),
       row(t("settings.securityBackup"), el("span", { class: "status-text", text: state.keys?.backup ? t("settings.securityReady") : t("settings.securityMissing") })),
+      el("h3", { class: "section-subtitle", text: t("profile.devices") }),
+      securitySection(app),
     ]),
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("settings.about") }),

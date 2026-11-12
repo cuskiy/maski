@@ -1,4 +1,4 @@
-import type { Draft, KeyStatus, Mark, Message, RoomSummary, Session } from "../core/types.ts";
+import type { DeviceEntry, Draft, KeyStatus, Mark, Message, RoomSummary, Session } from "../core/types.ts";
 import { WorkerClient } from "../client/worker-client.ts";
 import { LocalDb } from "../store/db.ts";
 import { activeRoom, roomPreview } from "../store/select.ts";
@@ -134,6 +134,15 @@ export class App implements UiContext {
     this.mount();
   }
 
+  async loadDevices(): Promise<void> {
+    try {
+      const result = await this.worker.send<{ devices: DeviceEntry[] }>({ type: "devices" });
+      setState({ devices: result.devices });
+    } catch {
+      setState({ devices: [] });
+    }
+  }
+
   async enter(): Promise<void> {
     const session = state.session;
     if (!session) return;
@@ -196,6 +205,13 @@ export class App implements UiContext {
         return;
       case "keys":
         setState({ keys: event.status });
+        return;
+      case "verify":
+        setState({ verify: event.update });
+        if (event.update.state === "requested") {
+          this.toast(t("profile.verifyRequest"));
+          if (!state.dialog) this.openDialog("settings");
+        }
         return;
       case "typing":
         if (event.roomId === state.activeRoomId) {

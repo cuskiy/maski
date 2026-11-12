@@ -57,6 +57,28 @@ prompt. The encoded key is returned once for display and never stored.
 Failures carry a code — `no-keys`, `invalid`, `restore`, `uia` — and the gate shows a
 sentence per code instead of one vague error.
 
+## Verifying a device
+
+`worker/verify.ts` holds one SAS verification. An incoming request is tracked from
+`CryptoEvent.VerificationRequestReceived`; a request from this side starts with
+`crypto.requestDeviceVerification(userId, deviceId)`. Once the request is `Ready` the side
+that asked for it calls `startVerification("m.sas.v1")` and the side that accepted waits for
+`request.verifier`. Seven emoji arrive through `VerifierEvent.ShowSas`, the user compares
+them and confirms with `sas.confirm()`; the SDK completes the MAC exchange and signs the
+device, which is what lets senders share room keys with it.
+
+The update is posted as one `verify` event with a state — `requested`, `ready`, `sas`,
+`done`, `cancelled` — and the interface renders it inside Settings, so a live flow stays in
+the dialog that owns it.
+
+## Sessions
+
+`devices` lists the account's sessions with `getDevices` and
+`crypto.getDeviceVerificationStatus`. `signOutOthers` and `signOutDevice` delete through
+`deleteMultipleDevices`: the first request asks the server for a user-interactive auth
+session, and the second carries that session with the password. The current device is never
+in the list to delete.
+
 ## Members
 
 The client starts with `lazyLoadMembers`, so a large room does not download its member list

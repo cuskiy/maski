@@ -1213,6 +1213,13 @@ a {
   text-transform: uppercase;
 }
 
+.section-subtitle {
+  padding-block-start: var(--space-2);
+  color: var(--surface-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
 .setting-row {
   display: grid;
   grid-template-columns: 9rem minmax(0, 1fr);
@@ -1274,6 +1281,69 @@ a {
 
 .setting-avatar {
   display: inline-flex;
+}
+
+.security {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.verify-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+}
+
+.verify-text {
+  font-size: var(--text-sm);
+}
+
+.verify-emoji {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.verify-emoji-cell {
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.verify-symbol {
+  font-size: var(--text-xl);
+  line-height: 1.1;
+}
+
+.verify-name {
+  color: var(--surface-text-muted);
+  font-size: 0.62rem;
+  overflow-wrap: anywhere;
+}
+
+.device-list {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.device-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) 0;
+}
+
+.device-name {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .member-list {
@@ -1466,7 +1536,14 @@ a {
     inline-size: auto;
   }
 
-  .setting-row {
+  .section-subtitle {
+  padding-block-start: var(--space-2);
+  color: var(--surface-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.setting-row {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-1);
   }

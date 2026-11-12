@@ -152,6 +152,26 @@ export type Phase = "boot" | "auth" | "gate" | "ready";
 
 export type SectionId = "invites" | "favorites" | "direct" | "rooms" | "low";
 
+export interface SasEmoji {
+  symbol: string;
+  name: string;
+}
+
+export type VerifyState =
+  | { state: "requested"; from: string; deviceId: string | null }
+  | { state: "ready" }
+  | { state: "sas"; emoji: SasEmoji[] }
+  | { state: "done" }
+  | { state: "cancelled" };
+
+export interface DeviceEntry {
+  deviceId: string;
+  name: string;
+  lastSeenTs: number;
+  current: boolean;
+  verified: boolean;
+}
+
 export interface KeyStatus {
   ready: boolean;
   backup: boolean;
