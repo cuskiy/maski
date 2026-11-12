@@ -43,7 +43,9 @@ export type Command =
   | { type: "mute"; roomId: string; on: boolean }
   | { type: "profile"; name?: string; avatar?: string }
   | { type: "uploadAvatar"; data: ArrayBuffer; mime: string }
-  | { type: "setRoomState"; roomId: string; name?: string; topic?: string; avatarUrl?: string };
+  | { type: "uploadRoomAvatar"; roomId: string; data: ArrayBuffer; mime: string }
+  | { type: "setRoomState"; roomId: string; name?: string; topic?: string; avatarUrl?: string }
+  | { type: "search"; query: string; roomId: string | null };
 
 export type CommandType = Command["type"];
 
@@ -56,12 +58,17 @@ export type Event =
   | { event: "connection"; connection: "connecting" | "online" | "offline" | "error"; message: string }
   | { event: "outbox"; txnId: string; status: SendStatus; error: string }
   | { event: "keys"; status: KeyStatus }
+  | { event: "typing"; roomId: string; users: { userId: string; name: string }[] }
   | { event: "fatal"; message: string };
 
 export interface RoomWindow {
   room: RoomSummary | null;
   messages: Message[];
   hasOlder: boolean;
+}
+
+export interface SearchResult {
+  hits: { roomId: string; message: Message }[];
 }
 
 export interface RegisterResult {

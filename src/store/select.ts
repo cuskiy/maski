@@ -1,6 +1,6 @@
 import { config } from "../app/config.ts";
 import type { Message, RoomSummary, SectionId } from "../core/types.ts";
-import { dayLabel } from "../i18n/index.ts";
+import { dayLabel, t } from "../i18n/index.ts";
 import { sectionOf, sortRooms, state } from "./state.ts";
 
 export interface DayItem {
@@ -47,6 +47,19 @@ export function sections(): Section[] {
     grouped.get(section)?.push(room);
   }
   return config.sections.map((id) => ({ id, rooms: sortRooms(grouped.get(id) ?? []) }));
+}
+
+export function roomPreview(room: RoomSummary): string {
+  const last = room.last;
+  if (!last) return "";
+  if (last.kind === "state") return last.body === "leave" ? t("room.memberLeft") : last.body === "invite" ? t("room.memberInvited") : t("room.memberJoined");
+  if (last.kind === "error") return t("room.encryptedPreview");
+  if (last.kind === "image") return t("room.image");
+  if (last.kind === "video") return t("room.video");
+  if (last.kind === "audio") return t("room.audio");
+  if (last.kind === "file") return t("room.file");
+  if (last.kind === "sticker") return t("room.sticker");
+  return last.own ? `${t("common.you")}: ${last.body}` : last.body;
 }
 
 export function activeRoom(): RoomSummary | null {

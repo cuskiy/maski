@@ -1,120 +1,62 @@
-import type { Draft, Mark, RoomSummary } from "../core/types.ts";
-import { escapeText } from "../core/text.ts";
+import type { Draft, Mark, MediaRef, PackImage, RoomSummary } from "../core/types.ts";
 import { t } from "../i18n/index.ts";
 import type { UiContext } from "./context.ts";
 import { el, icon, ICON } from "./dom.ts";
+import { offsetOf, segments, serialize, toggleMark } from "./marks.ts";
 import { openMenu } from "./overlay.ts";
 
 const MAX_UPLOAD = 100 * 1024 * 1024;
 
-function serialize(text: string, marks: Mark[]): string | null {
-  if (marks.length === 0) return null;
-  const open: string[] = [];
-  const close: string[] = [];
-  let out = "";
-  for (let index = 0; index < text.length; index += 1) {
-    const closing = activeAt(marks, index - 1).filter((kind) => !activeAt(marks, index).includes(kind));
-    for (const kind of closing.toReversed()) {
-      const name = tag(kind)[1];
-      const position = close.lastIndexOf(name);
-      if (position >= 0) close.splice(position, 1);
-      out += name;
-    }
-    const opening = new Set(activeAt(marks, index).filter((kind) => !activeAt(marks, index - 1).includes(kind)));
-    for (const kind of MARK_TYPES.filter((entry) => opening.has(entry))) {
-      out += tag(kind)[0];
-    }
-    const char = text[index] ?? "";
-    out += char === "\n" ? "<br>" : escapeText(char);
-  }
-  for (const type of activeAt(marks, text.length - 1).toReversed()) out += tag(type)[1];
-  void open;
-  return out;
+interface EmojiLookup {
+  url(image: PackImage): Promise<string | null>;
 }
 
-const MARK_TYPES: Mark["type"][] = ["bold", "italic", "underline", "strike", "code"];
-
-function tag(type: Mark["type"]): [string, string] {
-  switch (type) {
-    case "bold":
-      return ["<strong>", "</strong>"];
-    case "italic":
-      return ["<em>", "</em>"];
-    case "underline":
-      return ["<u>", "</u>"];
-    case "strike":
-      return ["<del>", "</del>"];
-    default:
-      return ["<code>", "</code>"];
-  }
+function ref(mxc: string, name: string): MediaRef {
+  return { mxc, mime: "image/png", size: 0, width: null, height: null, duration: null, name, file: null };
 }
 
-function activeAt(marks: Mark[], index: number): Mark["type"][] {
-  return marks.filter((mark) => index >= mark.start && index < mark.end).map((mark) => mark.type);
-}
-
-function renderFragment(text: string, marks: Mark[]): HTMLElement {
-  const host = el("div", { class: "field-render" });
-  let current: HTMLElement = host;
-  let activeState = "";
-  let buffer = "";
-  const flush = (): void => {
-    if (!buffer) return;
-    current.appendChild(document.createTextNode(buffer));
-    buffer = "";
-  };
-  const apply = (state: string): void => {
-    flush();
-    current = host;
-    for (const type of MARK_TYPES) {
-      if (!state.includes(type)) continue;
-      const next = document.createElement(type === "strike" ? "del" : type === "bold" ? "strong" : type === "italic" ? "em" : type);
+function renderFragment(text: string, marks: Mark[], emoji: Map<string, PackImage>, lookup: EmojiLookup): HTMLElement {
+  const host = el("div", { class: "composer-rendered" });
+  for (const segment of segments(text, marks)) {
+    const holder = segment.marks.reduce<HTMLElement>((parent, type) => {
+      const next = document.createElement(type === "bold" ? "strong" : type === "italic" ? "em" : type === "strike" ? "del" : type);
       if (type === "code") next.className = "inline-code";
-      current.appendChild(next);
-      current = next;
+      parent.appendChild(next);
+      return next;
+    }, host);
+    const parts = segment.text.split("\n");
+    for (const [index, part] of parts.entries()) {
+      if (index > 0) holder.appendChild(document.createElement("br"));
+      let rest = part;
+      while (rest.length > 0) {
+        const match = /^:([a-zA-Z0-9-_]+):/.exec(rest);
+        const image = match ? emoji.get(match[1] ?? "") : undefined;
+        if (match && image) {
+          const node = el("img", { class: "emoji-inline", attrs: { alt: image.body, title: image.shortcode } });
+          holder.appendChild(node);
+          void lookup.url(image).then((url) => {
+            if (url) node.src = url;
+            else node.remove();
+          });
+          rest = rest.slice(match[0].length);
+          continue;
+        }
+        const next = rest.search(/:([a-zA-Z0-9-_]+):/);
+        if (next < 0) {
+          holder.appendChild(document.createTextNode(rest));
+          break;
+        }
+        if (next > 0) {
+          holder.appendChild(document.createTextNode(rest.slice(0, next)));
+          rest = rest.slice(next);
+          continue;
+        }
+        holder.appendChild(document.createTextNode(rest.slice(0, 1)));
+        rest = rest.slice(1);
+      }
     }
-  };
-  for (let index = 0; index < text.length; index += 1) {
-    const state = activeAt(marks, index).join(" ");
-    if (state !== activeState) {
-      apply(state);
-      activeState = state;
-    }
-    const char = text[index] ?? "";
-    if (char === "\n") {
-      flush();
-      host.appendChild(document.createElement("br"));
-      continue;
-    }
-    buffer += char;
   }
-  flush();
   return host;
-}
-
-function caretOffset(container: HTMLElement, node: Node, offset: number): number {
-  let total = 0;
-  let found = false;
-  const visit = (current: Node): void => {
-    if (found) return;
-    if (current === node) {
-      if (current.nodeType === Node.TEXT_NODE) total += offset;
-      else for (let index = 0; index < Math.min(offset, current.childNodes.length); index += 1) visit(current.childNodes[index] as Node);
-      found = true;
-      return;
-    }
-    if (current.nodeName === "BR") {
-      total += 1;
-      return;
-    }
-    if (current.nodeType === Node.TEXT_NODE) {
-      total += (current.nodeValue ?? "").length;
-      return;
-    }
-    for (const child of current.childNodes) visit(child);
-  };
-  for (const child of container.childNodes) visit(child);
-  return total;
 }
 
 export class Composer {
@@ -123,8 +65,12 @@ export class Composer {
   private sendButton: HTMLButtonElement;
   private tray: HTMLElement;
   private banner: HTMLElement;
+  private note: HTMLElement;
   private rendered: HTMLElement;
   private files: File[] = [];
+  private caret = 0;
+  private trayUrls = new Set<string>();
+  private emoji = new Map<string, PackImage>();
   private ctx: UiContext;
 
   constructor(ctx: UiContext) {
@@ -133,7 +79,13 @@ export class Composer {
       class: "field composer-field",
       attrs: { rows: 1, placeholder: "", "aria-label": t("room.placeholder", { room: "" }) },
       on: {
-        input: () => this.sync(),
+        input: () => {
+          this.caret = this.textarea.selectionStart;
+          this.sync();
+        },
+        select: () => {
+          this.caret = this.textarea.selectionStart;
+        },
         keydown: (event) => this.onKey(event as KeyboardEvent),
         blur: () => this.showRendered(),
         focus: () => this.hideRendered(),
@@ -161,19 +113,15 @@ export class Composer {
     const emoji = el("button", {
       class: "icon-button",
       attrs: { type: "button", "aria-label": t("room.emoji") },
-      on: {
-        click: () => {
-          const picket = document.querySelector<HTMLElement>(".picker");
-          if (!picket) return;
-          this.ctx.openDialog("picker");
-        },
-      },
+      on: { click: () => this.ctx.togglePicker("emoji") },
     }, [icon(ICON.smile, 20)]);
     this.tray = el("div", { class: "composer-tray" });
     this.banner = el("div", { class: "composer-banner", attrs: { hidden: true } });
+    this.note = el("p", { class: "composer-note", attrs: { hidden: true } });
     const field = el("div", { class: "composer-field-wrap" }, [this.textarea, this.rendered]);
     this.root = el("div", { class: "composer" }, [
       this.banner,
+      this.note,
       this.tray,
       el("div", { class: "composer-row" }, [attach, el("div", { class: "composer-field-group" }, [field, emoji]), this.sendButton]),
     ]);
@@ -217,10 +165,7 @@ export class Composer {
     const start = this.textarea.selectionStart;
     const end = this.textarea.selectionEnd;
     if (start === end) return;
-    const marks = this.ctx.draftMarks();
-    const covered = marks.some((mark) => mark.type === type && mark.start <= start && mark.end >= end);
-    const next = covered ? marks.filter((mark) => !(mark.type === type && mark.start <= start && mark.end >= end)) : [...marks, { type, start, end }];
-    this.ctx.setDraft({ marks: next });
+    this.ctx.setDraft({ marks: toggleMark(this.ctx.draftMarks(), type, start, end) });
     this.sync();
   }
 
@@ -258,34 +203,52 @@ export class Composer {
   }
 
   private renderTray(): void {
+    for (const url of this.trayUrls) URL.revokeObjectURL(url);
+    this.trayUrls.clear();
     this.tray.replaceChildren(
-      ...this.files.map((file, index) =>
-        el("div", { class: "tray-item" }, [
+      ...this.files.map((file) => {
+        const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+        if (preview) this.trayUrls.add(preview);
+        return el("div", { class: "tray-item" }, [
+          preview
+            ? el("img", { class: "tray-preview", attrs: { src: preview, alt: file.name } })
+            : el("span", { class: "tray-icon" }, [icon(ICON.attach, 16)]),
           el("span", { class: "tray-name", text: file.name }),
           el("button", {
             class: "icon-button",
             attrs: { type: "button", "aria-label": t("common.cancel") },
             on: {
               click: () => {
-                this.files.splice(index, 1);
+                this.files = this.files.filter((entry) => entry !== file);
                 this.renderTray();
               },
             },
           }, [icon(ICON.close, 16)]),
-        ]),
-      ),
+        ]);
+      }),
     );
     this.tray.hidden = this.files.length === 0;
   }
 
+  private async loadEmoji(): Promise<void> {
+    const packs = await this.ctx.local.packs();
+    const emoji = new Map<string, PackImage>();
+    for (const pack of packs) {
+      if (pack.usage === "sticker") continue;
+      for (const image of pack.images) emoji.set(image.shortcode, image);
+    }
+    this.emoji = emoji;
+  }
+
   load(draft: Draft, room: RoomSummary | null): void {
     this.textarea.value = draft.text;
+    this.textarea.style.height = "";
     this.textarea.placeholder = room ? t("room.placeholder", { room: room.name }) : "";
-    this.textarea.disabled = !room || room.membership !== "join" || !room.canSend;
     this.files = [];
     this.renderTray();
     this.updateBanner();
     this.sync();
+    if (this.emoji.size === 0) void this.loadEmoji();
   }
 
   updateBanner(): void {
@@ -318,10 +281,17 @@ export class Composer {
   private sync(): void {
     const text = this.textarea.value;
     this.ctx.setDraft({ text });
-    this.textarea.style.setProperty("--rows", String(Math.min(8, Math.max(1, text.split("\n").length))));
-    this.textarea.style.setProperty("--field-height", `${Math.min(220, this.textarea.scrollHeight)}px`);
+    this.resize();
     this.sendButton.disabled = text.trim().length === 0 && this.files.length === 0;
     if (!this.textarea.matches(":focus")) this.showRendered();
+    this.ctx.typing(text.length > 0);
+  }
+
+  private resize(): void {
+    const field = this.textarea;
+    field.style.height = "auto";
+    const limit = Number.parseFloat(getComputedStyle(field).maxBlockSize);
+    field.style.height = `${Math.min(field.scrollHeight, Number.isFinite(limit) ? limit : 220)}px`;
   }
 
   private showRendered(): void {
@@ -331,7 +301,9 @@ export class Composer {
       this.textarea.hidden = false;
       return;
     }
-    const fragment = renderFragment(draft.text, draft.marks);
+    const fragment = renderFragment(draft.text, draft.marks, this.emoji, {
+      url: (image) => this.ctx.media.url(image.info ?? ref(image.url, image.body), 64),
+    });
     this.rendered.replaceChildren(...fragment.childNodes);
     this.rendered.hidden = false;
     this.textarea.hidden = true;
@@ -344,21 +316,33 @@ export class Composer {
   }
 
   private onRenderedClick(event: PointerEvent): void {
-    const position = document.caretPositionFromPoint(event.clientX, event.clientY);
-    const offset = position ? caretOffset(this.rendered, position.offsetNode, position.offset) : this.textarea.value.length;
+    const position = document.caretPositionFromPoint
+      ? document.caretPositionFromPoint(event.clientX, event.clientY)
+      : ((): { offsetNode: Node; offset: number } | null => {
+          const range = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+          return range ? { offsetNode: range.startContainer, offset: range.startOffset } : null;
+        })();
+    const offset = position ? offsetOf(this.rendered, position.offsetNode, position.offset) : this.textarea.value.length;
     this.hideRendered();
     this.textarea.focus();
     this.textarea.setSelectionRange(offset, offset);
   }
 
   insert(text: string): void {
-    const start = this.textarea.selectionStart;
-    const end = this.textarea.selectionEnd;
+    const start = this.textarea.matches(":focus") ? this.textarea.selectionStart : this.caret;
+    const end = this.textarea.matches(":focus") ? this.textarea.selectionEnd : this.caret;
     const value = this.textarea.value;
     this.textarea.value = `${value.slice(0, start)}${text}${value.slice(end)}`;
-    this.textarea.setSelectionRange(start + text.length, start + text.length);
+    this.caret = start + text.length;
+    this.textarea.setSelectionRange(this.caret, this.caret);
     this.textarea.focus();
     this.sync();
+  }
+
+  setReadOnly(reason: string | null): void {
+    this.textarea.disabled = reason !== null;
+    this.note.hidden = reason === null;
+    if (reason) this.note.textContent = reason;
   }
 
   focus(): void {
@@ -376,12 +360,13 @@ export class Composer {
     this.files = [];
     this.renderTray();
     this.textarea.value = "";
-    this.textarea.style.setProperty("--field-height", "");
+    this.textarea.style.height = "";
+    if (this.emoji.size === 0) await this.loadEmoji();
     if (draft.edit) {
       this.ctx.setDraft({ text: "", marks: [], edit: null, reply: null });
-      await this.ctx.submitEdit(draft.edit.id, text, serialize(text, draft.marks));
+      await this.ctx.submitEdit(draft.edit.id, text, serialize(text, draft.marks, this.emoji));
     } else {
-      const html = serialize(text, draft.marks);
+      const html = serialize(text, draft.marks, this.emoji);
       const replyTo = draft.reply?.id ?? null;
       this.ctx.setDraft({ text: "", marks: [], reply: null });
       if (text.trim().length > 0) await this.ctx.submitText(text, html, replyTo);

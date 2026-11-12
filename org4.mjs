@@ -1,0 +1,12 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch({ executablePath: "/nix/store/bjjswgpm41wpy2mzdf8d688p39fpbp4d-chromium-156.0.8078.47/bin/chromium" });
+const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+page.on("worker", (w) => w.on("console", (m) => console.log("W:", m.text().slice(0, 200))));
+await page.goto("http://localhost:5173/", { waitUntil: "networkidle" });
+await page.fill('input[name="server"]', "https://matrix.org");
+await page.fill('input[name="username"]', "maskiy");
+await page.fill('input[name="password"]', "kf891fda8da.");
+await page.click('form button[type="submit"]');
+await page.waitForTimeout(20000);
+console.log("notice:", await page.locator(".form-notice").textContent());
+await browser.close();

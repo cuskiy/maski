@@ -1,4 +1,5 @@
 import type { MediaRef } from "../core/types.ts";
+import { fileSize, t } from "../i18n/index.ts";
 import { el, icon, ICON } from "./dom.ts";
 import { LocalDb } from "../store/db.ts";
 import { WorkerClient } from "../client/worker-client.ts";
@@ -83,8 +84,8 @@ export function openViewer(url: string, name: string): void {
     el("img", { class: "viewer-image", attrs: { src: url, alt: name } }),
     el("div", { class: "viewer-bar" }, [
       el("span", { class: "viewer-name", text: name }),
-      el("a", { class: "button", attrs: { href: url, download: name } }, [icon(ICON.arrowDown), el("span", { text: "Download" })]),
-      el("button", { class: "icon-button", attrs: { type: "button", "aria-label": "Close" }, on: { click: () => dialog.close() } }, [icon(ICON.close)]),
+      el("a", { class: "button", attrs: { href: url, download: name } }, [icon(ICON.arrowDown), el("span", { text: t("room.download") })]),
+      el("button", { class: "icon-button", attrs: { type: "button", "aria-label": t("common.close") }, on: { click: () => dialog.close() } }, [icon(ICON.close)]),
     ]),
   ]);
   dialog.addEventListener("close", () => {
@@ -98,7 +99,6 @@ export function picture(ref: MediaRef, kind: "image" | "video" | "sticker"): HTM
   const ratio = ref.width && ref.height ? `${ref.width} / ${ref.height}` : kind === "sticker" ? "1 / 1" : "4 / 3";
   const box = el("div", { class: `media media-kind-${kind}` });
   box.style.setProperty("--media-ratio", ratio);
-  if (kind !== "sticker") box.style.setProperty("--media-width", `${Math.min(ref.width ?? 320, 320)}px`);
   if (ref.mime.startsWith("video/")) {
     const video = el("video", { class: "media-video", attrs: { controls: true, preload: "none", playsinline: true } });
     box.appendChild(video);
@@ -112,7 +112,7 @@ export function picture(ref: MediaRef, kind: "image" | "video" | "sticker"): HTM
   }
   const placeholder = el("div", { class: "media-placeholder" });
   box.appendChild(placeholder);
-  void cache?.url(ref, kind === "sticker" ? 320 : 640).then((url) => {
+  void cache?.url(ref, ref.file ? 0 : kind === "sticker" ? 320 : 640).then((url) => {
     if (!url) {
       box.classList.add("media-failed");
       placeholder.textContent = ref.name;
@@ -129,6 +129,6 @@ export function picture(ref: MediaRef, kind: "image" | "video" | "sticker"): HTM
 export function fileCard(ref: MediaRef): HTMLElement {
   return el("div", { class: "file-card" }, [
     el("div", { class: "file-name", text: ref.name }),
-    el("div", { class: "file-meta", text: ref.mime }),
+    el("div", { class: "file-meta", text: [ref.mime, ref.size > 0 ? fileSize(ref.size) : ""].filter(Boolean).join(" · ") }),
   ]);
 }

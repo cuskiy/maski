@@ -28,13 +28,26 @@ export class WorkerClient {
     return () => this.listeners.delete(listener);
   }
 
-  async send<T>(command: Command): Promise<T> {
+  async send<T>(command: Command, timeoutMs = 60000): Promise<T> {
     this.start();
     const worker = this.worker;
     if (!worker) throw new Error("worker is not available");
     const id = (this.sequence += 1);
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      const timer = command.type === "start" ? 0 : window.setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("the client did not answer"));
+      }, timeoutMs);
+      this.pending.set(id, {
+        resolve: (value) => {
+          window.clearTimeout(timer);
+          resolve(value as T);
+        },
+        reject: (error) => {
+          window.clearTimeout(timer);
+          reject(error);
+        },
+      });
       worker.postMessage({ id, command }, transferOf(command));
     });
   }

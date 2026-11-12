@@ -1,13 +1,12 @@
 import type { App } from "../app/app.ts";
 import { config } from "../app/config.ts";
-import type { Member, RoomSummary } from "../core/types.ts";
-import { fileSize, setLocale, t } from "../i18n/index.ts";
+import type { Member, Message } from "../core/types.ts";
+import { setLocale, t, timeOfDay } from "../i18n/index.ts";
 import { activeRoom } from "../store/select.ts";
 import { setState, state } from "../store/state.ts";
-import { el, icon, ICON } from "./dom.ts";
+import { el } from "./dom.ts";
 import { avatar } from "./media.ts";
 import { closeIcon, copyText, toast } from "./overlay.ts";
-import { safeMessageHtml } from "./sanitize.ts";
 
 let current: HTMLDialogElement | null = null;
 
@@ -41,6 +40,30 @@ function row(label: string, ...children: (Node | string)[]): HTMLElement {
   return el("div", { class: "setting-row" }, [el("span", { class: "setting-label", text: label }), el("div", { class: "setting-value" }, children)]);
 }
 
+function avatarRow(app: App, name: string, existing: string | null): HTMLElement {
+  const slot = el("span", { class: "setting-avatar" }, [avatar(existing, name, 40)]);
+  const upload = uploadButton(t("settings.changeAvatar"), async (file) => {
+    const data = await file.arrayBuffer();
+    const result = await app.worker.send<{ url: string }>({ type: "uploadAvatar", data, mime: file.type || "image/png" });
+    slot.replaceChildren(avatar(result.url, name, 40));
+    if (state.session) setState({ session: { ...state.session, avatar: result.url } });
+    toast(t("toast.saved"));
+  });
+  return el("div", { class: "setting-value" }, [slot, upload]);
+}
+
+function uploadButton(label: string, onFile: (file: File) => Promise<void>): HTMLElement {
+  const input = el("input", { attrs: { type: "file", accept: "image/*", hidden: true } });
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) void onFile(file).catch(() => toast(t("error.upload")));
+  });
+  return el("span", { class: "inline-form" }, [
+    el("button", { class: "button", attrs: { type: "button" }, on: { click: () => input.click() } }, [el("span", { text: label })]),
+    input,
+  ]);
+}
+
 function desktopStatus(): string {
   if (typeof Notification === "undefined") return t("settings.desktopUnsupported");
   if (Notification.permission === "granted") return t("settings.desktopOn");
@@ -57,7 +80,10 @@ function button(label: string, onClick: () => void, primary = false): HTMLButton
   return el("button", { class: `button${primary ? " button-primary" : ""}`, attrs: { type: "button" }, on: { click: onClick } }, [el("span", { text: label })]);
 }
 
+const DIALOGS = new Set(["settings", "room-settings", "profile", "search", "join", "create", "new-message"]);
+
 export function showDialog(app: App, name: string, arg?: string): void {
+  if (!DIALOGS.has(name)) return;
   setState({ dialog: name });
   switch (name) {
     case "settings":
@@ -136,6 +162,12 @@ function settingsDialog(app: App): void {
         ]),
       ]),
       row(t("settings.displayName"), name),
+      row(t("settings.mxid"), el("button", {
+        class: "link-button mono",
+        attrs: { type: "button" },
+        on: { click: () => void copyText(session.userId, t("toast.copied")) },
+      }, [el("span", { text: session.userId })])),
+      row(t("settings.avatar"), avatarRow(app, session.displayName, session.avatar)),
       note,
       row(t("settings.language"), language),
       el("div", { class: "dialog-actions" }, [
@@ -150,6 +182,15 @@ function settingsDialog(app: App): void {
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("settings.notifications") }),
       row(t("settings.desktop"), desktop),
+      row(t("settings.preview"), el("input", {
+        attrs: { type: "checkbox", ...(state.settings.preview ? { checked: true } : {}) },
+        on: {
+          change: (event) => {
+            const preview = (event.target as HTMLInputElement).checked;
+            void app.local.saveSettings({ preview }).then((settings) => setState({ settings }));
+          },
+        },
+      })),
       el("p", { class: "dialog-note", text: t("settings.previewHint") }),
     ]),
     el("section", { class: "section" }, [
@@ -178,7 +219,7 @@ function roomSettingsDialog(app: App, roomId: string): void {
   const nameInput = textField(t("roomSettings.name"), room.name);
   const topicInput = textField(t("roomSettings.topic"), room.topic);
   const members = el("div", { class: "member-list" }, [el("p", { class: "dialog-note", text: t("common.loading") })]);
-  const canEdit = room.membership === "join";
+  const canEdit = room.membership === "join" && room.myPower >= 50;
   void app.worker.send<{ members: Member[] }>({ type: "members", roomId }).then((result) => {
     const sorted = result.members.toSorted((a, b) => b.power - a.power || a.name.localeCompare(b.name));
     members.replaceChildren(
@@ -198,6 +239,16 @@ function roomSettingsDialog(app: App, roomId: string): void {
   const body = el("div", { class: "dialog-sections" }, [
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("roomSettings.general") }),
+      row(t("roomSettings.avatar"), el("div", { class: "setting-value" }, [
+        avatar(room.avatar, room.name, 40),
+        canEdit
+          ? uploadButton(t("settings.changeAvatar"), async (file) => {
+              const data = await file.arrayBuffer();
+              await app.worker.send({ type: "uploadRoomAvatar", roomId, data, mime: file.type || "image/png" });
+              toast(t("toast.saved"));
+            })
+          : el("span"),
+      ])),
       canEdit ? row(t("roomSettings.name"), nameInput) : row(t("roomSettings.name"), el("span", { class: "status-text", text: room.name })),
       canEdit ? row(t("roomSettings.topic"), topicInput) : row(t("roomSettings.topic"), el("span", { class: "status-text", text: room.topic || "—" })),
       canEdit
@@ -292,7 +343,8 @@ function searchDialog(app: App): void {
       results.replaceChildren(el("p", { class: "dialog-note", text: t("search.empty") }));
       return;
     }
-    const hits = await searchLocal(app, query);
+    const result = await app.worker.send<{ hits: { roomId: string; message: Message }[] }>({ type: "search", query, roomId: null });
+    const hits = result.hits;
     if (hits.length === 0) {
       results.replaceChildren(el("p", { class: "dialog-note", text: t("search.noResults") }));
       return;
@@ -306,33 +358,18 @@ function searchDialog(app: App): void {
           on: {
             click: () => {
               app.closeDialog();
-              app.openRoom(hit.roomId);
+              app.openRoom(hit.roomId, hit.message.id);
             },
           },
         }, [
-          el("span", { class: "search-room", text: state.rooms.get(hit.roomId)?.name ?? hit.roomId }),
-          el("span", { class: "search-text", text: hit.body }),
+          el("span", { class: "search-room", text: `${state.rooms.get(hit.roomId)?.name ?? hit.roomId} · ${timeOfDay(hit.message.ts)}` }),
+          el("span", { class: "search-text", text: hit.message.body }),
         ]),
       ),
     );
   };
   shell(t("search.title"), el("div", { class: "dialog-sections" }, [input, results]), app);
   requestAnimationFrame(() => input.focus());
-}
-
-async function searchLocal(app: App, query: string): Promise<{ roomId: string; body: string }[]> {
-  const rooms = [...state.rooms.values()].filter((room) => room.membership === "join");
-  const output: { roomId: string; body: string }[] = [];
-  for (const room of rooms) {
-    const messages = await app.local.window(room.roomId, 2000);
-    for (const message of messages) {
-      if (!message.body || message.kind === "state" || message.kind === "error") continue;
-      if (!message.body.toLowerCase().includes(query.toLowerCase())) continue;
-      output.push({ roomId: room.roomId, body: message.body });
-      if (output.length >= config.limits.search) return output;
-    }
-  }
-  return output;
 }
 
 function joinDialog(app: App): void {
@@ -401,5 +438,3 @@ function newMessageDialog(app: App): void {
   ]), app);
   requestAnimationFrame(() => userId.focus());
 }
-
-export type { RoomSummary, safeMessageHtml, fileSize, icon, ICON };

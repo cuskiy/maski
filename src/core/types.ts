@@ -61,6 +61,13 @@ export interface Message {
   search: string[];
 }
 
+export interface LastMessage {
+  kind: MessageKind;
+  body: string;
+  name: string;
+  own: boolean;
+}
+
 export interface RoomSummary {
   roomId: string;
   name: string;
@@ -71,8 +78,7 @@ export interface RoomSummary {
   isDirect: boolean;
   encrypted: boolean;
   lastTs: number;
-  preview: string;
-  previewKind: MessageKind | "membership" | "none";
+  last: LastMessage | null;
   unread: number;
   highlight: number;
   muted: boolean;
@@ -80,6 +86,7 @@ export interface RoomSummary {
   lowPriority: boolean;
   inviter: string | null;
   joined: number;
+  myPower: number;
   hasOlder: boolean;
   canSend: boolean;
 }
@@ -148,7 +155,6 @@ export type SectionId = "invites" | "favorites" | "direct" | "rooms" | "low";
 export interface KeyStatus {
   ready: boolean;
   backup: boolean;
-  hasOtherDevices: boolean;
 }
 
 export type ErrorCode =

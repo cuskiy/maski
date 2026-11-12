@@ -1,6 +1,6 @@
 import type { Message, RoomSummary } from "../core/types.ts";
 import { t, timeOfDay } from "../i18n/index.ts";
-import { timelineItems } from "../store/select.ts";
+import { timelineItems, type TimelineItem } from "../store/select.ts";
 import { state } from "../store/state.ts";
 import type { UiContext } from "./context.ts";
 import { el, keyed } from "./dom.ts";
@@ -33,7 +33,7 @@ function bubbleContent(message: Message, ctx: UiContext): HTMLElement {
       el("button", {
         class: "quote",
         attrs: { type: "button" },
-        on: { click: () => ctx.openRoom(message.roomId) },
+        on: { click: () => { if (message.reply) ctx.reveal(message.reply.id); } },
       }, [el("span", { class: "quote-name", text: message.reply.name }), el("span", { class: "quote-text", text: message.reply.body })]),
     );
   }
@@ -78,7 +78,7 @@ function statusRow(message: Message, ctx: UiContext): HTMLElement | null {
   if (message.status === "failed") {
     if (message.kind === "image" || message.kind === "file") {
       return el("button", { class: "row-status row-status-failed", attrs: { type: "button" }, on: { click: () => ctx.removePending(message) } }, [
-        el("span", { text: t("room.retry") }),
+        el("span", { text: t("room.discard") }),
       ]);
     }
     return el("button", { class: "row-status row-status-failed", attrs: { type: "button" }, on: { click: () => ctx.retry(message) } }, [
@@ -92,7 +92,7 @@ function menuFor(message: Message, x: number, y: number, ctx: UiContext): void {
   const own = message.sender === state.session?.userId;
   const items = [
     { label: t("menu.reply"), action: () => ctx.startReply(message) },
-    { label: t("menu.react"), action: () => ctx.react(message, "👍") },
+    { label: t("menu.react"), action: () => ctx.reactPicker(message) },
     { label: t("menu.copy"), action: () => ctx.copy(message.body, t("toast.copied")) },
     { label: t("menu.link"), action: () => ctx.copy(`${location.origin}${location.pathname}#/room/${encodeURIComponent(message.roomId)}/${encodeURIComponent(message.id)}`, t("toast.copied")) },
   ];
@@ -110,14 +110,22 @@ function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: Ui
     class: `row ${own ? "row-own" : "row-other"}${groupStart ? " row-start" : ""}`,
     dataset: { id: message.id },
   });
+  row.tabIndex = 0;
   row.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     menuFor(message, event.clientX, event.clientY, ctx);
   });
+  row.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+    event.preventDefault();
+    const box = row.getBoundingClientRect();
+    menuFor(message, box.left + 24, box.top + 12, ctx);
+  });
 
   if (message.kind === "state") {
+    const action = message.body === "leave" ? t("room.memberLeft") : message.body === "invite" ? t("room.memberInvited") : t("room.memberJoined");
     row.classList.add("row-state");
-    row.appendChild(el("div", { class: "state-line", text: `${message.name} ${message.body === "join" ? t("room.memberJoined") : message.body === "leave" ? t("room.memberLeft") : t("room.memberInvited")}` }));
+    row.append(el("div", { class: "state-line", text: t("room.membership", { name: message.name, action }) }));
     return row;
   }
 
@@ -136,6 +144,13 @@ function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: Ui
   return row;
 }
 
+function signature(item: TimelineItem): string {
+  if (item.kind === "day") return item.label;
+  const message = item.message;
+  const reactions = message.reactions.map((reaction) => `${reaction.key}${reaction.count}${reaction.me ? "+" : ""}`).join(",");
+  return `${item.groupStart}${item.own}${message.status}${message.edited}${message.body.length}${message.html?.length ?? 0}${reactions}${message.reply?.id ?? ""}`;
+}
+
 export class TimelineView {
   readonly root: HTMLElement;
   private list: HTMLOListElement;
@@ -145,7 +160,7 @@ export class TimelineView {
 
   constructor(ctx: UiContext) {
     this.ctx = ctx;
-    this.list = el("ol", { class: "timeline", attrs: { "aria-label": t("room.empty") } });
+    this.list = el("ol", { class: "timeline", attrs: { "aria-label": t("room.timeline") } });
     this.older = el("button", { class: "load-older", attrs: { type: "button" }, on: { click: () => void this.loadOlder() } }, [el("span", { text: t("room.loading") })]);
     this.root = el("div", { class: "timeline-scroll" }, [this.older, this.list]);
     this.root.addEventListener("scroll", () => {
@@ -158,6 +173,7 @@ export class TimelineView {
   }
 
   private loading = false;
+  private anchor: { height: number; top: number; count: number } | null = null;
 
   private async loadOlder(): Promise<void> {
     const room = this.ctx.activeRoom();
@@ -165,37 +181,58 @@ export class TimelineView {
     this.loading = true;
     this.older.hidden = false;
     this.older.classList.add("is-loading");
-    const before = this.root.scrollHeight;
+    this.anchor = { height: this.root.scrollHeight, top: this.root.scrollTop, count: this.list.childElementCount };
     try {
-      await this.ctx.worker.send<{ messages: Message[] }>({ type: "paginate", roomId: room.roomId });
+      await this.ctx.worker.send({ type: "paginate", roomId: room.roomId });
     } finally {
       this.loading = false;
       this.older.classList.remove("is-loading");
-      requestAnimationFrame(() => {
-        this.root.scrollTop += this.root.scrollHeight - before;
-      });
     }
   }
 
+  scrollToBottom(): void {
+    this.root.scrollTop = this.root.scrollHeight;
+  }
+
+  reveal(eventId: string): void {
+    const row = this.list.querySelector<HTMLElement>(`[data-id="${CSS.escape(eventId)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    row.classList.add("is-revealed");
+    setTimeout(() => row.classList.remove("is-revealed"), 1600);
+  }
+
   render(messages: Message[], room: RoomSummary | null): void {
-    this.older.hidden = !state.hasOlder;
+    this.older.hidden = !state.hasOlder || this.loading;
     if (!room) {
-      keyed(this.list, [], () => el("li"));
+      this.list.replaceChildren();
       return;
     }
     const items = timelineItems(messages);
+    const build = (item: TimelineItem): HTMLElement =>
+      item.kind === "day"
+        ? el("li", { class: "row-day" }, [el("span", { class: "day-label", text: item.label })])
+        : messageRow(item.message, item.groupStart, item.own, this.ctx);
     keyed(
       this.list,
       items.map((item) => ({ key: item.key, value: item })),
-      (item) =>
-        item.kind === "day"
-          ? el("li", { class: "row-day" }, [el("span", { class: "day-label", text: item.label })])
-          : messageRow(item.message, item.groupStart, item.own, this.ctx),
+      build,
+      (node, item) => {
+        if (node.dataset["signature"] === signature(item)) return;
+        const fresh = build(item);
+        node.className = fresh.className;
+        node.replaceChildren(...fresh.childNodes);
+        node.dataset["signature"] = signature(item);
+      },
     );
-    if (this.pinned) {
+    const anchor = this.anchor;
+    if (anchor && this.list.childElementCount > anchor.count) {
+      this.anchor = null;
       requestAnimationFrame(() => {
-        this.root.scrollTop = this.root.scrollHeight;
+        this.root.scrollTop = anchor.top + (this.root.scrollHeight - anchor.height);
       });
+      return;
     }
+    if (this.pinned) requestAnimationFrame(() => this.scrollToBottom());
   }
 }

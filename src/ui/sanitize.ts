@@ -4,7 +4,8 @@ const ALLOWED = {
   ALLOWED_TAGS: ["p", "br", "strong", "b", "em", "i", "u", "del", "s", "code", "pre", "blockquote", "ul", "ol", "li", "a", "hr", "img", "span"],
   ALLOWED_ATTR: ["href", "src", "alt", "title", "height", "width", "data-mx-emoticon", "data-mx-color"],
   ALLOW_DATA_ATTR: false,
-  FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "h1", "h2", "h3", "h4", "h5", "h6"],
+  FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "h1", "h2", "h3", "h4", "h5", "h6", "mx-reply"],
+  FORBID_CONTENTS: ["mx-reply"],
   FORBID_ATTR: ["style", "class", "id", "onerror", "onclick"],
 };
 

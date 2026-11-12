@@ -137,6 +137,14 @@ export class AccountDb {
     return rows.toReversed();
   }
 
+  async byStatus(statuses: string[]): Promise<Message[]> {
+    const tx = this.handle().transaction(STORE.events, "readonly");
+    const index = tx.objectStore(STORE.events).index(INDEX.eventsStatus);
+    const rows: Message[] = [];
+    for (const status of statuses) rows.push(...((await request(index.getAll(status))) as Message[]));
+    return rows;
+  }
+
   async rawEvents(roomId: string): Promise<Message[]> {
     const tx = this.handle().transaction(STORE.events, "readonly");
     const index = tx.objectStore(STORE.events).index(INDEX.eventsRoom);
@@ -160,7 +168,7 @@ export class AccountDb {
       const row = (await request(index.objectStore.get(key))) as Message | undefined;
       if (!row) continue;
       if (roomId && row.roomId !== roomId) continue;
-      if (row.status !== "sent" && row.status !== "failed") continue;
+      if (row.status !== "sent") continue;
       rows.push(row);
     }
     return rows.toSorted((a, b) => b.ts - a.ts).slice(0, limit);
@@ -180,6 +188,12 @@ export class AccountDb {
 
   async putMessages(messages: Message[]): Promise<void> {
     await this.putAll(STORE.events, messages);
+  }
+
+  async hasMembers(roomId: string): Promise<boolean> {
+    const tx = this.handle().transaction(STORE.members, "readonly");
+    const count = await request(tx.objectStore(STORE.members).index(INDEX.membersRoom).count(roomId));
+    return count > 0;
   }
 
   async putMembers(members: Member[]): Promise<void> {

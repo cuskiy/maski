@@ -1,7 +1,7 @@
-import type { Draft, Mark, Message, RoomSummary, SectionId } from "../core/types.ts";
+import type { Draft, KeyStatus, Mark, Message, RoomSummary, Session } from "../core/types.ts";
 import { WorkerClient } from "../client/worker-client.ts";
 import { LocalDb } from "../store/db.ts";
-import { activeRoom } from "../store/select.ts";
+import { activeRoom, roomPreview } from "../store/select.ts";
 import { EMPTY_DRAFT, setState, state, touch } from "../store/state.ts";
 import { MediaCache } from "../ui/media.ts";
 import { Shell } from "../ui/shell.ts";
@@ -9,18 +9,28 @@ import { copyText, toast } from "../ui/overlay.ts";
 import { closeDialog, showDialog } from "../ui/dialogs.ts";
 import { authScreen, gateScreen } from "../ui/screens.ts";
 import type { UiContext } from "../ui/context.ts";
-import { getLocale, setLocale, t } from "../i18n/index.ts";
-import type { Event, RoomWindow } from "../protocol/messages.ts";
+import { localeFromPath, setLocale, t } from "../i18n/index.ts";
+import type { RoomWindow } from "../protocol/messages.ts";
+import { config } from "./config.ts";
+import type { Event as WorkerEvent } from "../protocol/messages.ts";
 
+const MAX_WINDOW = 80;
 
 export class App implements UiContext {
   readonly local = new LocalDb();
   readonly worker = new WorkerClient();
   readonly media: MediaCache;
-  private shell: Shell;
+  private readonly root: HTMLElement;
+  private readonly shell: Shell;
   private draftState: Draft = EMPTY_DRAFT;
   private typingTimer = 0;
-  private root: HTMLElement;
+  private typingSent = false;
+  private lastRead = "";
+  private dialogPushed = false;
+  private draftTimer = 0;
+  private loadingRoom: string | null = null;
+  private seen = new Map<string, number>();
+  private started = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -30,36 +40,22 @@ export class App implements UiContext {
 
   async boot(): Promise<void> {
     const settings = await this.local.settings();
-    const locale = settings.locale ?? (location.pathname.startsWith("/zh-CN/") ? "zh-CN" : "en");
+    const locale = settings.locale ?? localeFromPath(location.pathname);
     setLocale(locale);
     setState({ settings, locale });
     this.worker.start();
-    this.worker.onEvent((event) => this.onWorkerEvent(event));
-    window.addEventListener("popstate", () => this.applyRoute());
-    window.addEventListener("hashchange", () => this.applyRoute());
-    window.addEventListener("offline", () => setState({ connection: "offline" }));
-    window.addEventListener("online", () => {
-      void this.worker.send({ type: "retrySync" });
-    });
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") this.markReadSoon();
-    });
+    this.worker.onEvent((event) => void this.onWorkerEvent(event));
+    this.listen();
 
     const last = settings.lastAccount;
     if (last) {
       try {
         await this.local.openAccount(last.hash);
         const rooms = await this.local.rooms();
+        this.remember(rooms);
         setState({
           rooms: new Map(rooms.map((room) => [room.roomId, room])),
-          session: {
-            userId: last.userId,
-            deviceId: "",
-            displayName: last.name,
-            avatar: last.avatar,
-            baseUrl: last.baseUrl,
-            accountHash: last.hash,
-          },
+          session: { userId: last.userId, deviceId: "", displayName: last.name, avatar: last.avatar, baseUrl: last.baseUrl, accountHash: last.hash },
           phase: settings.keysReady ? "ready" : "gate",
         });
         this.mount();
@@ -69,142 +65,119 @@ export class App implements UiContext {
     }
 
     try {
-      const result = await this.worker.send<{ session: { accountHash: string } | null }>({
-        type: "start",
-        accountHash: last?.hash ?? null,
-      });
+      const result = await this.worker.send<{ session: Session | null }>({ type: "start", accountHash: last?.hash ?? null });
       if (!result.session) {
         setState({ phase: "auth" });
         this.mount();
         return;
       }
-      this.local.closeAccount();
-      await this.local.openAccount(result.session.accountHash);
-      const rooms = await this.local.rooms();
-      setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: settings.keysReady ? "ready" : "gate" });
-      const status = await this.worker.send<{ ready: boolean }>({ type: "keyStatus" });
-      setState({ keys: { ready: status.ready, backup: false, hasOtherDevices: false }, phase: status.ready ? "ready" : "gate" });
-      await this.local.saveSettings({ keysReady: status.ready });
-      this.mount();
-      this.applyRoute();
+      if (state.phase === "boot") await this.applySession(result.session, settings.keysReady);
     } catch (error) {
       setState({ phase: "auth", notice: error instanceof Error ? error.message : "" });
       this.mount();
     }
   }
 
-  private get routeRoom(): string | null {
-    const match = /^#\/room\/([^?]+)/.exec(location.hash);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  private listen(): void {
+    window.addEventListener("popstate", () => this.applyRoute());
+    window.addEventListener("hashchange", () => this.applyRoute());
+    window.addEventListener("offline", () => setState({ connection: "offline" }));
+    window.addEventListener("online", () => void this.worker.send({ type: "retrySync" }));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.markRead();
+    });
   }
 
-  private get routeDialog(): string | null {
-    const query = location.hash.includes("?") ? location.hash.slice(location.hash.indexOf("?") + 1) : "";
-    return new URLSearchParams(query).get("d");
+  private async applySession(session: Session, keysReady: boolean): Promise<void> {
+    if (state.session?.accountHash === session.accountHash && state.phase === "ready") return;
+    await this.local.openAccount(session.accountHash);
+    const rooms = await this.local.rooms();
+    this.remember(rooms);
+    setState({ session, rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: keysReady ? "ready" : "gate" });
+    await this.local.saveSettings({
+      keysReady,
+      lastAccount: {
+        hash: session.accountHash,
+        userId: session.userId,
+        name: session.displayName,
+        avatar: session.avatar,
+        baseUrl: session.baseUrl,
+      },
+    });
+    this.mount();
+    void this.settleKeys();
+  }
+
+  private async settleKeys(): Promise<void> {
+    const session = state.session;
+    if (!session) return;
+    let status: KeyStatus;
+    try {
+      status = await this.worker.send<KeyStatus>({ type: "keyStatus" });
+    } catch {
+      return;
+    }
+    if (state.session?.accountHash !== session.accountHash) return;
+    setState({ keys: status });
+    await this.local.saveSettings({ keysReady: status.ready });
+    if (status.ready === (state.phase === "ready")) return;
+    setState({ phase: status.ready ? "ready" : "gate" });
+    this.mount();
   }
 
   async enter(): Promise<void> {
     const session = state.session;
     if (!session) return;
-    this.local.closeAccount();
-    await this.local.openAccount(session.accountHash);
-    const rooms = await this.local.rooms();
-    setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: "ready" });
+    setState({ phase: "boot" });
     await this.local.saveSettings({ keysReady: true });
-    this.mount();
-    this.applyRoute();
+    await this.applySession(session, true);
+  }
+
+  private remember(rooms: RoomSummary[]): void {
+    for (const room of rooms) this.seen.set(room.roomId, room.lastTs);
   }
 
   private mount(): void {
+    if (state.phase === "boot") return;
     this.root.replaceChildren();
     if (state.phase === "auth") {
-      this.root.appendChild(authScreen(this));
+      this.root.append(authScreen(this));
       return;
     }
     if (state.phase === "gate") {
-      this.root.appendChild(gateScreen(this));
+      this.root.append(gateScreen(this));
       return;
     }
-    if (state.phase === "boot") {
-      this.root.appendChild(document.createElement("div"));
-      return;
-    }
-    this.root.appendChild(this.shell.root);
-    touch();
-    this.applyRoute();
-    void this.refreshPacks();
-  }
-
-  private applyRoute(): void {
-    if (state.phase !== "ready") return;
-    const roomId = this.routeRoom;
-    if (roomId && roomId !== state.activeRoomId) void this.loadRoom(roomId, false);
-    if (!roomId && state.activeRoomId) {
-      setState({ activeRoomId: null, messages: [], typing: [] });
-    }
-    const dialog = this.routeDialog;
-    if (dialog !== state.dialog) {
-      if (dialog) showDialog(this, dialog);
-      else closeDialog();
-    }
+    this.root.append(this.shell.root);
+    this.started = true;
     this.shell.render();
+    this.applyRoute();
+    void this.reloadPacks();
   }
 
-  private route(roomId: string | null, dialog: string | null, replace = false): void {
-    const base = location.pathname;
-    const path = roomId ? `#/room/${encodeURIComponent(roomId)}` : "#/";
-    const query = dialog ? `?d=${dialog}` : "";
-    const url = `${base}${path}${query}`;
-    if (replace) history.replaceState(null, "", url);
-    else history.pushState(null, "", url);
-  }
-
-  private async onWorkerEvent(event: Event): Promise<void> {
+  private async onWorkerEvent(event: WorkerEvent): Promise<void> {
     switch (event.event) {
-      case "ready": {
-        if (!event.session) {
+      case "ready":
+        if (event.session) await this.applySession(event.session, false);
+        else {
           setState({ phase: "auth" });
-          this.mount();
-          return;
-        }
-        setState({ session: event.session });
-        const status = await this.worker.send<{ ready: boolean; backup: boolean; hasOtherDevices: boolean }>({ type: "keyStatus" });
-        setState({
-          keys: status,
-          phase: status.ready ? "ready" : "gate",
-          settings: {
-            ...state.settings,
-            lastAccount: {
-              hash: event.session.accountHash,
-              userId: event.session.userId,
-              name: event.session.displayName,
-              avatar: event.session.avatar,
-              baseUrl: event.session.baseUrl,
-            },
-          },
-        });
-        await this.local.saveSettings({ lastAccount: state.settings.lastAccount, keysReady: status.ready });
-        if (state.phase === "ready") {
-          this.local.closeAccount();
-          await this.local.openAccount(event.session.accountHash);
-          const rooms = await this.local.rooms();
-          setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: "ready" });
-          this.mount();
-        } else {
           this.mount();
         }
         return;
-      }
       case "session":
         if (!event.session) {
+          this.local.closeAccount();
           setState({ phase: "auth", session: null, rooms: new Map() });
-          await this.local.saveSettings({ lastAccount: null, keysReady: false });
           this.mount();
+        } else {
+          setState({ session: event.session });
+          if (this.started) this.shell.render();
         }
         return;
       case "connection":
         setState({ connection: event.connection, notice: event.message });
-        this.shell.render();
+        this.setTitle();
+        if (this.started) this.shell.render();
         return;
       case "sync":
         await this.resync(event.rooms, event.removed, event.active);
@@ -215,112 +188,188 @@ export class App implements UiContext {
       case "keys":
         setState({ keys: event.status });
         return;
+      case "typing":
+        if (event.roomId === state.activeRoomId) {
+          setState({ typing: event.users.filter((user) => user.userId !== state.session?.userId) });
+          if (this.started) this.shell.render();
+        }
+        return;
       case "fatal":
         setState({ notice: event.message, connection: "error" });
-        this.shell.render();
+        toast(event.message);
+        if (state.phase === "auth") this.mount();
         return;
       default:
         return;
     }
   }
 
+  private setTitle(): void {
+    const unread = [...state.rooms.values()].reduce((total, room) => total + (room.muted ? 0 : room.unread), 0);
+    document.title = unread > 0 ? `(${unread}) ${config.app.name}` : config.app.name;
+  }
+
   private async resync(rooms: string[], removed: string[], active: string | null): Promise<void> {
-    for (const roomId of removed) state.rooms.delete(roomId);
+    for (const roomId of removed) {
+      state.rooms.delete(roomId);
+      this.seen.delete(roomId);
+    }
+    if (state.activeRoomId && removed.includes(state.activeRoomId)) {
+      this.route(null, null, true);
+      setState({ activeRoomId: null, messages: [], typing: [] });
+    }
     for (const roomId of rooms) {
       const room = await this.local.room(roomId);
       if (room) state.rooms.set(roomId, room);
       else state.rooms.delete(roomId);
     }
     if (active && active === state.activeRoomId) {
-      const before = state.messages.length;
-      state.messages = await this.local.window(active, 80);
-      if (state.messages.length > before && document.visibilityState === "visible") this.markReadSoon();
+      state.messages = await this.local.window(active, Math.max(MAX_WINDOW, state.messages.length));
+      this.markRead();
     }
     touch();
-    this.detectNotifications(rooms);
+    this.setTitle();
+    this.notify(rooms);
   }
 
-  private lastSeen = new Map<string, number>();
-
-  private detectNotifications(rooms: string[]): void {
-    const enabled = state.settings.desktop;
+  private notify(rooms: string[]): void {
     for (const roomId of rooms) {
       const room = state.rooms.get(roomId);
       if (!room) continue;
-      const previous = this.lastSeen.get(roomId) ?? 0;
-      this.lastSeen.set(roomId, room.lastTs);
-      if (!enabled || document.visibilityState === "visible" || room.muted || room.membership !== "join") continue;
-      if (room.lastTs <= previous || roomId === state.activeRoomId) continue;
+      const previous = this.seen.get(roomId) ?? room.lastTs;
+      this.seen.set(roomId, room.lastTs);
+      if (!state.settings.desktop || room.lastTs <= previous || roomId === state.activeRoomId) continue;
+      if (document.visibilityState === "visible" || room.muted || room.membership !== "join") continue;
       if (typeof Notification === "undefined" || Notification.permission !== "granted") continue;
-      const body = state.settings.preview ? room.preview : t("room.encryptedPreview");
-      new Notification(room.name, { body, tag: roomId });
+      const notification = new Notification(room.name, {
+        body: state.settings.preview ? roomPreview(room) : t("room.encryptedPreview"),
+        tag: roomId,
+      });
+      notification.onclick = () => {
+        window.focus();
+        this.openRoom(roomId);
+        notification.close();
+      };
     }
   }
 
   private applyOutbox(txnId: string, status: "sent" | "queued" | "sending" | "failed"): void {
+    if (status === "sent") return;
     const message = state.messages.find((entry) => entry.id === txnId);
     if (!message) return;
-    if (status === "sent") return;
     message.status = status;
     touch();
   }
 
-  private markReadSoon(): void {
+  private markRead(): void {
     const room = activeRoom();
-    const last = state.messages.findLast((message) => message.status === "sent");
-    if (!room || !last) return;
+    const last = state.messages.findLast((message) => message.status === "sent" && message.id.startsWith("$"));
+    if (!room || !last || this.lastRead === last.id) return;
+    if (document.visibilityState !== "visible") return;
+    this.lastRead = last.id;
     void this.worker.send({ type: "markRead", roomId: room.roomId, eventId: last.id });
   }
 
-  private async refreshPacks(): Promise<void> {
+  private async reloadPacks(): Promise<void> {
     try {
-      const packs = await this.local.packs();
-      this.shell.picker.load(packs);
+      this.shell.picker.load(await this.local.packs());
     } catch {
       this.shell.picker.load([]);
     }
   }
 
-  openRoom(roomId: string): void {
+  private get routeRoom(): string | null {
+    const match = /^#\/room\/([^?]+)/.exec(location.hash);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  }
+
+  private get routeDialog(): string | null {
+    const index = location.hash.indexOf("?");
+    if (index < 0) return null;
+    return new URLSearchParams(location.hash.slice(index + 1)).get("d");
+  }
+
+  private route(roomId: string | null, dialog: string | null, replace = false): void {
+    const path = roomId ? `#/room/${encodeURIComponent(roomId)}` : "#/";
+    const url = `${location.pathname}${path}${dialog ? `?d=${dialog}` : ""}`;
+    if (replace) history.replaceState(null, "", url);
+    else history.pushState(null, "", url);
+  }
+
+  private applyRoute(): void {
+    if (state.phase !== "ready") return;
+    const roomId = this.routeRoom;
+    if (roomId && roomId !== state.activeRoomId) void this.loadRoom(roomId, false);
+    if (!roomId && state.activeRoomId) setState({ activeRoomId: null, messages: [], typing: [] });
+    const dialog = this.routeDialog;
+    if (dialog && dialog !== state.dialog) {
+      showDialog(this, dialog);
+    } else if (!dialog && state.dialog) {
+      closeDialog();
+      setState({ dialog: null });
+    }
+    this.shell.render();
+  }
+
+  openRoom(roomId: string, revealId?: string): void {
     if (!roomId) {
       this.route(null, null);
       setState({ activeRoomId: null, messages: [], typing: [] });
+      this.shell.render();
       return;
     }
-    void this.loadRoom(roomId);
+    void this.loadRoom(roomId, true).then(() => {
+      if (!revealId) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => this.shell.timeline.reveal(revealId)));
+    });
   }
 
-  private async loadRoom(roomId: string, updateRoute = true): Promise<void> {
-    if (updateRoute) this.route(roomId, null);
-    const draft = (await this.local.draft(state.session?.accountHash ?? "", roomId)) ?? EMPTY_DRAFT;
-    this.draftState = draft;
-    setState({ activeRoomId: roomId, messages: [], draft });
-    this.draftState = draft;;
-    const window = await this.worker.send<RoomWindow>({ type: "openRoom", roomId });
-    setState({ messages: window.messages, hasOlder: window.hasOlder });
-    this.shell.composer.load(draft, activeRoom());
-    this.shell.render();
-    requestAnimationFrame(() => this.shell.timeline.root.scrollTo({ top: this.shell.timeline.root.scrollHeight }));
-    this.markReadSoon();
-    this.shell.composer.focus();
+  private async loadRoom(roomId: string, updateRoute: boolean): Promise<void> {
+    if (this.loadingRoom === roomId) return;
+    this.loadingRoom = roomId;
+    try {
+      if (updateRoute) this.route(roomId, null);
+      const draft = (await this.local.draft(state.session?.accountHash ?? "", roomId)) ?? EMPTY_DRAFT;
+      this.draftState = draft;
+      setState({ activeRoomId: roomId, messages: [], draft });
+      const window = await this.worker.send<RoomWindow>({ type: "openRoom", roomId });
+      if (window.room) state.rooms.set(roomId, window.room);
+      setState({ messages: window.messages, hasOlder: window.hasOlder });
+      this.shell.composer.load(draft, activeRoom());
+      this.shell.render();
+      requestAnimationFrame(() => this.shell.timeline.scrollToBottom());
+      this.markRead();
+      this.shell.composer.focus();
+    } finally {
+      this.loadingRoom = null;
+    }
   }
 
   openDialog(name: string, roomId?: string): void {
-    if (name === "picker") return;
     this.route(state.activeRoomId, name);
+    this.dialogPushed = true;
     showDialog(this, name, roomId);
   }
 
   closeDialog(): void {
+    if (this.dialogPushed) {
+      // The entry belongs to the dialog, so going back is what removes it.
+      this.dialogPushed = false;
+      history.back();
+      return;
+    }
     closeDialog();
+    setState({ dialog: null });
     this.route(state.activeRoomId, null, true);
   }
 
   setDraft(patch: Partial<Draft>): void {
     this.draftState = { ...this.draftState, ...patch };
-    setState({ draft: this.draftState });
     const room = activeRoom();
-    if (room) void this.local.saveDraft(state.session?.accountHash ?? "", room.roomId, this.draftState);
+    if (!room) return;
+    const draft = this.draftState;
+    window.clearTimeout(this.draftTimer);
+    this.draftTimer = window.setTimeout(() => void this.local.saveDraft(state.session?.accountHash ?? "", room.roomId, draft), 250);
   }
 
   draft(): Draft {
@@ -329,6 +378,38 @@ export class App implements UiContext {
 
   draftMarks(): Mark[] {
     return this.draftState.marks;
+  }
+
+  private pending(room: RoomSummary, kind: Message["kind"], body: string, extra: Partial<Message>): Message {
+    return {
+      id: `t${Date.now()}${Math.random().toString(16).slice(2, 8)}`,
+      roomId: room.roomId,
+      sender: state.session?.userId ?? "",
+      name: state.session?.displayName ?? "",
+      avatar: state.session?.avatar ?? null,
+      ts: Date.now(),
+      kind,
+      body,
+      html: null,
+      media: null,
+      reply: null,
+      mentions: [],
+      edited: false,
+      reactions: [],
+      status: "queued",
+      error: null,
+      encrypted: room.encrypted,
+      search: [],
+      ...extra,
+    };
+  }
+
+  private async queue(message: Message): Promise<void> {
+    await this.local.putMessage(message);
+    if (message.roomId === state.activeRoomId) {
+      state.messages = [...state.messages, message].toSorted((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
+      this.shell.render();
+    }
   }
 
   startReply(message: Message): void {
@@ -346,33 +427,12 @@ export class App implements UiContext {
   async submitText(body: string, html: string | null, replyTo: string | null): Promise<void> {
     const room = activeRoom();
     if (!room) return;
-    const txnId = `m${Date.now()}${Math.random().toString(16).slice(2, 8)}`;
-    const pending: Message = {
-      id: txnId,
-      roomId: room.roomId,
-      sender: state.session?.userId ?? "",
-      name: state.session?.displayName ?? "",
-      avatar: state.session?.avatar ?? null,
-      ts: Date.now(),
-      kind: "text",
-      body,
-      html,
-      media: null,
-      reply: replyTo ? (this.draftState.reply ?? null) : null,
-      mentions: [],
-      edited: false,
-      reactions: [],
-      status: "queued",
-      error: null,
-      encrypted: room.encrypted,
-      search: [],
-    };
-    await this.local.putMessage(pending);
-    setState({ messages: [...state.messages, pending] });
-    this.shell.render();
-    void this.worker.send({ type: "text", roomId: room.roomId, txnId, body, html, replyTo }).catch((error: unknown) => {
-      this.toast(error instanceof Error ? error.message : t("error.unknown"));
-    });
+    const reply = replyTo ? (this.draftState.reply ?? null) : null;
+    const message = this.pending(room, "text", body, { html, reply });
+    await this.queue(message);
+    void this.worker
+      .send({ type: "text", roomId: room.roomId, txnId: message.id, body, html, replyTo })
+      .catch((error: unknown) => this.failSend(message, error));
   }
 
   async submitEdit(eventId: string, body: string, html: string | null): Promise<void> {
@@ -384,63 +444,29 @@ export class App implements UiContext {
   async submitFile(file: File): Promise<void> {
     const room = activeRoom();
     if (!room) return;
-    const txnId = `f${Date.now()}${Math.random().toString(16).slice(2, 8)}`;
-    const pending: Message = {
-      id: txnId,
-      roomId: room.roomId,
-      sender: state.session?.userId ?? "",
-      name: state.session?.displayName ?? "",
-      avatar: state.session?.avatar ?? null,
-      ts: Date.now(),
-      kind: file.type.startsWith("image/") ? "image" : "file",
-      body: file.name,
-      html: null,
-      media: null,
-      reply: null,
-      mentions: [],
-      edited: false,
-      reactions: [],
-      status: "queued",
-      error: null,
-      encrypted: room.encrypted,
-      search: [],
-    };
-    await this.local.putMessage(pending);
-    setState({ messages: [...state.messages, pending] });
-    this.shell.render();
+    const message = this.pending(room, kindOf(file.type), file.name, {});
+    await this.queue(message);
     const data = await file.arrayBuffer();
-    void this.worker.send({ type: "sendFile", roomId: room.roomId, txnId, name: file.name, mime: file.type || "application/octet-stream", data }).catch(() => undefined);
+    void this.worker
+      .send({ type: "sendFile", roomId: room.roomId, txnId: message.id, name: file.name, mime: file.type || "application/octet-stream", data })
+      .catch((error: unknown) => this.failSend(message, error));
   }
 
   sendSticker(url: string, body: string): void {
     const room = activeRoom();
     if (!room) return;
-    const txnId = `s${Date.now()}${Math.random().toString(16).slice(2, 8)}`;
-    const pending: Message = {
-      id: txnId,
-      roomId: room.roomId,
-      sender: state.session?.userId ?? "",
-      name: state.session?.displayName ?? "",
-      avatar: state.session?.avatar ?? null,
-      ts: Date.now(),
-      kind: "sticker",
-      body,
-      html: null,
+    const message = this.pending(room, "sticker", body, {
       media: { mxc: url, mime: "image/png", size: 0, width: null, height: null, duration: null, name: body, file: null },
-      reply: null,
-      mentions: [],
-      edited: false,
-      reactions: [],
-      status: "queued",
-      error: null,
-      encrypted: room.encrypted,
-      search: [],
-    };
-    void this.local.putMessage(pending).then(() => {
-      setState({ messages: [...state.messages, pending] });
-      this.shell.render();
     });
-    void this.worker.send({ type: "sticker", roomId: room.roomId, txnId, body, url, replyTo: null }).catch(() => undefined);
+    void this.queue(message);
+    void this.worker.send({ type: "sticker", roomId: room.roomId, txnId: message.id, body, url, replyTo: null }).catch((error: unknown) => this.failSend(message, error));
+  }
+
+  private failSend(message: Message, error: unknown): void {
+    message.status = "failed";
+    message.error = error instanceof Error ? error.message : null;
+    touch();
+    this.toast(message.error ?? t("error.unknown"));
   }
 
   react(message: Message, key: string): void {
@@ -455,6 +481,8 @@ export class App implements UiContext {
   }
 
   retry(message: Message): void {
+    message.status = "queued";
+    touch();
     void this.worker.send({ type: "retry", txnId: message.id });
   }
 
@@ -480,29 +508,33 @@ export class App implements UiContext {
   typing(on: boolean): void {
     const room = activeRoom();
     if (!room) return;
-    window.clearTimeout(this.typingTimer);
+    if (on === this.typingSent) return;
+    this.typingSent = on;
     void this.worker.send({ type: "typing", roomId: room.roomId, on });
-    if (on) this.typingTimer = window.setTimeout(() => this.typing(false), 15000);
+    window.clearTimeout(this.typingTimer);
+    if (on) this.typingTimer = window.setTimeout(() => this.typing(false), 20000);
   }
 
   togglePicker(mode: "emoji" | "sticker"): void {
     this.shell.picker.toggle(mode);
   }
 
+  reactPicker(message: Message): void {
+    this.shell.picker.openReact((key) => this.react(message, key));
+  }
+
+  reveal(eventId: string): void {
+    this.shell.timeline.reveal(eventId);
+  }
+
   activeRoom(): RoomSummary | null {
     return activeRoom();
   }
+}
 
-  sections(): Record<SectionId, boolean> {
-    return state.settings.sections;
-  }
-
-  async refreshRooms(): Promise<void> {
-    const rooms = await this.local.rooms();
-    setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])) });
-  }
-
-  get locale(): string {
-    return getLocale();
-  }
+function kindOf(mime: string): Message["kind"] {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "file";
 }

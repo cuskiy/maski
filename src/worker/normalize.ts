@@ -202,8 +202,11 @@ export function summarize({ room, direct, last, selfId }: SummaryInput): RoomSum
   const partnerMember = partner ? room.getMember(partner) : null;
   const avatar = room.getMxcAvatarUrl() ?? partnerMember?.getMxcAvatarUrl() ?? null;
   const membership = room.getMyMembership() as Membership;
-  const inviter = room.getDMInviter() ?? null;
-  const preview = last ? previewOf(last, selfId) : "";
+  const inviterId = room.getDMInviter() ?? null;
+  const inviter = inviterId ? (room.getMember(inviterId)?.name ?? inviterId) : null;
+  const preview: RoomSummary["last"] = last
+    ? { kind: last.kind, body: last.body, name: last.name, own: last.sender === selfId }
+    : null;
   return {
     roomId: room.roomId,
     name: room.name || room.getCanonicalAlias() || room.roomId,
@@ -214,8 +217,7 @@ export function summarize({ room, direct, last, selfId }: SummaryInput): RoomSum
     isDirect: direct.has(room.roomId),
     encrypted: room.hasEncryptionStateEvent(),
     lastTs: last ? last.ts : 0,
-    preview: preview,
-    previewKind: last ? last.kind : "none",
+    last: preview,
     unread: room.getUnreadNotificationCount(NotificationCountType.Total),
     highlight: room.getUnreadNotificationCount(NotificationCountType.Highlight),
     muted: isMuted(room),
@@ -223,16 +225,8 @@ export function summarize({ room, direct, last, selfId }: SummaryInput): RoomSum
     lowPriority: Boolean(room.tags["m.lowpriority"]),
     inviter,
     joined: room.getJoinedMemberCount(),
+    myPower: room.getMember(selfId)?.powerLevel ?? 0,
     hasOlder: room.getLiveTimeline().getPaginationToken("b" as never) !== null,
     canSend: room.maySendMessage(),
   };
-}
-
-function previewOf(message: StoredMessage, selfId: string): string {
-  if (message.kind === "state") return "";
-  if (message.kind === "error") return "";
-  const prefix = message.sender === selfId ? "" : `${message.name}: `;
-  if (message.kind === "image") return `${prefix}${message.body}`;
-  if (message.kind === "sticker") return prefix.trim();
-  return `${prefix}${message.body}`;
 }

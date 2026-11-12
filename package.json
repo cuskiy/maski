@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "verify": "tsx scripts/verify.ts",
+    "verify": "tsx scripts/verify.ts && tsx scripts/audit.ts",
     "code": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" --max-warnings=0",
     "test": "vitest run",

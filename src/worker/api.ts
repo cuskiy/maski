@@ -2,6 +2,7 @@ import {
   ClientEvent,
   MatrixError,
   RoomEvent,
+  RoomMemberEvent,
   RoomStateEvent,
   PushRuleKind,
   SyncState,
@@ -9,6 +10,7 @@ import {
   type MatrixClient,
   type MatrixEvent,
   type Room,
+  type RoomMember,
 } from "matrix-js-sdk";
 import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api/recovery-key.js";
 import { deriveRecoveryKeyFromPassphrase } from "matrix-js-sdk/lib/crypto-api/key-passphrase.js";
@@ -16,12 +18,14 @@ import type { CryptoApi } from "matrix-js-sdk/lib/crypto-api/index.js";
 import { Attachment, EncryptedAttachment } from "@matrix-org/matrix-sdk-crypto-wasm";
 import { accountHash } from "../core/id.ts";
 import { STORE } from "../core/schema.ts";
-import { asArray, asNumber, asString, isRecord } from "../core/guard.ts";
+import { asArray, asString, isRecord } from "../core/guard.ts";
 import type { KeyStatus, MediaRef, Message, RoomSummary, Session } from "../core/types.ts";
 import type { Command, Event, UiaStage } from "../protocol/messages.ts";
 import { AccountDb } from "./db.ts";
 import type { StoredMessage } from "./normalize.ts";
 import { projectPacks, projectRooms, readDirect, refreshDirect } from "./project.ts";
+import { searchTokens } from "./normalize.ts";
+import { escapeText } from "../core/text.ts";
 
 interface StoredSession {
   session: Session;
@@ -44,10 +48,36 @@ function send(client: MatrixClient, roomId: string, type: string, content: unkno
   return emit(roomId, type, content, txnId);
 }
 
-function accountData(client: MatrixClient, type: string): Record<string, unknown> | null {
-  const read = client.getAccountData.bind(client) as (eventType: string) => MatrixEvent | undefined;
-  const content = read(type)?.getContent();
-  return isRecord(content) ? content : null;
+export class GateError extends Error {
+  readonly code: "no-keys" | "invalid" | "restore" | "uia";
+
+  constructor(code: "no-keys" | "invalid" | "restore" | "uia", cause?: unknown) {
+    super(code);
+    this.code = code;
+    if (cause instanceof Error) this.cause = cause;
+  }
+}
+
+interface PassphraseInfo {
+  salt?: string;
+  iterations?: number;
+  bits?: number;
+}
+
+interface KeyDescription {
+  passphrase?: PassphraseInfo;
+}
+
+async function keyFromInput(input: string, info: KeyDescription): Promise<Uint8Array<ArrayBuffer>> {
+  const trimmed = input.trim();
+  if (!trimmed) throw new GateError("invalid");
+  try {
+    return decodeRecoveryKey(trimmed);
+  } catch {
+    const passphrase = info.passphrase;
+    if (!passphrase?.salt) throw new GateError("invalid");
+    return deriveRecoveryKeyFromPassphrase(trimmed, passphrase.salt, passphrase.iterations ?? 500000, passphrase.bits);
+  }
 }
 
 interface QuietLogger {
@@ -58,6 +88,25 @@ interface QuietLogger {
   debug: () => void;
   trace: () => void;
   getChild: () => QuietLogger;
+}
+
+function kindOfMime(mime: string): Message["kind"] {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "file";
+}
+
+function msgTypeOf(mime: string): string {
+  if (mime.startsWith("image/")) return "m.image";
+  if (mime.startsWith("video/")) return "m.video";
+  if (mime.startsWith("audio/")) return "m.audio";
+  return "m.file";
+}
+
+function lastMessageId(room: Room | null): string {
+  const events = room?.getLiveTimeline().getEvents() ?? [];
+  return events.findLast((event) => event.getType() === "m.room.message" || event.getType() === "m.sticker")?.getId() ?? "";
 }
 
 function quietLogger(): QuietLogger {
@@ -116,7 +165,7 @@ export class WorkerApi {
   private db: AccountDb | null = null;
   private client: MatrixClient | null = null;
   private session: Session | null = null;
-  private unlockKey: Uint8Array<ArrayBuffer> | null = null;
+  private secretKey: { id: string; key: Uint8Array<ArrayBuffer> } | null = null;
   private revision = 0;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private touched = new Set<string>();
@@ -192,8 +241,12 @@ export class WorkerApi {
         return this.profile(command.name, command.avatar);
       case "uploadAvatar":
         return this.uploadAvatar(command.data, command.mime);
+      case "uploadRoomAvatar":
+        return this.uploadRoomAvatar(command.roomId, command.data, command.mime);
       case "setRoomState":
         return this.setRoomState(command.roomId, command.name, command.topic, command.avatarUrl);
+      case "search":
+        return this.search(command.query, command.roomId);
       default:
         return Promise.reject(new Error("unknown command"));
     }
@@ -225,6 +278,7 @@ export class WorkerApi {
     this.session = stored.session;
     this.post({ event: "ready", session: this.session, revision: this.revision });
     void this.boot(stored);
+    this.afterBoot(stored);
     return { session: this.session };
   }
 
@@ -252,14 +306,12 @@ export class WorkerApi {
       deviceId: stored.session.deviceId,
       cryptoCallbacks: {
         getSecretStorageKey: (opts) => {
-          const key = this.unlockKey;
-          if (!key) return Promise.resolve(null);
-          const ids = Object.keys(opts.keys);
-          const id = ids[0];
-          return Promise.resolve(id ? [id, key] : null);
+          const cached = this.secretKey;
+          if (!cached || !opts.keys[cached.id]) return Promise.resolve(null);
+          return Promise.resolve([cached.id, cached.key]);
         },
-        cacheSecretStorageKey: (_keyId, _info, key) => {
-          this.unlockKey = key;
+        cacheSecretStorageKey: (keyId, _info, key) => {
+          this.secretKey = { id: keyId, key };
         },
       },
       logger: quietLogger(),
@@ -268,21 +320,28 @@ export class WorkerApi {
     await client.initRustCrypto({ cryptoDatabasePrefix: `maski-rust-${stored.session.accountHash}` });
     this.attach(client);
     this.post({ event: "connection", connection: "connecting", message: "" });
-    client.startClient({ initialSyncLimit: 20 }).catch((error: unknown) => {
+    client.startClient({ initialSyncLimit: 20, lazyLoadMembers: true }).catch((error: unknown) => {
       this.post({ event: "connection", connection: "error", message: reason(error) });
     });
     await this.recoverQueue();
     await this.postKeys();
-    const profile = await client.getProfileInfo(stored.session.userId).catch(() => null);
-    if (profile) {
-      this.session = {
-        ...stored.session,
-        displayName: profile.displayname ?? stored.session.displayName,
-        avatar: profile.avatar_url ?? null,
-      };
-      await this.saveSession({ ...stored, session: this.session });
-      this.post({ event: "session", session: this.session });
-    }
+  }
+
+  private async refreshProfile(stored: StoredSession): Promise<void> {
+    const profile = await this.requireClient().getProfileInfo(stored.session.userId);
+    this.session = {
+      ...stored.session,
+      displayName: profile.displayname ?? stored.session.displayName,
+      avatar: profile.avatar_url ?? null,
+    };
+    await this.saveSession({ ...stored, session: this.session });
+    this.post({ event: "session", session: this.session });
+  }
+
+  private afterBoot(stored: StoredSession): void {
+    void this.requireBooting()
+      .then(() => this.refreshProfile(stored))
+      .catch(() => undefined);
   }
 
   private attach(client: MatrixClient): void {
@@ -316,6 +375,20 @@ export class WorkerApi {
     client.on(ClientEvent.Room, (room: Room) => {
       this.touched.add(room.roomId);
       this.schedule();
+    });
+    client.on(RoomEvent.Receipt, (_event: MatrixEvent, room: Room) => {
+      this.touched.add(room.roomId);
+      this.schedule();
+    });
+    client.on(RoomEvent.Tags, (_event: MatrixEvent, room: Room) => {
+      this.touched.add(room.roomId);
+      this.schedule();
+    });
+    client.on(RoomMemberEvent.Typing, (_event: MatrixEvent, member: RoomMember) => {
+      const room = client.getRoom(member.roomId);
+      if (!room) return;
+      const users = room.getMembers().filter((entry) => entry.typing).map((entry) => ({ userId: entry.userId, name: entry.name }));
+      this.post({ event: "typing", roomId: member.roomId, users });
     });
   }
 
@@ -355,15 +428,9 @@ export class WorkerApi {
   }
 
   private async recoverQueue(): Promise<void> {
-    const db = this.requireDb();
-    const rooms = await db.getAll<RoomSummary>(STORE.rooms);
-    for (const room of rooms) {
-      const messages = await db.rawEvents(room.roomId);
-      for (const message of messages) {
-        if (message.status === "queued" || message.status === "sending") {
-          await db.putMessage({ ...message, status: "failed", error: "interrupted" } as StoredMessage);
-        }
-      }
+    const pending = await this.requireDb().byStatus(["queued", "sending"]);
+    for (const message of pending) {
+      await this.requireDb().putMessage({ ...message, status: "failed", error: "interrupted" });
     }
   }
 
@@ -398,6 +465,7 @@ export class WorkerApi {
     await this.saveSession(stored);
     this.post({ event: "ready", session: this.session, revision: this.revision });
     void this.boot(stored);
+    this.afterBoot(stored);
     return stored.session;
   }
 
@@ -464,6 +532,7 @@ export class WorkerApi {
       await this.saveSession(stored);
       this.post({ event: "ready", session: this.session, revision: this.revision });
       void this.boot(stored);
+      this.afterBoot(stored);
       return { session: stored.session, uia: null, uiaSession: null };
     }
   }
@@ -489,55 +558,49 @@ export class WorkerApi {
   }
 
   private async keyStatus(): Promise<KeyStatus> {
-    const client = this.requireClient();
-    const crypto = client.getCrypto();
-    if (!crypto) return { ready: false, backup: false, hasOtherDevices: false };
-    const ready = await crypto.isSecretStorageReady();
-    const backup = (await crypto.checkKeyBackupAndEnable()) !== null;
-    let hasOtherDevices = false;
-    try {
-      const devices = await client.getDevices();
-      hasOtherDevices = devices.devices.some((device) => device.device_id !== client.getDeviceId());
-    } catch {
-      hasOtherDevices = false;
-    }
-    const status: KeyStatus = { ready, backup, hasOtherDevices };
+    await this.requireBooting();
+    const status = await this.currentKeys();
     this.post({ event: "keys", status });
     return status;
   }
 
+  private async currentKeys(): Promise<KeyStatus> {
+    const crypto = this.requireClient().getCrypto();
+    if (!crypto) return { ready: false, backup: false };
+    const ready = await crypto.isSecretStorageReady();
+    const backup = (await crypto.checkKeyBackupAndEnable().catch(() => null)) !== null;
+    return { ready, backup };
+  }
+
   private async postKeys(): Promise<void> {
     try {
-      await this.keyStatus();
+      this.post({ event: "keys", status: await this.currentKeys() });
     } catch {
-      this.post({ event: "keys", status: { ready: false, backup: false, hasOtherDevices: false } });
+      this.post({ event: "keys", status: { ready: false, backup: false } });
     }
   }
 
   private async unlock(input: string): Promise<KeyStatus> {
     const client = this.requireClient();
     const crypto = await this.requireCrypto();
-    const keyId = await client.secretStorage.getDefaultKeyId();
-    if (!keyId) throw new Error("invalid");
-    const info = accountData(client, `m.secret_storage.key.${keyId}`);
-    const trimmed = input.trim();
-    if (!trimmed) throw new Error("invalid");
-    let key: Uint8Array<ArrayBuffer> | null = null;
+    if (!(await client.secretStorage.hasKey())) throw new GateError("no-keys");
+    const stored = await client.secretStorage.getKey();
+    if (!stored) throw new GateError("no-keys");
+    const [keyId, info] = stored;
+    const key = await keyFromInput(input, info);
+    this.secretKey = { id: keyId, key };
     try {
-      key = decodeRecoveryKey(trimmed);
-    } catch {
-      const passphrase = isRecord(info) ? info["passphrase"] : null;
-      if (isRecord(passphrase)) {
-        const salt = asString(passphrase["salt"]);
-        const iterations = asNumber(passphrase["iterations"], 500000);
-        if (salt) key = await deriveRecoveryKeyFromPassphrase(trimmed, salt, iterations);
-      }
+      // Importing the cross-signing keys also signs this device, which is what
+      // makes it trusted by the other sessions of the account.
+      await crypto.bootstrapCrossSigning({});
+      await crypto.bootstrapSecretStorage({});
+      await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+      await crypto.checkKeyBackupAndEnable();
+    } catch (error) {
+      throw new GateError("restore", error);
+    } finally {
+      this.secretKey = null;
     }
-    if (!key) throw new Error("invalid");
-    this.unlockKey = key;
-    await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
-    await crypto.bootstrapCrossSigning({});
-    await crypto.checkKeyBackupAndEnable();
     return this.keyStatus();
   }
 
@@ -545,28 +608,39 @@ export class WorkerApi {
     const client = this.requireClient();
     const crypto = await this.requireCrypto();
     const generated = await crypto.createRecoveryKeyFromPassphrase();
-    this.unlockKey = generated.privateKey;
-    await crypto.bootstrapSecretStorage({
-      createSecretStorageKey: () => Promise.resolve(generated),
-      setupNewSecretStorage: true,
-      setupNewKeyBackup: true,
-    });
     const userId = client.getUserId() ?? "";
-    await crypto.bootstrapCrossSigning({
-      setupNewCrossSigning: true,
-      authUploadDeviceSigningKeys: (makeRequest) =>
-        makeRequest({ type: "m.login.password", identifier: { type: "m.id.user", user: userId }, password }),
-    });
-    const status = await this.keyStatus();
-    return { key: generated.encodedPrivateKey ?? "", status };
+    try {
+      await crypto.bootstrapSecretStorage({
+        createSecretStorageKey: () => Promise.resolve(generated),
+        setupNewSecretStorage: true,
+        setupNewKeyBackup: true,
+      });
+      await crypto.bootstrapCrossSigning({
+        setupNewCrossSigning: true,
+        authUploadDeviceSigningKeys: (makeRequest) =>
+          makeRequest({ type: "m.login.password", identifier: { type: "m.id.user", user: userId }, password }),
+      });
+    } catch (error) {
+      throw new GateError("uia", error);
+    } finally {
+      this.secretKey = null;
+    }
+    return { key: generated.encodedPrivateKey ?? "", status: await this.keyStatus() };
   }
 
   private async openRoom(roomId: string): Promise<{ room: RoomSummary | null; messages: Message[]; hasOlder: boolean }> {
     const db = this.requireDb();
     this.activeRoomId = roomId;
-    const room = await db.getRoom(roomId);
+    const room = this.client?.getRoom(roomId);
+    if (room && room.getMembers().length <= 1) {
+      void room
+        .loadMembersIfNeeded()
+        .then(() => projectRooms(db, this.requireClient(), [roomId]))
+        .catch(() => undefined);
+    }
+    const stored = await db.getRoom(roomId);
     const messages = await db.roomWindow(roomId, 80);
-    return { room: room ?? null, messages, hasOlder: room?.hasOlder ?? false };
+    return { room: stored ?? null, messages, hasOlder: stored?.hasOlder ?? false };
   }
 
   private async paginate(roomId: string): Promise<{ messages: Message[]; hasOlder: boolean }> {
@@ -606,42 +680,58 @@ export class WorkerApi {
 
   private replyContent(replyTo: string | null, roomId: string): Record<string, unknown> {
     if (!replyTo) return {};
-    const client = this.requireClient();
-    const sender = client.getRoom(roomId)?.findEventById(replyTo)?.getSender();
+    const fallback = this.replyFallback(replyTo, roomId);
     return {
       "m.relates_to": { "m.in_reply_to": { event_id: replyTo } },
-      ...(sender ? { "m.mentions": { user_ids: [sender] } } : {}),
+      ...(fallback ? { "m.mentions": { user_ids: [fallback.sender] } } : {}),
     };
   }
 
-  private async sendText(roomId: string, txnId: string, body: string, html: string | null, replyTo: string | null): Promise<unknown> {
-    const client = this.requireClient();
-    const content: Record<string, unknown> = { msgtype: "m.text", body, ...this.replyContent(replyTo, roomId) };
-    if (html) {
-      content["format"] = "org.matrix.custom.html";
-      content["formatted_body"] = html;
-    }
+  private replyFallback(replyTo: string, roomId: string): { sender: string; body: string; html: string } | null {
+    const target = this.requireClient().getRoom(roomId)?.findEventById(replyTo);
+    if (!target) return null;
+    const sender = target.getSender() ?? "";
+    const body = asString(target.getContent()["body"]);
+    const line = (body.split("\n")[0] ?? "").slice(0, 120);
+    const link = `https://matrix.to/#/${roomId}/${replyTo}`;
+    return {
+      sender,
+      body: `> <${sender}> ${line}\n\n`,
+      html: `<mx-reply><blockquote><a href="${link}">In reply to</a> <a href="https://matrix.to/#/${sender}">${escapeText(sender)}</a><br>${escapeText(line)}</blockquote></mx-reply>`,
+    };
+  }
+
+  private async deliver(txnId: string, task: () => Promise<unknown>): Promise<unknown> {
     try {
-      await send(client, roomId, "m.room.message", content, txnId);
+      await task();
       this.post({ event: "outbox", txnId, status: "sent", error: "" });
       return {};
     } catch (error) {
       this.post({ event: "outbox", txnId, status: "failed", error: reason(error) });
       throw error;
     }
+  }
+
+  private async sendText(roomId: string, txnId: string, body: string, html: string | null, replyTo: string | null): Promise<unknown> {
+    const client = this.requireClient();
+    const fallback = replyTo ? this.replyFallback(replyTo, roomId) : null;
+    const content: Record<string, unknown> = {
+      msgtype: "m.text",
+      body: `${fallback?.body ?? ""}${body}`,
+      ...this.replyContent(replyTo, roomId),
+    };
+    const formatted = html ?? (body.includes("\n") ? escapeText(body).replace(/\n/g, "<br>") : null);
+    if (fallback || formatted) {
+      content["format"] = "org.matrix.custom.html";
+      content["formatted_body"] = `${fallback?.html ?? ""}${formatted ?? escapeText(body)}`;
+    }
+    return this.deliver(txnId, () => send(client, roomId, "m.room.message", content, txnId));
   }
 
   private async sendSticker(roomId: string, txnId: string, body: string, url: string, replyTo: string | null): Promise<unknown> {
     const client = this.requireClient();
     const content = { body, url, info: {}, ...this.replyContent(replyTo, roomId) };
-    try {
-      await send(client, roomId, "m.sticker", content, txnId);
-      this.post({ event: "outbox", txnId, status: "sent", error: "" });
-      return {};
-    } catch (error) {
-      this.post({ event: "outbox", txnId, status: "failed", error: reason(error) });
-      throw error;
-    }
+    return this.deliver(txnId, () => send(client, roomId, "m.sticker", content, txnId));
   }
 
   private async sendFile(roomId: string, txnId: string, name: string, mime: string, data: ArrayBuffer): Promise<unknown> {
@@ -649,10 +739,9 @@ export class WorkerApi {
     const db = this.requireDb();
     const room = client.getRoom(roomId);
     if (!room) throw new Error("unknown room");
-    const kind = mime.startsWith("image/") ? "image" : "file";
-    const msgtype = mime.startsWith("image/") ? "m.image" : "m.file";
+    const msgtype = msgTypeOf(mime);
     let content: Record<string, unknown>;
-    try {
+    return this.deliver(txnId, async () => {
       if (room.hasEncryptionStateEvent()) {
         const attachment = Attachment.encrypt(new Uint8Array(data));
         const file = JSON.parse(attachment.mediaEncryptionInfo ?? "{}") as Record<string, unknown>;
@@ -676,15 +765,10 @@ export class WorkerApi {
           name,
           file,
         };
-        await db.putMessage({ ...pending, kind, body: name, media });
+        await db.putMessage({ ...pending, kind: kindOfMime(mime), body: name, media });
       }
       await send(client, roomId, "m.room.message", content, txnId);
-      this.post({ event: "outbox", txnId, status: "sent", error: "" });
-      return {};
-    } catch (error) {
-      this.post({ event: "outbox", txnId, status: "failed", error: reason(error) });
-      throw error;
-    }
+    });
   }
 
   private async retry(txnId: string): Promise<unknown> {
@@ -745,8 +829,18 @@ export class WorkerApi {
   }
 
   private async markRead(roomId: string, eventId: string): Promise<unknown> {
-    await this.requireClient().setRoomReadMarkers(roomId, eventId);
+    const client = this.requireClient();
+    const id = eventId || lastMessageId(client.getRoom(roomId));
+    if (!id) return {};
+    await client.setRoomReadMarkers(roomId, id);
     return {};
+  }
+
+  private async search(query: string, roomId: string | null): Promise<{ hits: { roomId: string; message: Message }[] }> {
+    const tokens = searchTokens(query);
+    if (tokens.length === 0) return { hits: [] };
+    const messages = await this.requireDb().search(tokens, roomId, 50);
+    return { hits: messages.map((message) => ({ roomId: message.roomId, message })) };
   }
 
   private async media(mxc: string, size: number, method: "scale" | "crop", file: Record<string, unknown> | null): Promise<{ blob: Blob; mime: string }> {
@@ -816,6 +910,7 @@ export class WorkerApi {
       options["initial_state"] = [{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }];
     }
     const result = await client.createRoom(options as never);
+    await projectRooms(this.requireDb(), client, [result.room_id]);
     return { roomId: result.room_id };
   }
 
@@ -836,6 +931,7 @@ export class WorkerApi {
     const next = { ...existing, [userId]: [...rooms, result.room_id] };
     await client.setAccountData("m.direct" as never, next as never);
     await refreshDirect(this.requireDb(), client);
+    await projectRooms(this.requireDb(), client, [result.room_id]);
     return { roomId: result.room_id };
   }
 
@@ -870,6 +966,14 @@ export class WorkerApi {
     const client = this.requireClient();
     const uploaded = await client.uploadContent(new File([data], "avatar", { type: mime }));
     await client.setAvatarUrl(uploaded.content_uri);
+    return { url: uploaded.content_uri };
+  }
+
+  private async uploadRoomAvatar(roomId: string, data: ArrayBuffer, mime: string): Promise<{ url: string }> {
+    const client = this.requireClient();
+    const uploaded = await client.uploadContent(new File([data], "room-avatar", { type: mime }));
+    await client.sendStateEvent(roomId, "m.room.avatar" as never, { url: uploaded.content_uri } as never, "");
+    await projectRooms(this.requireDb(), client, [roomId]);
     return { url: uploaded.content_uri };
   }
 

@@ -1,4 +1,4 @@
-import type { Pack, PackImage } from "../core/types.ts";
+import type { MediaRef, Pack, PackImage } from "../core/types.ts";
 import { t } from "../i18n/index.ts";
 import type { UiContext } from "./context.ts";
 import { el, icon, ICON } from "./dom.ts";
@@ -22,6 +22,7 @@ export class Picker {
   private packs: Pack[] = [];
   private active = "";
   private mode: "emoji" | "sticker" = "emoji";
+  private reactWith: ((key: string) => void) | null = null;
   private ctx: UiContext;
 
   constructor(ctx: UiContext) {
@@ -47,7 +48,28 @@ export class Picker {
     return !this.root.hidden;
   }
 
+  private outside = (event: PointerEvent): void => {
+    const target = event.target as Node | null;
+    if (!target || this.root.contains(target)) return;
+    if ((target as HTMLElement).closest?.(".composer-field-group")) return;
+    this.close();
+  };
+
+  openReact(onPick: (key: string) => void): void {
+    this.reactWith = onPick;
+    this.root.hidden = false;
+    this.packs = [];
+    this.active = "";
+    this.search.value = "";
+    this.mode = "emoji";
+    this.renderTabs();
+    this.renderBody();
+    this.search.focus();
+    setTimeout(() => document.addEventListener("pointerdown", this.outside, true));
+  }
+
   async open(mode: "emoji" | "sticker"): Promise<void> {
+    this.reactWith = null;
     this.mode = mode;
     this.root.hidden = false;
     this.search.value = "";
@@ -76,6 +98,7 @@ export class Picker {
   }
 
   private visiblePacks(): Pack[] {
+    if (this.reactWith) return [];
     return this.packs.filter((pack) => (this.mode === "sticker" ? pack.usage !== "emoticon" : pack.usage !== "sticker"));
   }
 
@@ -97,6 +120,7 @@ export class Picker {
   private renderTabs(): void {
     const packs = this.visiblePacks();
     const tabs = [{ id: "", label: this.mode === "sticker" ? t("picker.stickers") : t("picker.emoji") }, ...packs.map((pack) => ({ id: pack.id, label: pack.name }))];
+    this.tabs.hidden = Boolean(this.reactWith) && tabs.length === 1;
     if (!tabs.some((tab) => tab.id === this.active)) this.active = tabs[0]?.id ?? "";
     this.tabs.replaceChildren(
       ...tabs.map((tab) =>
@@ -122,14 +146,30 @@ export class Picker {
     if (!pack) {
       if (this.mode === "emoji") {
         const recent = this.recent().filter((entry) => !entry.sticker && (!query || entry.shortcode.includes(query)));
-        if (recent.length > 0 && !query) cells.push(...this.recentCells(recent));
+        if (recent.length > 0 && !query) {
+          cells.push(el("h2", { class: "picker-group", text: t("picker.recent") }), ...this.recentCells(recent));
+        }
         for (const emoji of UNICODE) {
           if (query && !emoji.includes(query)) continue;
-          cells.push(el("button", { class: "emoji-cell", attrs: { type: "button", title: emoji }, on: { click: () => this.insert(emoji) } }, [el("span", { text: emoji })]));
+          cells.push(el("button", {
+            class: "emoji-cell",
+            attrs: { type: "button", title: emoji },
+            on: {
+              click: () => {
+                const react = this.reactWith;
+                if (react) {
+                  react(emoji);
+                  this.close();
+                  return;
+                }
+                this.insert(emoji);
+              },
+            },
+          }, [el("span", { text: emoji })]));
         }
       } else {
         const recent = this.recent().filter((entry) => entry.sticker && (!query || entry.shortcode.includes(query)));
-        cells.push(...this.recentCells(recent));
+        if (recent.length > 0) cells.push(el("h2", { class: "picker-group", text: t("picker.recent") }), ...this.recentCells(recent));
       }
     } else {
       const images = pack.images.filter((image) => !query || image.shortcode.toLowerCase().includes(query) || image.body.toLowerCase().includes(query));
@@ -141,10 +181,10 @@ export class Picker {
   }
 
   private recentCells(entries: Recent[]): HTMLElement[] {
-    return entries.map((entry) =>
-      el("button", {
+    return entries.map((entry) => {
+      const button = el("button", {
         class: "emoji-cell",
-        attrs: { type: "button", title: entry.shortcode },
+        attrs: { type: "button", title: entry.shortcode, "aria-label": entry.shortcode },
         on: {
           click: () => {
             if (entry.sticker) this.ctx.sendSticker(entry.url, entry.body);
@@ -152,8 +192,14 @@ export class Picker {
             this.close();
           },
         },
-      }, [el("img", { class: "emoji-image-loading", attrs: { alt: entry.shortcode } })]),
-    );
+      }, [el("span", { class: "emoji-slot" })]);
+      const info: MediaRef = { mxc: entry.url, mime: "image/png", size: 0, width: null, height: null, duration: null, name: entry.shortcode, file: null };
+      void this.ctx.media.url(info, 64).then((url) => {
+        if (url) button.replaceChildren(el("img", { class: "emoji-image", attrs: { src: url, alt: entry.shortcode } }));
+        else button.replaceChildren(el("span", { class: "emoji-text", text: entry.shortcode.slice(0, 2) }));
+      });
+      return button;
+    });
   }
 
   private imageCell(image: PackImage, pack: Pack): HTMLElement {

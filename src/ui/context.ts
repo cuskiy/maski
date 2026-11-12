@@ -20,6 +20,8 @@ export interface UiContext {
   submitFile(file: File): Promise<void>;
   sendSticker(url: string, body: string): void;
   react(message: Message, key: string): void;
+  reactPicker(message: Message): void;
+  reveal(eventId: string): void;
   redact(message: Message): void;
   retry(message: Message): void;
   removePending(message: Message): void;

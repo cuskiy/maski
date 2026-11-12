@@ -39,18 +39,29 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
   const cursors = await db.meta<Record<string, string>>("cursors", {});
   const cursor = cursors[room.roomId];
   const events = room.getLiveTimeline().getEvents();
-  const fresh: MatrixEvent[] = [];
+  const reached = new Set<string>();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (!event) continue;
-    const id = event.getId();
-    if (id && id === cursor) break;
-    fresh.unshift(event);
-    if (fresh.length > 400) break;
+    const id = event.getId() ?? "";
+    if (id === cursor) break;
+    reached.add(id);
+    if (reached.size > 400) break;
+  }
+  // A relation or a redaction changes an older event in place, so the last rows
+  // are revisited on every pass; writes are idempotent.
+  const tailStart = Math.max(0, events.length - 30);
+  const fresh: MatrixEvent[] = [];
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    if (!event) continue;
+    if (index >= tailStart || reached.has(event.getId() ?? "")) fresh.push(event);
   }
 
   let changed = false;
+  let membersChanged = false;
   const writes: StoredMessage[] = [];
+  const batch = new Map<string, StoredMessage>();
   for (const event of fresh) {
     const id = event.getId();
     if (!id) continue;
@@ -61,21 +72,36 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
     }
     const stored = await normalize(event, room);
     if (!stored) continue;
+    if (event.getType() === "m.room.member") membersChanged = true;
+    const txn = asString(event.getUnsigned()["transaction_id"]);
+    if (txn) await db.del(STORE.events, txn);
     if (stored.kind === "state" && stored.membership !== "join" && stored.membership !== "leave" && stored.membership !== "invite") {
       continue;
     }
-    writes.push(await resolveReply(db, stored));
+    writes.push(resolveReply(stored, batch));
+    batch.set(stored.id, stored);
     if (event.getType() === "m.room.message" || event.getType() === "m.sticker") changed = true;
   }
-  if (writes.length > 0) await db.putMessages(writes);
+  if (writes.length > 0) {
+    await db.putMessages(writes);
+    const late = writes.filter((message) => message.replyId && !message.reply);
+    const patched: StoredMessage[] = [];
+    for (const message of late) {
+      const target = await db.get<Message>(STORE.events, message.replyId ?? "");
+      if (!target) continue;
+      message.reply = { id: target.id, name: target.name, body: target.body };
+      patched.push(message);
+    }
+    if (patched.length > 0) await db.putMessages(patched);
+  }
 
-  const newest = fresh.at(-1);
+  const newest = events.at(-1);
   if (newest) {
     cursors[room.roomId] = newest.getId() ?? cursor ?? "";
     await db.setMeta("cursors", cursors);
   }
 
-  await projectMembers(db, room);
+  if (membersChanged || !(await db.hasMembers(room.roomId))) await projectMembers(db, room);
   const window = await db.roomWindow(room.roomId, 1);
   const summary = summarize({ room, direct, last: (window[0] as StoredMessage | undefined) ?? null, selfId: self });
   const previous = await db.getRoom(room.roomId);
@@ -84,9 +110,9 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
   return changed || !same;
 }
 
-async function resolveReply(db: AccountDb, message: StoredMessage): Promise<StoredMessage> {
+function resolveReply(message: StoredMessage, batch: Map<string, StoredMessage>): StoredMessage {
   if (!message.replyId) return message;
-  const target = await db.get<Message>(STORE.events, message.replyId);
+  const target = batch.get(message.replyId);
   if (target) message.reply = { id: message.replyId, name: target.name, body: target.body };
   return message;
 }
@@ -103,7 +129,13 @@ function sameSummary(a: RoomSummary, b: RoomSummary): boolean {
     a.favorite === b.favorite &&
     a.lowPriority === b.lowPriority &&
     a.topic === b.topic &&
-    a.preview === b.preview &&
+    a.last?.body === b.last?.body &&
+    a.last?.kind === b.last?.kind &&
+    a.joined === b.joined &&
+    a.isDirect === b.isDirect &&
+    a.encrypted === b.encrypted &&
+    a.hasOlder === b.hasOlder &&
+    a.myPower === b.myPower &&
     a.canSend === b.canSend
   );
 }
