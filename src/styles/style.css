@@ -7,7 +7,7 @@
   --ink: light-dark(#000, #fff);
   --surface: light-dark(
     color-mix(in oklab, var(--ink) 2.5%, var(--page)),
-    color-mix(in oklab, var(--ink) 7%, var(--page))
+    color-mix(in oklab, var(--ink) 2%, var(--page))
   );
   --surface-hover: light-dark(
     color-mix(in oklab, var(--ink) 5%, var(--page)),
@@ -556,7 +556,7 @@ h3 {
   align-items: center;
   gap: var(--space-1) var(--space-3);
   inline-size: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-3);
   border-radius: var(--radius);
   text-align: start;
 }
@@ -861,8 +861,8 @@ h3 {
 }
 
 .read-marker {
-  justify-content: flex-end;
-  font-size: var(--text-sm);
+  justify-content: center;
+  font-size: var(--text-xs);
 }
 
 .event {
