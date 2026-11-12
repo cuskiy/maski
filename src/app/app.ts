@@ -360,10 +360,8 @@ export class App {
     const projection = await this.db.readProjection(this.router.roomId());
     this.store.setProjection(projection);
     if (this.readOnly) this.store.setConnection("readonly");
-    const routeRoom = this.router.roomId();
-    if (routeRoom && !roomById(this.store.getSnapshot(), routeRoom)) {
-      this.router.navigate("/", { replace: true });
-    }
+    // A deep link is never rewritten from here: the first sync may still be adding
+    // rooms, and an unknown room simply shows the empty panel.
   }
 
   private async persistGate(): Promise<void> {
@@ -2755,7 +2753,13 @@ export class App {
     const name = el("input", { class: "input", attrs: { value: room.name, disabled: !canEditState } });
     const topic = el("textarea", { class: "textarea", text: room.topic });
     if (!canEditState) topic.disabled = true;
-    const avatarInput = el("input", { attrs: { type: "file", accept: "image/*", disabled: !canEditState } });
+    const avatarInput = el("input", {
+      attrs: { type: "file", accept: "image/*", disabled: !canEditState, hidden: true },
+    });
+    const avatarName = el("span", { class: "muted", text: "" });
+    avatarInput.addEventListener("change", () => {
+      avatarName.textContent = avatarInput.files?.[0]?.name ?? "";
+    });
     const uploadAvatar = async (): Promise<void> => {
       const file = avatarInput.files?.[0];
       if (!file) return;
@@ -2786,6 +2790,13 @@ export class App {
           avatarInput,
           el("button", {
             class: "button",
+            text: t("roomSettings.chooseFile"),
+            attrs: { type: "button", disabled: !canEditState },
+            on: { click: () => avatarInput.click() },
+          }),
+          avatarName,
+          el("button", {
+            class: "button",
             text: t("settings.uploadAvatar"),
             attrs: { type: "button", disabled: !canEditState },
             on: { click: () => void uploadAvatar().catch((error: unknown) => this.notify(messageOf(error))) },
@@ -2808,7 +2819,9 @@ export class App {
         }, [
           el("div", { class: "member-main" }, [
             el("span", { class: "member-name", text: member.displayName || member.userId }),
-            el("span", { class: "member-id", text: member.userId }),
+            member.displayName && member.displayName !== member.userId
+              ? el("span", { class: "member-id", text: member.userId })
+              : null,
           ]),
           el("span", { class: "badge", text: member.membership }),
         ]),

@@ -1850,7 +1850,7 @@ dialog::backdrop {
 }
 
 .button:hover {
-  background: var(--surface-hover);
+  background: var(--control-hover);
 }
 
 .button.primary {
@@ -1867,7 +1867,11 @@ dialog::backdrop {
 }
 
 .button.ghost:hover {
-  background: var(--surface-hover);
+  background: var(--hover-tint);
+}
+
+.dialog-body .button {
+  justify-self: start;
 }
 
 .button.danger {
