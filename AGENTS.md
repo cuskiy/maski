@@ -126,6 +126,9 @@ When a decision changes, update 0.6, the matching AGENTS section, the matching d
 | E17 | The worker owns the outbox delivery: one message in flight per room, retry with exponential backoff for transport, rate-limit and unknown errors, manual retry, cancel of a queued row. The main thread only writes the record. | 13, 20, `worker` |
 | E18 | Transient feedback is one rendered live region. `ui.toast` is the only user-visible error and confirmation surface; internal state is never shown to the user. | `ui`, `state` |
 | E19 | Commands that need the client wait for the worker's readiness instead of failing during the boot window; session commands are exempt. | 21, `worker` |
+| E21 | A relation reaches its target on both paths: the live timeline and the late decryption callback share one relation handler, so an edit or a reaction in an encrypted room applies once the event is readable. | `worker` |
+| E22 | Read state is one call: `setRoomReadMarkers` moves the receipt and the fully read marker together, and the timeline draws the marker where it sits. | 20, `worker`, `ui` |
+| E23 | Display names are disambiguated with the MXID when two members of a room share one. The count comes from the room summary, not the locally loaded members. | `data`, `ui` |
 | E20 | Outgoing events are built in one place: reply mentions the replied-to sender, every text message carries `m.mentions`, an edit carries the prefixed fallback body, a redaction goes through the SDK's redaction path. | 14, 24, `worker` |
 
 **Open decisions.**

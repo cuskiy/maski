@@ -2842,7 +2842,10 @@ export class App {
     clearSearch.hidden = true;
     const searchField = el("div", { class: "picker-search" }, [search, clearSearch]);
     const head = el("div", { class: "picker-head" }, [
-      el("span", { class: "picker-title", text: t("composer.emoji") }),
+      el("span", {
+        class: "picker-title",
+        text: reactTo ? t("room.react") : tab === "sticker" ? t("picker.stickers") : t("picker.emoticons"),
+      }),
       iconButton(t("common.close"), "close", () => close(), "icon-button picker-close"),
     ]);
     const body = el("div", { class: "picker-body" });

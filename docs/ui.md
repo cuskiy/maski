@@ -236,6 +236,12 @@ A UIA prompt can arrive before the shell exists, so the dialog host lives on `bo
 | `about.ts` | version/source/credits/privacy |
 | `media.ts` | image/video/audio/file rows and viewers |
 
+## Mentions, names and time
+
+- A row whose `m.mentions` names the current user gets the mark tone; the room list badge stays strong.
+- Display names come from the member record; when two members of a room share one, the MXID is appended so a name cannot be spoofed.
+- The timestamp sits in the bubble's bottom right and is not selectable. An emoji-only message takes the next type step.
+
 ## Feedback
 
 - One `Toaster` live region lives on `body`, so a message survives a shell re-render and is announced once.

@@ -173,6 +173,14 @@ A thumbnail is requested only when a width and height are known and the media is
 
 `start` resumes every row still in the outbox after the projection is ready, and `setOnline true` does the same after a reconnect, so a send made before a reload is delivered without a new user action.
 
+### Relations and decryption
+
+A replacement or an annotation may arrive before its payload is readable. When the event is decrypted the worker runs it through the same relation handler the live timeline uses, so an edit in an encrypted room reaches the event it changes instead of being dropped.
+
+### Read state
+
+`markRead` calls `setRoomReadMarkers`, which moves the read receipt and the fully read marker in one request. The marker is what the timeline draws as the line between read and unread.
+
 ### Readiness
 
 A command that needs the client waits for the worker to finish starting, up to the 30s command timeout instead of failing with an internal error during the boot window. `start`, `discover`, `login`, `loginToken`, `register`, `ssoUrl` and `logout` never wait.

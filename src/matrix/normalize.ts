@@ -208,6 +208,7 @@ export function normalizeRoom(
     unreadHighlight: room.getUnreadNotificationCount(NotificationCountType.Highlight),
     readUpToEventId: selfUserId ? room.getEventReadUpTo(selfUserId, true) : null,
     tags,
+    muted: isRoomMuted(client, room.roomId),
     order: 0,
     hasOlder: room.getLiveTimeline().getPaginationToken(Direction.Backward) !== null,
     updatedAt: Date.now(),
@@ -342,6 +343,17 @@ function mentionsFromContent(content: Record<string, unknown>): string[] {
   return Array.isArray(mentions["user_ids"])
     ? mentions["user_ids"].filter((entry): entry is string => typeof entry === "string")
     : [];
+}
+
+/** A room rule with dont_notify is what the client sets when a room is muted. */
+function isRoomMuted(client: MatrixClient | null, roomId: string): boolean {
+  if (!client) return false;
+  try {
+    const rule = client.getRoomPushRule("global", roomId);
+    return rule ? rule.actions.some((action) => action === "dont_notify") : false;
+  } catch {
+    return false;
+  }
 }
 
 export function directRoomIds(client: MatrixClient): Set<string> {
