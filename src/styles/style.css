@@ -786,7 +786,7 @@ a {
   white-space: nowrap;
 }
 
-.bubble-emote .bubble-text {
+.bubble-kind-emote .bubble-text {
   font-style: italic;
 }
 
@@ -900,14 +900,14 @@ a {
   opacity: 0;
 }
 
-.bubble-image,
-.bubble-video,
-.bubble-sticker {
+.bubble-kind-image,
+.bubble-kind-video,
+.bubble-kind-sticker {
   padding: 0;
   background: none;
 }
 
-.bubble-sticker {
+.bubble-kind-sticker {
   position: relative;
 }
 

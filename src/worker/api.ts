@@ -170,13 +170,20 @@ export class WorkerApi {
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private touched = new Set<string>();
   private activeRoomId: string | null = null;
+  private ready: Promise<{ session: Session | null }> = Promise.resolve({ session: null });
   private booting: Promise<void> | null = null;
 
   constructor(post: Post) {
     this.post = post;
   }
 
+  /** Commands wait for the account database, which `start` opens. */
   dispatch(command: Command): Promise<unknown> {
+    if (command.type === "start" || command.type === "login" || command.type === "register") return this.handle(command);
+    return this.ready.then(() => this.handle(command));
+  }
+
+  private handle(command: Command): Promise<unknown> {
     switch (command.type) {
       case "start":
         return this.start(command.accountHash);
@@ -263,6 +270,11 @@ export class WorkerApi {
   }
 
   async start(accountHashValue: string | null): Promise<{ session: Session | null }> {
+    this.ready = this.openAccount(accountHashValue);
+    return this.ready;
+  }
+
+  private async openAccount(accountHashValue: string | null): Promise<{ session: Session | null }> {
     if (!accountHashValue) {
       this.post({ event: "ready", session: null, revision: 0 });
       return { session: null };

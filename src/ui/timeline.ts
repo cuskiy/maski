@@ -27,7 +27,7 @@ function hydrateEmoji(root: HTMLElement, ctx: UiContext): void {
 }
 
 function bubbleContent(message: Message, ctx: UiContext): HTMLElement {
-  const bubble = el("div", { class: `bubble bubble-${message.kind}` });
+  const bubble = el("div", { class: `bubble bubble-kind-${message.kind}` });
   if (message.reply) {
     bubble.appendChild(
       el("button", {

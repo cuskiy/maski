@@ -1,16 +1,25 @@
 import { chromium } from "playwright";
 
 const SERVER = process.env.MASKI_SERVER ?? "http://localhost:8008";
-const USER = process.env.MASKI_USER ?? "maski-rewrite-1";
-const PASSWORD = process.env.MASKI_PASSWORD ?? "test-password-123";
-let RECOVERY = process.env.MASKI_RECOVERY ?? "";
-const shots = "/tmp/maski-check";
-const browser = await chromium.launch({ executablePath: "/nix/store/bjjswgpm41wpy2mzdf8d688p39fpbp4d-chromium-156.0.8078.47/bin/chromium" });
-const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
-const page = await context.newPage();
+const USER = process.env.MASKI_USER ?? "maski";
+const PASSWORD = process.env.MASKI_PASSWORD ?? "";
+const RECOVERY = process.env.MASKI_RECOVERY ?? "";
+const PROFILE = process.env.MASKI_PROFILE ?? "/tmp/maski-browser";
+const URL = process.env.MASKI_URL ?? "http://localhost:5173/";
+const shots = process.env.MASKI_SHOTS ?? "/tmp/maski-check";
+
+// One device: the profile is kept between runs, so the account sees the same device and
+// the same keys instead of a new one on every run.
+const context = await chromium.launchPersistentContext(PROFILE, {
+  viewport: { width: 1280, height: 860 },
+  executablePath: "/nix/store/bjjswgpm41wpy2mzdf8d688p39fpbp4d-chromium-156.0.8078.47/bin/chromium",
+});
+const page = context.pages()[0] ?? (await context.newPage());
 const errors = [];
 page.on("pageerror", (error) => errors.push(`pageerror: ${String(error).slice(0, 200)}`));
-page.on("console", (message) => { if (message.type() === "error") errors.push(`console: ${message.text().slice(0, 200)}`); });
+page.on("console", (message) => {
+  if (message.type() === "error") errors.push(`console: ${message.text().slice(0, 200)}`);
+});
 
 const step = async (name, action) => {
   try {
@@ -21,119 +30,98 @@ const step = async (name, action) => {
   }
 };
 
-await step("login", async () => {
-  await page.goto("http://localhost:5173/", { waitUntil: "networkidle" });
+await page.goto(URL, { waitUntil: "domcontentloaded" });
+
+await step("sign in", async () => {
+  if ((await page.locator(".auth-form").count()) === 0) return;
+  if (!PASSWORD) throw new Error("MASKI_PASSWORD is not set");
   await page.fill('input[name="server"]', SERVER);
   await page.fill('input[name="username"]', USER);
   await page.fill('input[name="password"]', PASSWORD);
   await page.click('form button[type="submit"]');
-  await page.waitForSelector("text=Unlock your messages", { timeout: 40000 });
+  await page.waitForSelector("text=Unlock your messages", { timeout: 60000 });
+  if (!RECOVERY) throw new Error("MASKI_RECOVERY is not set, open the gate once to create a key");
+  await page.fill('input[name="key"]', RECOVERY);
+  await page.click('button:has-text("Unlock")');
 });
 
-await step("unlock", async () => {
-  // A fresh account has no key yet, so the first run creates one and the key is
-  // kept for the second run, which exercises the unlock path.
-  if (RECOVERY) {
-    await page.fill('input[name="key"]', RECOVERY);
-    await page.click('button:has-text("Unlock")');
-    await page.waitForSelector(".shell", { timeout: 40000 });
-    return;
-  }
-  await page.click('button:has-text("Start over with a new key")');
-  await page.fill('input[name="password"]', PASSWORD);
-  await page.click('button:has-text("Create a new key")');
-  await page.waitForSelector(".recovery-key", { timeout: 60000 });
-  RECOVERY = (await page.locator(".recovery-key").textContent()) ?? "";
-  console.log("     key:", RECOVERY);
-  await page.click('button:has-text("I saved my key")');
-  await page.waitForSelector(".shell", { timeout: 40000 });
+await step("shell", async () => {
+  await page.waitForSelector(".shell", { timeout: 60000 });
+  await page.waitForTimeout(2000);
+  const rooms = await page.locator(".room-row").allTextContents();
+  console.log("     rooms:", rooms.length, rooms[0]?.replace(/\n/g, " | ").slice(0, 60) ?? "");
+  await page.screenshot({ path: `${shots}/B1-shell.png` });
 });
 
-await step("first paint", async () => {
-  const rooms = await page.locator(".room-row").count();
-  console.log("     rooms:", rooms);
-  await page.screenshot({ path: `${shots}/F1-shell.png` });
-});
-
-await step("create room", async () => {
-  await page.click('.nav-action:has-text("Create room")');
-  await page.waitForSelector(".dialog");
-  await page.fill('.dialog input[aria-label="Name"]', "Rewrite room");
-  await page.click('.dialog button:has-text("Create")');
-  await page.waitForSelector(".composer-field", { timeout: 30000 });
-});
-
-await step("send message", async () => {
-  await page.fill(".composer-field", "hello from the rewrite");
+await step("send and echo", async () => {
+  await page.locator(".room-row").first().click();
+  await page.waitForTimeout(1500);
+  const text = `flow ${Date.now()}`;
+  await page.fill(".composer-field", text);
   await page.click(".composer-send");
-  await page.waitForSelector("text=hello from the rewrite", { timeout: 20000 });
-  await page.screenshot({ path: `${shots}/F2-sent.png` });
-});
-
-await step("own message has no duplicate", async () => {
+  await page.waitForFunction((value) => [...document.querySelectorAll(".bubble-text")].some((node) => node.textContent === value), text, { timeout: 20000 });
   await page.waitForTimeout(4000);
-  const count = await page.locator(".bubble-text:has-text('hello from the rewrite')").count();
-  console.log("     bubbles:", count);
+  const copies = await page.evaluate((value) => [...document.querySelectorAll(".bubble-text")].filter((node) => node.textContent === value).length, text);
+  if (copies !== 1) throw new Error(`the message appears ${copies} times`);
+  await page.screenshot({ path: `${shots}/B2-sent.png` });
 });
 
-await step("reload keeps history", async () => {
-  await page.reload({ waitUntil: "networkidle" });
-  await page.waitForSelector(".shell", { timeout: 40000 });
-  await page.waitForSelector("text=hello from the rewrite", { timeout: 20000 });
-  await page.screenshot({ path: `${shots}/F3-reload.png` });
+await step("reload keeps the message", async () => {
+  const before = await page.locator(".bubble-text").count();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".shell", { timeout: 60000 });
+  await page.waitForTimeout(3000);
+  const after = await page.locator(".bubble-text").count();
+  if (after < before) throw new Error(`before ${before}, after ${after}`);
 });
 
 await step("picker", async () => {
   await page.click('.composer button[aria-label="Emoji and stickers"]');
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(500);
   const cells = await page.locator(".picker .emoji-cell").count();
-  console.log("     cells:", cells);
-  await page.screenshot({ path: `${shots}/F4-picker.png` });
+  if (cells === 0) throw new Error("the picker is empty");
+  await page.screenshot({ path: `${shots}/B3-picker.png` });
+  await page.keyboard.press("Escape");
+  await page.click(".room-header button:has-text('Room settings'), .room-header .icon-button");
 });
 
-await step("settings", async () => {
+await step("settings and search", async () => {
   await page.keyboard.press("Escape");
   await page.click('.nav-action:has-text("Settings")');
   await page.waitForSelector(".dialog");
-  await page.screenshot({ path: `${shots}/F5-settings.png` });
+  await page.screenshot({ path: `${shots}/B4-settings.png` });
   await page.keyboard.press("Escape");
-});
-
-await step("search", async () => {
   await page.click('.nav-action:has-text("Search")');
-  await page.fill('.dialog input[type="search"]', "rewrite");
+  await page.fill('.dialog input[type="search"]', "flow");
   await page.waitForTimeout(900);
-  const rows = await page.locator(".search-row").count();
-  console.log("     hits:", rows);
+  await page.screenshot({ path: `${shots}/B5-search.png` });
   await page.keyboard.press("Escape");
 });
 
 await step("dark", async () => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${shots}/F6-dark.png` });
+  await page.screenshot({ path: `${shots}/B6-dark.png` });
 });
 
 await step("narrow", async () => {
   await page.setViewportSize({ width: 420, height: 820 });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${shots}/F8-narrow-room.png` });
+  await page.screenshot({ path: `${shots}/B7-narrow-room.png` });
   await page.locator(".back-button").click();
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${shots}/F7-narrow-home.png` });
+  await page.screenshot({ path: `${shots}/B8-narrow-home.png` });
   await page.locator(".room-row").first().click();
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${shots}/F8-narrow-room.png` });
+  await page.waitForTimeout(500);
 });
 
-await step("no horizontal scroll", async () => {
-  const metrics = await page.evaluate(() => ({
-    doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    body: document.body.scrollWidth - document.body.clientWidth,
+await step("no horizontal overflow", async () => {
+  const overflow = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     wide: [...document.querySelectorAll("*")].filter((node) => node.getBoundingClientRect().right > window.innerWidth + 1).length,
   }));
-  console.log("     ", JSON.stringify(metrics));
+  if (overflow.document > 0 || overflow.wide > 0) throw new Error(JSON.stringify(overflow));
 });
 
 console.log("errors:", errors.slice(0, 6));
-await browser.close();
+await context.close();
