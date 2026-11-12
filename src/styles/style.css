@@ -61,6 +61,7 @@
   --text-sm: clamp(0.74rem, 0.7rem + 0.15vw, 0.78rem);
   --text-md: clamp(0.84rem, 0.79rem + 0.22vw, 0.95rem);
   --text-control: clamp(0.8rem, 0.77rem + 0.12vw, 0.88rem);
+  --text-note: clamp(0.7rem, 0.67rem + 0.1vw, 0.74rem);
   --text-lg: clamp(0.98rem, 0.88rem + 0.45vw, 1.22rem);
   --text-xl: clamp(1.22rem, 1.08rem + 0.8vw, 1.65rem);
   --text-2xl: clamp(1.76rem, 1.24rem + 2.2vw, 2.84rem);
@@ -383,7 +384,7 @@ h3 {
 }
 
 .nav-account {
-  padding-block: var(--space-2) 0;
+  padding: var(--space-2) var(--space-2) 0;
 }
 
 .nav-user {
@@ -443,7 +444,7 @@ h3 {
 
 .nav-user-name,
 .nav-user-sub {
-  font-size: var(--text-sm);
+  font-size: var(--text-note);
   line-height: var(--leading-tight);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -507,6 +508,7 @@ h3 {
 
 .room-section {
   border-block-start: 0;
+  margin-inline: var(--space-2);
   margin-block-end: var(--space-2);
 }
 
@@ -669,7 +671,7 @@ h3 {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--page-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-note);
   line-height: var(--leading-tight);
 }
 
