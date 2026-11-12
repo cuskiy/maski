@@ -148,3 +148,34 @@ echo arrives with a real id and replaces the queued row by its transaction id.
 call whose key does not exist, an interface file that imports the SDK or the worker, and a
 worker file that imports the interface. Dead copy and a broken boundary are build failures,
 not code review notes.
+
+## 7. Where the work stands
+
+Done and verified against a real homeserver: sign in, the key gate (unlock, reset, and a
+signed-in device taking the key again), SAS device verification, session listing and signing
+the others out, room list with sections and previews, invites, E2EE send and receive,
+media with progress and cancel, drafts, picker, settings, search, both colour schemes, the
+narrow shell.
+
+Next, in order, each inside an existing boundary:
+
+1. Split `ui/dialogs.ts` by dialog; it holds every dialog and is the largest view file.
+2. Unit tests for `store/select.ts` (sections, timeline items, preview) and for the
+   projection's cursor decision in `worker/project.ts`.
+3. Member permissions in room settings: kick and ban follow the power level the summary
+   already carries in `myPower`.
+
+## 8. Picking the work up
+
+```
+npm install
+npm run check                       # the gate: typecheck, lint, tests, build, two audits
+npm run dev                         # http://localhost:5173/
+```
+
+`test/browser/flow.mjs` drives the real app. It reads `MASKI_SERVER`, `MASKI_USER`,
+`MASKI_PASSWORD`, `MASKI_RECOVERY`, `MASKI_PROFILE` and `MASKI_SHOTS`; the profile directory
+is kept between runs so the account sees one device instead of a new one each time. A fresh
+profile exercises the whole first-run path. Verification needs a second client, so it is
+tested by hand: start it from the other client, accept here, compare the seven emoji, and
+confirm on both sides.
