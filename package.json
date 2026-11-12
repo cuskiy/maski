@@ -1,0 +1,38 @@
+{
+  "name": "maski",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A fast, local-first Matrix client",
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "build": "tsx scripts/build.ts",
+    "verify": "tsx scripts/verify.ts",
+    "code": "tsc --noEmit",
+    "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" --max-warnings=0",
+    "test": "vitest run",
+    "check": "npm run code && npm run lint && npm test && npm run build && npm run verify"
+  },
+  "dependencies": {
+    "dompurify": "3.4.17",
+    "matrix-js-sdk": "45.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "playwright": "1.65.0",
+    "stylelint": "18.0.0",
+    "stylelint-config-standard": "41.0.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

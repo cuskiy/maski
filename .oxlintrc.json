@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist/**", "node_modules/**", "blog/**", "git/**"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "plugins": ["import", "promise", "unicorn", "typescript", "oxc"],
+  "rules": {
+    "no-console": "error",
+    "no-alert": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "eqeqeq": "error",
+    "no-implicit-coercion": "error",
+    "no-param-reassign": "error",
+    "no-return-assign": "error",
+    "no-throw-literal": "error",
+    "no-useless-catch": "error",
+    "no-useless-return": "error",
+    "require-await": "off",
+    "promise/always-return": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    "unicorn/require-post-message-target-origin": "off",
+    "eslint/no-await-in-loop": "off",
+    "typescript/no-unsafe-enum-comparison": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/no-unnecessary-type-parameters": "off"
+  }
+}
