@@ -1,3432 +1,508 @@
-import { config, type Locale } from "./config";
-import { MainDb } from "../store/db";
-import { AppStore, type AppSnapshot } from "../store/app-store";
-import {
-  activeRoom,
-  displayName,
-  isEmoticonPack,
-  isStickerPack,
-  memberFor,
-  roomById,
-  roomSections,
-  roomTitle,
-  timelineItems,
-  type SectionKey,
-} from "../store/selectors";
-import type {
-  DeviceRecord,
-  EventRecord,
-  MediaDescriptor,
-  MemberRecord,
-  OutboxRecord,
-  RoomRecord,
-  ScrollRecord,
-  VerificationState,
-} from "../data/records";
-import type {
-  DiscoveryResult,
-  RecoveryResult,
-  RecoveryStatus,
-  SessionSummary,
-  SetupRecoveryResult,
-  SsoTarget,
-  UiaEvent,
-  VerificationResult,
-  WorkerToClient,
-} from "../protocol";
-import { isRecord, isSessionSummary } from "../protocol";
-import { WorkerClient, WorkerError } from "../matrix/client";
-import { messageContent, redactionContent } from "../matrix/compose";
-import { Router } from "../ui/router";
-import { DialogHost } from "../ui/dialogs";
-import { MediaCache } from "../ui/media-cache";
-import { Notifier } from "../ui/notifications";
-import { Toaster } from "../ui/toast";
-import { confirmAction } from "../ui/confirm";
-import { Composer, type ComposerMessage, type PendingFile } from "../ui/views/composer";
-import type { MarkType } from "../ui/composer-model";
-import { TimelineView } from "../ui/views/timeline";
-import { ActionMenu, bindActionTrigger, type ActionMenuItem, type ActionPosition } from "../ui/action-menu";
-import { el, initial, type Child } from "../ui/dom";
-import { icon, iconButton } from "../ui/icons";
-import { escapeHtml } from "../ui/sanitize";
-import { formatNumber, setLocale, t } from "../i18n";
+import type { Draft, Mark, Message, RoomSummary, SectionId } from "../core/types.ts";
+import { WorkerClient } from "../client/worker-client.ts";
+import { LocalDb } from "../store/db.ts";
+import { activeRoom } from "../store/select.ts";
+import { EMPTY_DRAFT, setState, state, touch } from "../store/state.ts";
+import { MediaCache } from "../ui/media.ts";
+import { Shell } from "../ui/shell.ts";
+import { copyText, toast } from "../ui/overlay.ts";
+import { closeDialog, showDialog } from "../ui/dialogs.ts";
+import { authScreen, gateScreen } from "../ui/screens.ts";
+import type { UiContext } from "../ui/context.ts";
+import { getLocale, setLocale, t } from "../i18n/index.ts";
+import type { Event, RoomWindow } from "../protocol/messages.ts";
 
-type View = "boot" | "auth" | "gate" | "shell" | "fatal";
-type AuthStep = "server" | "methods" | "register";
-type AuthIntent = "login" | "register";
 
-interface AuthFields {
-  server: string;
-  identifier: string;
-  password: string;
-  confirm: string;
-  username: string;
-}
-
-interface ShellRefs {
-  app: HTMLElement;
-  nav: HTMLElement;
-  rooms: HTMLElement;
-  content: HTMLElement;
-  headerTitle: HTMLElement;
-  headerActions: HTMLElement;
-  body: HTMLElement;
-  typing: HTMLElement;
-  composerHost: HTMLElement;
-}
-
-export class App {
-  private readonly root: HTMLElement;
-  private readonly adapter: WorkerClient;
-  private readonly db = new MainDb();
-  private readonly router = new Router();
-  private readonly dialogs = new DialogHost();
-  private readonly media: MediaCache;
-  private readonly notifier = new Notifier();
-  private readonly toaster = new Toaster();
-  private readonly actionMenu = new ActionMenu();
-  private readonly store = new AppStore(config.app.defaultLocale);
-  private view: View = "boot";
-  private shell: ShellRefs | null = null;
-  private timeline: TimelineView | null = null;
-  private composer: Composer | null = null;
-  private picker: {
-    element: HTMLElement;
-    trigger: HTMLElement;
-    mode: "emoji" | "sticker";
-    close: () => void;
-  } | null = null;
-  private renderQueued = false;
-  private shellLocale: Locale | null = null;
-  private authStep: AuthStep = "server";
-  private authIntent: AuthIntent = "login";
-  private discovery: DiscoveryResult | null = null;
-  private authBusy = false;
-  private authError: string | null = null;
-  private authFields: AuthFields = {
-    server: config.app.defaultHomeserver,
-    identifier: "",
-    password: "",
-    confirm: "",
-    username: "",
-  };
-  private authRenderKey = "";
-  private gateBusy = false;
-  private gateError: string | null = null;
-  private recoveryKey: string | null = null;
-  private gateRenderKey = "";
-  private hash: string | null = null;
-  private adopting: string | null = null;
-  private settings: Record<string, unknown> = {};
-  private dialogName: string | null = null;
-  private uia: UiaEvent | null = null;
-  private uiaAnswering = false;
-  private pendingFocusEvent: string | null = null;
-  private readOnly = false;
-  private locksHeld = false;
-  private activating: string | null = null;
-  private roomListKey = "";
-  private headerKey = "";
-  private channelKey = "";
-  private notificationPermission: NotificationPermission | "unsupported" = "unsupported";
-  private settingsSection = "account";
-  private searchTimer: number | null = null;
-  private draftTimer: number | null = null;
-  private draftRoom: string | null = null;
-  private typingRoom: string | null = null;
-  private typingAt = 0;
+export class App implements UiContext {
+  readonly local = new LocalDb();
+  readonly worker = new WorkerClient();
+  readonly media: MediaCache;
+  private shell: Shell;
+  private draftState: Draft = EMPTY_DRAFT;
+  private typingTimer = 0;
+  private root: HTMLElement;
 
   constructor(root: HTMLElement) {
     this.root = root;
-    this.adapter = new WorkerClient();
-    this.media = new MediaCache(this.adapter, (key) => this.db.readMediaBlob(key));
-    document.body.appendChild(this.toaster.element);
+    this.media = new MediaCache(this.local, this.worker);
+    this.shell = new Shell(this);
   }
 
-  private notify(message: string): void {
-    this.toaster.show(message);
-  }
-
-  async start(): Promise<void> {
-    await this.db.open();
-    this.settings = await this.db.readSettings();
-    // The static shell decides the locale; the stored setting follows it.
-    const locale: Locale = this.router.route.locale;
+  async boot(): Promise<void> {
+    const settings = await this.local.settings();
+    const locale = settings.locale ?? (location.pathname.startsWith("/zh-CN/") ? "zh-CN" : "en");
     setLocale(locale);
-    if (this.settings["locale"] !== locale) await this.db.writeSetting("locale", locale);
-    this.store.patchUi({
-      locale,
-      notificationsPreview: this.settings["notificationsPreview"] !== false,
-      notificationPermission:
-        typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+    setState({ settings, locale });
+    this.worker.start();
+    this.worker.onEvent((event) => this.onWorkerEvent(event));
+    window.addEventListener("popstate", () => this.applyRoute());
+    window.addEventListener("hashchange", () => this.applyRoute());
+    window.addEventListener("offline", () => setState({ connection: "offline" }));
+    window.addEventListener("online", () => {
+      void this.worker.send({ type: "retrySync" });
     });
-    this.notificationPermission = this.store.getSnapshot().ui.notificationPermission;
-    this.notifier.configure(
-      {
-        enabled: this.settings["notificationsEnabled"] === true,
-        preview: this.settings["notificationsPreview"] !== false,
-      },
-      (roomId) => this.openRoom(roomId),
-    );
-    this.adapter.onEvent((event) => this.handleWorkerEvent(event));
-    this.adapter.onFatal((error) => this.fatal(error.message));
-    this.store.subscribe(() => this.requestRender());
-    this.router.subscribe(() => this.requestRender());
-    this.applyLocale();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.markReadSoon();
+    });
 
-    const token = new URLSearchParams(window.location.search).get("loginToken");
-    if (token) {
-      await this.loginWithSsoToken(token);
-      return;
-    }
-    const last = await this.db.lastAccountHash();
+    const last = settings.lastAccount;
     if (last) {
-      await this.resume(last);
-      return;
-    }
-    this.requestRender();
-  }
-
-  private async resume(hash: string): Promise<void> {
-    const cached = isSessionSummary(this.settings["lastSession"]) ? this.settings["lastSession"] : null;
-    const gateDone = this.settings[`keyGate:${hash}`] === true;
-    this.hash = hash;
-    this.store.setConnection(this.readOnly ? "readonly" : "connecting");
-    if (cached && gateDone && cached.accountHash === hash) {
       try {
-        // Rooms and the open timeline are read first: the loading screen stays up
-        // until the shell can be painted complete instead of filling in later.
-        await this.db.openAccount(hash);
-        await this.reloadProjection();
-        this.store.setSession(cached);
-        this.store.setKeyGate("complete");
-        await this.openInitialRoom();
-      } catch (error) {
-        this.authError = messageOf(error);
-      }
-    }
-    this.requestRender();
-    if (this.readOnly) {
-      this.notify(t("session.readOnly"));
-      return;
-    }
-    void this.startWorker(hash);
-  }
-
-  // The second tab reads the projection and never opens the SDK or crypto store.
-  // A reload releases the lock a moment after the new document starts, so one retry
-  // separates a reload from a real second tab.
-  private async holdClientLock(): Promise<boolean> {
-    if (this.locksHeld) return true;
-    if (!("locks" in navigator)) return true;
-    this.locksHeld = (await this.requestClientLock()) || (await this.requestClientLock(300));
-    return this.locksHeld;
-  }
-
-  private async requestClientLock(delay = 0): Promise<boolean> {
-    if (delay > 0) await new Promise((resolve) => window.setTimeout(resolve, delay));
-    return new Promise<boolean>((resolve) => {
-      void navigator.locks
-        .request("maski-client", { ifAvailable: true }, (lock) => {
-          resolve(lock !== null);
-          return lock ? new Promise<void>(() => undefined) : undefined;
-        })
-        .catch(() => resolve(true));
-    });
-  }
-
-  private async startWorker(hash: string): Promise<void> {
-    if (!(await this.holdClientLock())) {
-      this.readOnly = true;
-      this.store.setConnection("readonly");
-      this.notify(t("session.readOnly"));
-      return;
-    }
-    try {
-      await this.adapter.request("start", { accountHash: hash }, 0);
-    } catch (error) {
-      if (error instanceof WorkerError && error.code === "not_logged_in") {
-        this.forgetSession();
-        return;
-      }
-      this.store.setConnection("error");
-      this.notify(messageOf(error));
-    }
-  }
-
-  private handleWorkerEvent(event: WorkerToClient): void {
-    switch (event.type) {
-      case "ready":
-        this.handleReady(event.session);
-        break;
-      case "session":
-        this.store.setSession(event.session);
-        break;
-      case "reload":
-        void this.reloadProjection();
-        break;
-      case "delta": {
-        // The known ids have to be read before the delta lands, or every arriving
-        // event already looks known and nothing is announced.
-        const prior = new Set(this.store.getSnapshot().events.map((row) => row.eventId));
-        if (!this.store.applyDelta(event.delta)) break;
-        for (const row of event.delta.events) {
-          if (prior.has(row.eventId)) continue;
-          const room = roomById(this.store.getSnapshot(), row.roomId);
-          if (room) this.notifier.notify(row, room, this.store.getSnapshot().session?.userId ?? "");
-        }
-        break;
-      }
-      case "outbox":
-        void this.handleOutboxEvent(event.txnId, event.status, event.error, event.attempts);
-        break;
-      case "typing":
-        this.store.setTyping(event.roomId, event.userIds);
-        break;
-      case "sync":
-        if (event.state === "ERROR") this.store.setConnection("error");
-        else if (event.state === "RECONNECTING") this.store.setConnection("offline");
-        else if (event.state === "PREPARED" || event.state === "SYNCING") this.store.setConnection("ready");
-        else if (event.state === "STOPPED") this.store.setConnection("boot");
-        else this.store.setConnection("connecting");
-        break;
-      case "progress":
-        break;
-      case "verification":
-        this.handleVerification(event.state);
-        break;
-      case "uia":
-        this.openUia(event);
-        break;
-      case "fatal":
-        this.fatal(event.message);
-        break;
-      case "log":
-        if (event.level === "error") this.notify(event.message);
-        break;
-      case "toast":
-        this.notify(event.message);
-        break;
-    }
-  }
-
-  private handleReady(session: SessionSummary | null): void {
-    if (!session) {
-      this.forgetSession();
-      return;
-    }
-    void this.adoptSession(session);
-  }
-
-  private forgetSession(): void {
-    this.hash = null;
-    this.authStep = "server";
-    this.discovery = null;
-    this.authBusy = false;
-    this.store.setSession(null);
-    this.store.setKeyGate("checking");
-    this.requestRender();
-  }
-
-  private async adoptSession(session: SessionSummary): Promise<void> {
-    if (this.adopting === session.accountHash) return;
-    this.adopting = session.accountHash;
-    const keepShell = this.hash === session.accountHash && this.store.getSnapshot().keyGate === "complete";
-    try {
-      this.hash = session.accountHash;
-      this.store.setSession(session);
-      if (!keepShell) this.store.setKeyGate("checking");
-      this.store.setConnection("connecting");
-      this.authBusy = false;
-      this.authError = null;
-      await this.db.openAccount(session.accountHash);
-      await this.db.writeSetting("lastAccountHash", session.accountHash);
-      this.settings = await this.db.readSettings();
-      await this.reloadProjection();
-      await this.checkGate(keepShell);
-    } catch (error) {
-      if (keepShell) {
-        this.store.setConnection("error");
-        this.notify(messageOf(error));
-      } else {
-        this.hash = null;
-        this.authError = messageOf(error);
-      }
-      this.requestRender();
-    } finally {
-      this.adopting = null;
-    }
-  }
-
-  private async reloadProjection(): Promise<void> {
-    if (!this.hash) return;
-    await this.db.openAccount(this.hash);
-    const projection = await this.db.readProjection(this.router.roomId());
-    this.store.setProjection(projection);
-    this.prefetchAvatars();
-    if (this.readOnly) this.store.setConnection("readonly");
-    // A deep link is never rewritten from here: the first sync may still be adding
-    // rooms, and an unknown room simply shows the empty panel.
-  }
-
-  private async persistGate(): Promise<void> {
-    const session = this.store.getSnapshot().session;
-    if (!session) return;
-    await this.db.writeSetting("lastSession", session);
-    await this.db.writeSetting(`keyGate:${session.accountHash}`, true);
-  }
-
-  private async checkGate(background = false): Promise<void> {
-    const session = this.store.getSnapshot().session;
-    if (!session) return;
-    if (!background) {
-      this.store.setKeyGate("checking");
-      this.requestRender();
-    }
-    try {
-      const result = await this.adapter.request<RecoveryResult>("recoveryStatus", {});
-      this.store.setRecovery(result.status);
-      if (gateComplete(result.status)) {
-        await this.persistGate();
-        this.store.setKeyGate("complete");
-        if (!background) await this.openInitialRoom();
-      } else {
-        this.store.setKeyGate("required");
-      }
-    } catch (error) {
-      // A background check that cannot reach the server says nothing about the key:
-      // the shell keeps the state it already proved locally.
-      if (background) {
-        this.notify(t("errors.network"));
-        return;
-      }
-      this.gateError = messageOf(error);
-      this.store.setKeyGate("required");
-    }
-    this.requestRender();
-  }
-
-  private async openInitialRoom(): Promise<void> {
-    const routeRoom = this.router.roomId();
-    if (routeRoom) {
-      await this.activateRoom(routeRoom, false);
-      return;
-    }
-    this.store.setActiveRoom(null);
-  }
-
-  private async activateRoom(roomId: string, navigate = true): Promise<void> {
-    const room = roomById(this.store.getSnapshot(), roomId);
-    if (!room) return;
-    // A render can request the same room while the first request is still reading,
-    // which used to stack IndexedDB work and freeze the switch.
-    if (this.activating === roomId) return;
-    this.activating = roomId;
-    this.closePicker();
-    try {
-      const snapshot = this.store.getSnapshot();
-      const previous = snapshot.activeRoomId;
-      // Switching rooms replaces the composer, so a draft still waiting on its
-      // debounce is written first.
-      if (this.draftTimer !== null) {
-        window.clearTimeout(this.draftTimer);
-        this.draftTimer = null;
-        if (previous !== roomId) await this.saveDraft();
-      }
-      if (previous !== roomId) await this.storeScroll(previous);
-      const scroll = previous === roomId ? null : await this.readScroll(roomId);
-      const events = await this.db.readRoomEvents(roomId);
-      this.store.setActiveRoom(roomId, events);
-      const latest = events[events.length - 1];
-      if (latest) void this.adapter.request("markRead", { roomId, eventId: latest.eventId }).catch(() => undefined);
-      if (navigate && this.router.roomId() !== roomId) this.router.navigate(this.router.roomPath(roomId));
-      await this.restoreDraft(roomId);
-      this.composer?.focus();
-      if (scroll) this.timeline?.restoreScroll(scroll);
-      this.requestRender();
-    } finally {
-      this.activating = null;
-    }
-  }
-
-  private async readScroll(roomId: string): Promise<ScrollRecord | null> {
-    if (!this.hash) return null;
-    return this.db.readScroll(this.hash, roomId).catch(() => null);
-  }
-
-  private async storeScroll(roomId: string | null): Promise<void> {
-    const hash = this.hash;
-    const timeline = this.timeline;
-    if (!hash || !roomId || !timeline) return;
-    const state = timeline.scrollState();
-    await this.db
-      .writeScroll({ accountHash: hash, roomId, eventId: state.eventId, offset: state.offset, atBottom: state.atBottom })
-      .catch(() => undefined);
-  }
-
-  private scheduleDraftSave(): void {
-    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
-    this.draftTimer = window.setTimeout(() => {
-      this.draftTimer = null;
-      void this.saveDraft();
-    }, 400);
-  }
-
-  private async saveDraft(): Promise<void> {
-    const hash = this.hash;
-    const roomId = this.store.getSnapshot().activeRoomId;
-    const composer = this.composer;
-    if (!hash || !roomId || !composer) return;
-    const state = composer.model.state;
-    const target = composer.contextTarget;
-    const empty = state.text.length === 0 && state.marks.length === 0 && state.tokens.length === 0 && !target;
-    if (empty) {
-      if (this.draftRoom !== roomId) return;
-      this.draftRoom = null;
-      await this.db.deleteDraft(hash, roomId).catch(() => undefined);
-      return;
-    }
-    this.draftRoom = roomId;
-    await this.db
-      .writeDraft({
-        accountHash: hash,
-        roomId,
-        text: state.text,
-        marks: state.marks,
-        emoji: state.tokens,
-        replyTo: target?.kind === "reply" ? target.eventId : null,
-        editTarget: target?.kind === "edit" ? target.eventId : null,
-        updatedAt: Date.now(),
-      })
-      .catch(() => undefined);
-  }
-
-  private async restoreDraft(roomId: string): Promise<void> {
-    const hash = this.hash;
-    const composer = this.composer;
-    if (!hash || !composer) return;
-    const draft = await this.db.readDraft(hash, roomId).catch(() => null);
-    if (!draft) {
-      composer.reset();
-      this.draftRoom = null;
-      return;
-    }
-    this.draftRoom = roomId;
-    composer.restore({
-      text: draft.text,
-      marks: draft.marks,
-      tokens: draft.emoji,
-      selectionStart: draft.text.length,
-      selectionEnd: draft.text.length,
-    });
-    const target = draft.replyTo ?? draft.editTarget;
-    if (target) {
-      const event = this.store.getSnapshot().events.find((row) => row.eventId === target);
-      const name = event ? displayName(this.store.getSnapshot(), roomId, event.senderId) : "";
-      composer.setContext(draft.replyTo ? "reply" : "edit", target, name);
-    }
-  }
-
-  private openRoom(roomId: string): void {
-    this.router.navigate(this.router.roomPath(roomId));
-    void this.activateRoom(roomId, false);
-  }
-
-  private backToHome(): void {
-    void this.storeScroll(this.store.getSnapshot().activeRoomId);
-    this.router.navigate("/");
-  }
-
-  private requestRender(): void {
-    if (this.renderQueued) return;
-    this.renderQueued = true;
-    requestAnimationFrame(() => {
-      this.renderQueued = false;
-      this.render();
-    });
-  }
-
-  private render(): void {
-    this.applyLocale();
-    this.syncRoute();
-    const snapshot = this.store.getSnapshot();
-    if (!snapshot.session) {
-      if (this.hash) {
-        this.renderBoot();
-        return;
-      }
-      if (this.view !== "auth" || this.authRenderKey !== this.authKey()) this.renderAuth();
-      return;
-    }
-    if (snapshot.keyGate !== "complete") {
-      if (this.view !== "gate" || this.gateRenderKey !== this.gateKey()) this.renderGate();
-      return;
-    }
-    if (this.view !== "shell" || !this.shell || this.shellLocale !== snapshot.ui.locale) {
-      this.renderShell();
-    } else {
-      this.updateShell();
-    }
-    this.syncDialogs();
-  }
-
-  private syncRoute(): void {
-    const snapshot = this.store.getSnapshot();
-    if (!snapshot.session || snapshot.keyGate !== "complete") return;
-    const roomId = this.router.roomId();
-    if (!roomId) {
-      if (snapshot.activeRoomId) this.store.setActiveRoom(null);
-      return;
-    }
-    if (roomId !== snapshot.activeRoomId) void this.activateRoom(roomId, false);
-  }
-
-  private applyLocale(): void {
-    const locale = this.store.getSnapshot().ui.locale;
-    setLocale(locale);
-    document.documentElement.lang = locale;
-    document.title = `${config.app.name} — ${t("app.description")}`;
-  }
-
-  // Same markup as the static shell, so the handover draws nothing twice
-  private renderBoot(): void {
-    if (this.view === "boot") return;
-    this.view = "boot";
-    this.root.classList.add("boot");
-    this.root.replaceChildren(
-      el("div", { class: "boot-screen", attrs: { "aria-busy": "true" } }, [
-        el("p", { class: "brand", text: config.app.name }),
-        el("p", { class: "boot-text", text: t("boot.connecting") }),
-        el("span", { class: "spinner" }),
-      ]),
-    );
-  }
-
-  private renderAuth(): void {
-    this.view = "auth";
-    this.root.classList.remove("boot");
-    this.authRenderKey = this.authKey();
-    const snapshot = this.store.getSnapshot();
-    const nodes: Child[] = [];
-    if (this.authStep === "server") {
-      nodes.push(...this.serverStep());
-    } else if (this.authStep === "methods") {
-      nodes.push(...this.methodsStep());
-    } else {
-      nodes.push(...this.registerStep());
-    }
-    if (this.readOnly) nodes.push(el("p", { class: "muted", text: t("session.readOnly") }));
-    if (this.authError) nodes.push(el("p", { class: "error-text", text: this.authError }));
-    nodes.push(el("div", { class: "auth-foot" }, [this.languageSwitch(snapshot.ui.locale)]));
-    this.root.replaceChildren(el("div", { class: "auth" }, [el("div", { class: "auth-card" }, nodes)]));
-  }
-
-  private authChoice(label: string, variant: string | null, onClick: () => void): HTMLElement {
-    return el("button", {
-      class: variant ? `button ${variant}` : "button",
-      text: label,
-      attrs: { type: "button" },
-      on: { click: onClick },
-    });
-  }
-
-  private field(label: string, control: HTMLElement, hint?: string): HTMLElement {
-    return el("div", { class: "field" }, [
-      el("label", {}, [el("span", { class: "field-label", text: label }), control]),
-      hint ? el("small", { text: hint }) : null,
-    ]);
-  }
-
-  private authHead(title: string, text: string): HTMLElement {
-    return el("div", { class: "auth-head" }, [
-      el("p", { class: "brand", text: config.app.name }),
-      el("h1", { text: title }),
-      el("p", { text }),
-    ]);
-  }
-
-  private serverStep(): Child[] {
-    const server = el("input", {
-      class: "input",
-      attrs: { value: this.authFields.server, autocomplete: "url", spellcheck: "false" },
-    });
-    server.addEventListener("input", () => {
-      this.authFields.server = server.value;
-    });
-    const form = el("form", { class: "auth-form" }, [
-      this.field(t("auth.homeserver"), server),
-      el("p", { class: "muted", text: t("auth.chooseServerHint") }),
-      el("div", { class: "auth-actions" }, [
-        el("button", {
-          class: "button primary",
-          text: this.authBusy ? t("auth.discovering") : t("auth.continue"),
-          attrs: { type: "submit", disabled: this.authBusy },
-        }),
-      ]),
-    ]);
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void this.discoverServer();
-    });
-    return [
-      this.authHead(t("auth.title"), t("auth.chooseServer")),
-      form,
-    ];
-  }
-
-  private methodsStep(): Child[] {
-    const discovery = this.discovery;
-    if (!discovery) {
-      this.authStep = "server";
-      return this.serverStep();
-    }
-    const nodes: Child[] = [
-      this.authHead(t("auth.title"), discovery.baseUrl),
-      this.authBack(t("auth.changeServer"), () => this.goAuth("server")),
-    ];
-    const password = discovery.loginFlows.includes("m.login.password");
-    if (password) nodes.push(this.passwordForm(discovery));
-    if (discovery.ssoTargets.length > 0) {
-      nodes.push(
-        el("div", { class: "auth-methods" }, [
-          el("h2", { text: password ? t("auth.otherMethods") : t("auth.chooseMethod") }),
-          ...discovery.ssoTargets.map((target) =>
-            this.authChoice(this.ssoLabel(target), null, () => void this.startSso(target)),
-          ),
-        ]),
-      );
-    }
-    if (!password && discovery.ssoTargets.length === 0) {
-      nodes.push(
-        el("div", { class: "auth-methods" }, [
-          el("h2", { text: t("auth.chooseMethod") }),
-          el("p", { class: "muted", text: this.authNote(discovery) }),
-        ]),
-      );
-    }
-    if (discovery.registration) {
-      nodes.push(this.authBack(t("auth.createAccountAction"), () => this.goAuth("register", "register")));
-    }
-    return nodes;
-  }
-
-  private authNote(discovery: DiscoveryResult): string {
-    return discovery.loginFlows.includes("m.login.token") ? t("auth.methodToken") : t("auth.noPassword");
-  }
-
-  private ssoLabel(target: SsoTarget): string {
-    if (target.name) return target.name;
-    return target.loginType === "cas" ? t("auth.methodCas") : t("auth.sso");
-  }
-
-  private passwordForm(discovery: DiscoveryResult): HTMLElement {
-    const identifier = el("input", {
-      class: "input",
-      attrs: { value: this.authFields.identifier, autocomplete: "username", spellcheck: "false" },
-    });
-    identifier.addEventListener("input", () => {
-      this.authFields.identifier = identifier.value;
-    });
-    const password = el("input", {
-      class: "input",
-      attrs: { type: "password", value: this.authFields.password, autocomplete: "current-password" },
-    });
-    password.addEventListener("input", () => {
-      this.authFields.password = password.value;
-    });
-    const form = el("form", { class: "auth-form" }, [
-      this.field(t("auth.username"), identifier, t("auth.usernameHint")),
-      this.field(t("auth.password"), password),
-      el("div", { class: "auth-actions" }, [
-        el("button", {
-          class: "button primary",
-          text: this.authBusy ? t("auth.signingIn") : t("auth.login"),
-          attrs: { type: "submit", disabled: this.authBusy },
-        }),
-      ]),
-    ]);
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void this.submitPassword(discovery);
-    });
-    return form;
-  }
-
-  private registerStep(): Child[] {
-    const discovery = this.discovery;
-    if (!discovery) {
-      this.authStep = "server";
-      return this.serverStep();
-    }
-    const nodes: Child[] = [
-      this.authHead(t("auth.registerTitle"), t("auth.registerHint", { server: discovery.baseUrl })),
-      this.authBack(t("auth.changeServer"), () => this.goAuth("server")),
-    ];
-    if (!discovery.registration) {
-      nodes.push(el("p", { class: "error-text", text: t("auth.registerDisabled") }));
-      return nodes;
-    }
-    nodes.push(this.registerForm(discovery));
-    nodes.push(this.authBack(t("auth.backToLogin"), () => this.goAuth("methods", "login")));
-    return nodes;
-  }
-
-  private registerForm(discovery: DiscoveryResult): HTMLElement {
-    const username = el("input", {
-      class: "input",
-      attrs: { value: this.authFields.username, autocomplete: "username", spellcheck: "false" },
-    });
-    username.addEventListener("input", () => {
-      this.authFields.username = username.value;
-    });
-    const password = el("input", {
-      class: "input",
-      attrs: { type: "password", value: this.authFields.password, autocomplete: "new-password" },
-    });
-    password.addEventListener("input", () => {
-      this.authFields.password = password.value;
-    });
-    const confirm = el("input", {
-      class: "input",
-      attrs: { type: "password", value: this.authFields.confirm, autocomplete: "new-password" },
-    });
-    confirm.addEventListener("input", () => {
-      this.authFields.confirm = confirm.value;
-    });
-    const form = el("form", { class: "auth-form" }, [
-      this.field(t("auth.username"), username),
-      this.field(t("auth.password"), password),
-      this.field(t("auth.passwordConfirm"), confirm),
-      el("div", { class: "auth-actions" }, [
-        el("button", {
-          class: "button primary",
-          text: this.authBusy ? t("auth.signingIn") : t("auth.registerSubmit"),
-          attrs: { type: "submit", disabled: this.authBusy },
-        }),
-      ]),
-    ]);
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void this.submitRegister(discovery);
-    });
-    return form;
-  }
-
-  private authBack(label: string, onClick: () => void): HTMLElement {
-    return el("div", { class: "auth-back" }, [
-      el("button", {
-        class: "button ghost",
-        attrs: { type: "button" },
-        on: { click: onClick },
-      }, [icon("arrowLeft"), label]),
-    ]);
-  }
-
-  private goAuth(step: AuthStep, intent: AuthIntent | null = null): void {
-    this.authStep = step;
-    if (intent) this.authIntent = intent;
-    this.authError = null;
-    this.authRenderKey = "";
-    this.requestRender();
-  }
-
-  private authKey(): string {
-    return [
-      this.store.getSnapshot().ui.locale,
-      this.authStep,
-      this.authIntent,
-      this.authBusy,
-      this.authError ?? "",
-      this.discovery?.baseUrl ?? "",
-      this.discovery?.registration ?? "",
-    ].join("|");
-  }
-
-  private async discoverServer(): Promise<void> {
-    if (this.authBusy) return;
-    this.authBusy = true;
-    this.authError = null;
-    this.authRenderKey = "";
-    this.requestRender();
-    try {
-      const discovery = await this.adapter.request<DiscoveryResult>("discover", {
-        server: this.authFields.server,
-      });
-      this.discovery = discovery;
-      this.authFields.server = discovery.baseUrl;
-      this.authStep = this.authIntent === "register" ? "register" : "methods";
-    } catch {
-      this.authError = t("auth.discoverFailed");
-    } finally {
-      this.authBusy = false;
-      this.authRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async submitPassword(discovery: DiscoveryResult): Promise<void> {
-    if (this.authBusy || !(await this.requireLock())) return;
-    if (!this.authFields.identifier.trim()) {
-      this.authError = t("auth.missingUsername");
-      this.authRenderKey = "";
-      this.requestRender();
-      return;
-    }
-    if (!this.authFields.password) {
-      this.authError = t("auth.missingPassword");
-      this.authRenderKey = "";
-      this.requestRender();
-      return;
-    }
-    this.authBusy = true;
-    this.authError = null;
-    this.authRenderKey = "";
-    this.requestRender();
-    try {
-      const result = await this.adapter.request<{ session: SessionSummary }>(
-        "login",
-        {
-          baseUrl: discovery.baseUrl,
-          identifier: this.authFields.identifier.trim(),
-          password: this.authFields.password,
-        },
-        0,
-      );
-      this.authFields.password = "";
-      await this.adoptSession(result.session);
-    } catch (error) {
-      this.authError = this.authFailure(error);
-    } finally {
-      this.authBusy = false;
-      this.authRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async submitRegister(discovery: DiscoveryResult): Promise<void> {
-    if (this.authBusy || !(await this.requireLock())) return;
-    if (!this.authFields.username.trim()) {
-      this.authError = t("auth.missingUsername");
-      this.authRenderKey = "";
-      this.requestRender();
-      return;
-    }
-    if (!this.authFields.password) {
-      this.authError = t("auth.missingPassword");
-      this.authRenderKey = "";
-      this.requestRender();
-      return;
-    }
-    if (this.authFields.password !== this.authFields.confirm) {
-      this.authError = t("auth.passwordMismatch");
-      this.authRenderKey = "";
-      this.requestRender();
-      return;
-    }
-    this.authBusy = true;
-    this.authError = null;
-    this.authRenderKey = "";
-    this.requestRender();
-    try {
-      const result = await this.adapter.request<{ session: SessionSummary }>(
-        "register",
-        {
-          baseUrl: discovery.baseUrl,
-          username: this.authFields.username.trim(),
-          password: this.authFields.password,
-        },
-        0,
-      );
-      this.authFields.password = "";
-      this.authFields.confirm = "";
-      await this.adoptSession(result.session);
-    } catch (error) {
-      this.authError = this.authFailure(error);
-    } finally {
-      this.authBusy = false;
-      this.authRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async requireLock(): Promise<boolean> {
-    if (await this.holdClientLock()) return true;
-    this.readOnly = true;
-    this.authError = t("session.readOnly");
-    this.authRenderKey = "";
-    this.requestRender();
-    return false;
-  }
-
-  private authFailure(error: unknown): string {
-    if (error instanceof WorkerError) {
-      if (error.code === "M_USER_IN_USE") return t("auth.userTaken");
-      if (error.code === "M_LIMIT_EXCEEDED") return t("auth.rateLimited");
-      if (error.code === "M_FORBIDDEN") return t("auth.loginFailed");
-    }
-    return messageOf(error);
-  }
-
-  private async startSso(target: SsoTarget): Promise<void> {
-    const discovery = this.discovery;
-    if (!discovery || !(await this.requireLock())) return;
-    this.authBusy = true;
-    this.authError = null;
-    this.authRenderKey = "";
-    this.requestRender();
-    try {
-      sessionStorage.setItem("maski-sso-base", discovery.baseUrl);
-      const result = await this.adapter.request<{ url: string }>("ssoUrl", {
-        baseUrl: discovery.baseUrl,
-        redirectUrl: window.location.href.split("#")[0],
-        loginType: target.loginType,
-        idpId: target.idpId,
-      });
-      window.location.assign(result.url);
-    } catch (error) {
-      this.authBusy = false;
-      this.authError = messageOf(error);
-      this.authRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async loginWithSsoToken(token: string): Promise<void> {
-    const baseUrl = sessionStorage.getItem("maski-sso-base");
-    const url = new URL(window.location.href);
-    url.searchParams.delete("loginToken");
-    window.history.replaceState(null, "", url);
-    if (!baseUrl) {
-      this.authError = t("auth.ssoUnsupported");
-      this.goAuth("server");
-      return;
-    }
-    if (!(await this.requireLock())) return;
-    try {
-      this.authBusy = true;
-      this.requestRender();
-      const result = await this.adapter.request<{ session: SessionSummary }>(
-        "loginToken",
-        { baseUrl, token },
-        0,
-      );
-      await this.adoptSession(result.session);
-    } catch (error) {
-      this.authError = messageOf(error);
-      this.goAuth("server");
-    } finally {
-      this.authBusy = false;
-    }
-  }
-
-  private languageSwitch(locale: Locale): HTMLElement {
-    const node = el("div", { class: "language-switch" });
-    for (const item of config.app.locales) {
-      node.appendChild(
-        el("button", {
-          text: t(item === "zh-CN" ? "language.zh-CN" : "language.en"),
-          attrs: { type: "button", "aria-pressed": item === locale },
-          on: {
-            click: () => {
-              this.store.patchUi({ locale: item });
-              void this.db.writeSetting("locale", item);
-              this.router.setLocale(item);
-              this.authRenderKey = "";
-              this.gateRenderKey = "";
-              this.shellLocale = null;
-              this.requestRender();
-            },
+        await this.local.openAccount(last.hash);
+        const rooms = await this.local.rooms();
+        setState({
+          rooms: new Map(rooms.map((room) => [room.roomId, room])),
+          session: {
+            userId: last.userId,
+            deviceId: "",
+            displayName: last.name,
+            avatar: last.avatar,
+            baseUrl: last.baseUrl,
+            accountHash: last.hash,
           },
-        }),
-      );
-    }
-    return node;
-  }
-
-  private renderGate(): void {
-    this.view = "gate";
-    this.root.classList.remove("boot");
-    this.gateRenderKey = this.gateKey();
-    const snapshot = this.store.getSnapshot();
-    const recovery = snapshot.recovery;
-    const verification = snapshot.verification;
-    let body: Child[] = [];
-    if (this.recoveryKey) {
-      body = this.recoveryKeyPanel();
-    } else if (!recovery) {
-      body = [el("p", { class: "empty", text: t("common.loading") })];
-    } else if (!recovery.hasRecoveryKey) {
-      body = [el("p", { class: "muted", text: t("keygate.noKey") }), this.gateSetupPanel()];
-    } else {
-      body = [this.gateUnlockPanel(), this.gateWaitPanel(), this.gateResetPanel()];
-    }
-    if (verification?.sas) body.push(this.sasPanel(verification));
-    if (this.gateError) body.push(el("p", { class: "error-text", text: this.gateError }));
-    const card = el("div", { class: "keygate-card" }, [
-      el("div", { class: "keygate-head" }, [
-        el("p", { class: "brand", text: config.app.name }),
-        el("h1", { text: this.recoveryKey ? t("keygate.setupTitle") : t("keygate.title") }),
-        el("p", { text: this.recoveryKey ? t("keygate.setupBody") : t("keygate.body") }),
-      ]),
-      ...body,
-      el("div", { class: "auth-foot" }, [this.languageSwitch(snapshot.ui.locale)]),
-    ]);
-    this.root.replaceChildren(el("div", { class: "keygate" }, [card]));
-  }
-
-  private gateKey(): string {
-    return `${this.store.getSnapshot().ui.locale}|${this.gateBusy}|${this.gateError ?? ""}|${
-      this.recoveryKey ?? ""
-    }|${JSON.stringify(this.store.getSnapshot().recovery)}|${JSON.stringify(
-      this.store.getSnapshot().verification,
-    )}`;
-  }
-
-  private gateSetupPanel(): HTMLElement {
-    const passphrase = el("input", { class: "input", attrs: { type: "password", autocomplete: "new-password" } });
-    return el("div", { class: "path-card" }, [
-      el("h2", { text: t("keygate.setupTitle") }),
-      el("p", { text: t("keygate.setupBody") }),
-      this.field(t("keygate.setupPassphrase"), passphrase),
-      el("button", {
-        class: "button primary",
-        text: this.gateBusy ? t("common.loading") : t("keygate.generate"),
-        attrs: { type: "button", disabled: this.gateBusy },
-        on: {
-          click: () => void this.setupRecovery(passphrase.value || undefined),
-        },
-      }),
-    ]);
-  }
-
-  private gateUnlockPanel(): HTMLElement {
-    const key = el("input", { class: "input", attrs: { autocomplete: "off", spellcheck: "false" } });
-    const passphrase = el("input", { class: "input", attrs: { type: "password", autocomplete: "current-password" } });
-    return el("div", { class: "path-card" }, [
-      el("h2", { text: t("keygate.recovery") }),
-      el("p", { text: t("keygate.recoveryHint") }),
-      this.field(t("keygate.recoveryKey"), key),
-      this.field(t("keygate.passphrase"), passphrase),
-      el("button", {
-        class: "button primary",
-        text: this.gateBusy ? t("common.loading") : t("keygate.unlock"),
-        attrs: { type: "button", disabled: this.gateBusy },
-        on: {
-          click: () => void this.unlockRecovery(key.value.trim() || undefined, passphrase.value || undefined),
-        },
-      }),
-    ]);
-  }
-
-  private gateWaitPanel(): HTMLElement {
-    const waiting = this.store.getSnapshot().verification?.initiatedByMe;
-    return el("div", { class: "path-card" }, [
-      el("h2", { text: t("keygate.wait") }),
-      el("p", { text: waiting ? t("keygate.waiting") : t("keygate.waitHint") }),
-      el("button", {
-        class: "button",
-        text: waiting ? t("keygate.waiting") : t("keygate.wait"),
-        attrs: { type: "button", disabled: this.gateBusy || Boolean(waiting) },
-        on: { click: () => void this.waitForDevice() },
-      }),
-    ]);
-  }
-
-  private gateResetPanel(): HTMLElement {
-    return el("div", { class: "path-card" }, [
-      el("h2", { text: t("keygate.reset") }),
-      el("p", { text: t("keygate.resetWarning") }),
-      el("button", {
-        class: "button danger",
-        text: t("keygate.resetAction"),
-        attrs: { type: "button", disabled: this.gateBusy },
-        on: {
-          click: () => {
-            void this.resetRecovery();
-          },
-        },
-      }),
-    ]);
-  }
-
-  private recoveryKeyPanel(): Child[] {
-    const key = this.recoveryKey ?? "";
-    return [
-      el("p", { text: t("keygate.recoveryKeyOnce") }),
-      el("div", { class: "recovery-key", text: key }),
-      el("div", { class: "row" }, [
-        el("button", {
-          class: "button",
-          text: t("common.copy"),
-          attrs: { type: "button" },
-          on: { click: () => void navigator.clipboard.writeText(key) },
-        }),
-        el("button", {
-          class: "button",
-          text: t("keygate.download"),
-          attrs: { type: "button" },
-          on: { click: () => this.downloadRecoveryKey(key) },
-        }),
-        el("button", {
-          class: "button primary",
-          text: t("keygate.saved"),
-          attrs: { type: "button" },
-          on: { click: () => void this.confirmRecoveryKey() },
-        }),
-      ]),
-    ];
-  }
-
-  private sasPanel(verification: VerificationState): HTMLElement {
-    const sas = verification.sas;
-    if (!sas) return el("div");
-    return el("div", { class: "path-card" }, [
-      el("h2", { text: t("keygate.sasTitle") }),
-      el("p", { text: t("keygate.sasBody") }),
-      this.sasGrid(sas.emoji),
-      el("div", { class: "row" }, [
-        el("button", {
-          class: "button primary",
-          text: t("keygate.sasConfirm"),
-          attrs: { type: "button" },
-          on: { click: () => void this.confirmSas(verification.requestId) },
-        }),
-        el("button", {
-          class: "button ghost",
-          text: t("keygate.sasMismatch"),
-          attrs: { type: "button" },
-          on: { click: () => void this.cancelVerification(verification.requestId) },
-        }),
-      ]),
-    ]);
-  }
-
-  private sasGrid(emoji: ReadonlyArray<readonly [string, string]>): HTMLElement {
-    return el(
-      "div",
-      { class: "sas-grid" },
-      emoji.map(([symbol, name]) =>
-        el("div", { class: "sas-cell" }, [
-          el("span", { class: "sas-symbol", text: symbol }),
-          el("span", { class: "sas-name", text: name }),
-        ]),
-      ),
-    );
-  }
-
-  private async setupRecovery(passphrase?: string): Promise<void> {
-    this.gateBusy = true;
-    this.gateError = null;
-    this.gateRenderKey = "";
-    this.requestRender();
-    try {
-      const payload: Record<string, unknown> = {};
-      if (passphrase) payload["passphrase"] = passphrase;
-      const result = await this.adapter.request<SetupRecoveryResult>("setupRecovery", payload);
-      this.recoveryKey = result.recoveryKey;
-      this.store.setRecovery(result.status);
-    } catch (error) {
-      this.gateError = messageOf(error);
-    } finally {
-      this.gateBusy = false;
-      this.gateRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async unlockRecovery(recoveryKey?: string, passphrase?: string): Promise<void> {
-    this.gateBusy = true;
-    this.gateError = null;
-    this.gateRenderKey = "";
-    this.requestRender();
-    try {
-      const result = await this.adapter.request<RecoveryResult>("unlockRecovery", {
-        ...(recoveryKey ? { recoveryKey } : {}),
-        ...(passphrase ? { passphrase } : {}),
-      });
-      this.store.setRecovery(result.status);
-      if (gateComplete(result.status)) {
-        await this.persistGate();
-        this.store.setKeyGate("complete");
-        await this.openInitialRoom();
-      } else {
-        this.gateError = t("keygate.error");
-      }
-    } catch (error) {
-      this.gateError = messageOf(error);
-    } finally {
-      this.gateBusy = false;
-      this.gateRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async waitForDevice(): Promise<void> {
-    this.gateBusy = true;
-    this.gateError = null;
-    this.gateRenderKey = "";
-    this.requestRender();
-    try {
-      await this.adapter.request<VerificationResult>("verifyOwnDevice", {});
-    } catch (error) {
-      this.gateError = messageOf(error);
-    } finally {
-      this.gateBusy = false;
-      this.gateRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async resetRecovery(): Promise<void> {
-    if (!(await confirmAction(t("keygate.resetConfirm")))) return;
-    this.gateBusy = true;
-    this.gateError = null;
-    this.gateRenderKey = "";
-    this.requestRender();
-    try {
-      const result = await this.adapter.request<SetupRecoveryResult>("resetRecovery", {});
-      this.recoveryKey = result.recoveryKey;
-      this.store.setRecovery(result.status);
-    } catch (error) {
-      this.gateError = messageOf(error);
-    } finally {
-      this.gateBusy = false;
-      this.gateRenderKey = "";
-      this.requestRender();
-    }
-  }
-
-  private async confirmRecoveryKey(): Promise<void> {
-    this.recoveryKey = null;
-    this.gateRenderKey = "";
-    await this.checkGate();
-  }
-
-  private downloadRecoveryKey(key: string): void {
-    const blob = new Blob([`${key}\n`], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const anchor = el("a", { attrs: { href: url, download: "maski-recovery-key.txt" } });
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  private async confirmSas(requestId: string): Promise<void> {
-    try {
-      await this.adapter.request("confirmSas", { requestId });
-    } catch (error) {
-      this.gateError = messageOf(error);
-      this.requestRender();
-    }
-  }
-
-  private async cancelVerification(requestId: string): Promise<void> {
-    try {
-      await this.adapter.request("cancelVerification", { requestId });
-    } catch {
-      // The request may already be cancelled.
-    }
-    this.store.setVerification(null);
-    await this.checkGate();
-  }
-
-  private handleVerification(state: VerificationState): void {
-    this.store.setVerification(state);
-    if (state.phase === "done") {
-      if (this.store.getSnapshot().keyGate !== "complete") void this.checkGate();
-      if (this.dialogName === "verify") this.router.closeDialog();
-      return;
-    }
-    if (this.dialogName === "verify") {
-      this.dialogName = null;
-      this.dialogs.close();
-      this.renderDialog("verify");
-    }
-    if (
-      state.phase === "requested" &&
-      !state.initiatedByMe &&
-      this.store.getSnapshot().keyGate === "complete" &&
-      this.dialogName !== "verify"
-    ) {
-      this.router.openDialog("verify");
-    }
-  }
-
-  private renderShell(): void {
-    this.picker?.close();
-    this.view = "shell";
-    this.root.classList.remove("boot");
-    const snapshot = this.store.getSnapshot();
-    this.shellLocale = snapshot.ui.locale;
-    if (this.shell) {
-      this.timeline?.destroy();
-      this.composer?.destroy();
-    }
-    const nav = el("nav", { class: "nav", attrs: { "aria-label": t("nav.rooms") } });
-    const rooms = el("div", { class: "rooms" });
-    nav.append(this.menuBlock().element, rooms);
-
-    const headerTitle = el("h1", { class: "content-title", text: "" });
-    const headerActions = el("div", { class: "row" });
-    const back = iconButton(t("common.back"), "arrowLeft", () => this.backToHome(), "icon-button back-button");
-    const header = el("header", { class: "content-head" }, [back, headerTitle, headerActions]);
-    const body = el("div", { class: "content-body" });
-    const typing = el("div", { class: "typing-indicator" });
-    const composerHost = el("div", { class: "composer" });
-    const content = el("main", { class: "content" }, [header, body, typing, composerHost]);
-    const app = el("div", { class: "app", attrs: { "data-view": "home" } }, [nav, content]);
-
-    this.timeline = new TimelineView(this.media, {
-      onReply: (event) => this.replyTo(event),
-      onEdit: (event) => this.editEvent(event),
-      onRedact: (event) => void this.redact(event),
-      onReact: (event, key) => void this.react(event, key),
-      onJump: (eventId) => this.jumpToEvent(eventId),
-      onOpenMedia: (event) => this.openMedia(event),
-      onRetryOutbox: (txnId) => void this.retryOutbox(txnId),
-      onCancelOutbox: (txnId) => void this.cancelOutbox(txnId),
-      onProfile: (userId) => this.openProfile(userId),
-      onMenu: (event, position) => this.openMessageMenu(event, position),
-      onOlder: () => void this.loadOlder(),
-    });
-    body.appendChild(this.timeline.element);
-    this.composer = new Composer({
-      onSend: (message) => void this.send(message),
-      onOpenPicker: (anchor, mode) => this.openPicker(anchor, { mode }),
-      onTyping: (active) => void this.sendTyping(active),
-      onFormatMenu: (position) => this.openFormatMenu(position),
-      onPreviewFile: (file) => this.previewLocalFile(file),
-      onChange: () => this.scheduleDraftSave(),
-      loadEmoji: (url) =>
-        this.media.get({ mediaKey: "", mxc: url, width: 32, height: 32, method: "scale" }),
-    });
-    composerHost.appendChild(this.composer.element);
-    const roomId = this.store.getSnapshot().activeRoomId;
-    if (roomId) void this.restoreDraft(roomId);
-    this.shell = {
-      app,
-      nav,
-      rooms,
-      content,
-      headerTitle,
-      headerActions,
-      body,
-      typing,
-      composerHost,
-    };
-    this.roomListKey = "";
-    this.root.replaceChildren(app);
-    this.updateShell();
-  }
-
-  // Quick actions sit at the top of the column for good: no disclosure, no card
-  private menuBlock(): { element: HTMLElement } {
-    const actions: { label: string; icon: string; run: () => void }[] = [
-      { label: t("nav.search"), icon: "search", run: () => this.router.openDialog("search") },
-      { label: t("nav.newMessage"), icon: "userPlus", run: () => this.router.openDialog("new-message") },
-      { label: t("nav.join"), icon: "hash", run: () => this.router.openDialog("join") },
-      { label: t("nav.create"), icon: "plus", run: () => this.router.openDialog("create") },
-      { label: t("nav.settings"), icon: "settings", run: () => this.router.openDialog("settings") },
-      {
-        label: t("nav.profile"),
-        icon: "person",
-        run: () => {
-          const userId = this.store.getSnapshot().session?.userId;
-          if (userId) this.openProfile(userId);
-        },
-      },
-    ];
-    return {
-      element: el(
-        "div",
-        { class: "nav-actions" },
-        actions.map((action) =>
-          el("button", {
-            class: "nav-action",
-            attrs: { type: "button" },
-            on: { click: action.run },
-          }, [icon(action.icon), el("span", { text: action.label })]),
-        ),
-      ),
-    };
-  }
-
-  private updateShell(): void {
-    const snapshot = this.store.getSnapshot();
-    const shell = this.shell;
-    if (!shell) return;
-    shell.app.dataset.view = snapshot.activeRoomId ? "room" : "home";
-    this.updateRoomList();
-    const room = snapshot.activeRoomId ? activeRoom(snapshot) : null;
-    if (!room) {
-      shell.headerTitle.textContent = t("rooms.title");
-      shell.headerActions.replaceChildren();
-      shell.body.replaceChildren(el("div", { class: "empty", text: t("rooms.empty") }));
-      shell.composerHost.hidden = true;
-      shell.typing.hidden = true;
-      return;
-    }
-    const headerKey = `${room.roomId}|${room.kind}|${roomTitle(room)}`;
-    if (headerKey !== this.headerKey) {
-      this.headerKey = headerKey;
-      shell.headerTitle.textContent = roomTitle(room);
-      shell.headerActions.replaceChildren(
-        iconButton(
-          t(room.kind === "space" ? "channel.settings" : "room.settings"),
-          "more",
-          () => this.router.openDialog("room-settings"),
-        ),
-      );
-    }
-    if (room.kind === "space") {
-      shell.composerHost.hidden = true;
-      shell.typing.hidden = true;
-      const channelKey = channelSignature(room, snapshot);
-      if (channelKey !== this.channelKey) {
-        this.channelKey = channelKey;
-        shell.body.replaceChildren(this.channelPage(room, snapshot));
-      }
-      return;
-    }
-    shell.composerHost.hidden = false;
-    shell.typing.hidden = false;
-    if (this.timeline && !shell.body.contains(this.timeline.element)) {
-      shell.body.replaceChildren(this.timeline.element);
-    }
-    const windowSize = this.pendingFocusEvent ? config.limits.loadedMax : config.limits.timelineWindow;
-    this.timeline?.render(snapshot, room, timelineItems(snapshot, room.roomId, windowSize));
-    this.composer?.setRoom(roomTitle(room));
-    const typingUsers = (snapshot.typing[room.roomId] ?? []).filter(
-      (userId) => userId !== snapshot.session?.userId,
-    );
-    shell.typing.textContent = typingUsers.length > 0 ? t("room.typing") : "";
-    if (this.pendingFocusEvent) {
-      this.timeline?.focusEvent(this.pendingFocusEvent);
-      this.pendingFocusEvent = null;
-    }
-  }
-
-  private channelPage(room: RoomRecord, snapshot: ReturnType<AppStore["getSnapshot"]>): HTMLElement {
-    const children = room.children.map((childId) => ({
-      id: childId,
-      room: roomById(snapshot, childId),
-    }));
-    return el("section", { class: "channel" }, [
-      el("div", { class: "channel-head" }, [
-        el("h2", { text: roomTitle(room) }),
-        room.topic ? el("p", { class: "muted", text: room.topic }) : null,
-        el("div", { class: "row" }, [
-          el("button", {
-            class: "button primary",
-            text: t("channel.settings"),
-            attrs: { type: "button" },
-            on: { click: () => this.router.openDialog("room-settings") },
-          }),
-        ]),
-      ]),
-      el("h3", { text: t("channel.subgroups") }),
-      children.length === 0
-        ? el("p", { class: "muted", text: t("channel.empty") })
-        : el("div", { class: "channel-list" }, children.map((child) => {
-            const name = child.room ? roomTitle(child.room) : child.id;
-            const avatar = el("div", { class: "room-avatar" }, [el("span", { text: initial(name) })]);
-            if (child.room) this.loadAvatar(avatar, child.room.avatarMxc, 48);
-            return el("button", {
-              class: "channel-row",
-              attrs: { type: "button", "aria-label": t("channel.open", { name }) },
-              on: { click: () => this.openChild(child.id, Boolean(child.room)) },
-            }, [
-              avatar,
-              el("div", { class: "room-meta" }, [
-                el("span", { class: "room-name", text: name }),
-                el("span", { class: "room-preview", text: child.room?.topic ?? child.id }),
-              ]),
-            ]);
-          })),
-    ]);
-  }
-
-  private memberRows(snapshot: AppSnapshot, members: readonly MemberRecord[]): HTMLElement[] {
-    return members.map((member) => {
-      const name = displayName(snapshot, member.roomId, member.userId);
-      return el("button", {
-        class: "member-row",
-        attrs: { type: "button" },
-        on: { click: () => this.openProfile(member.userId) },
-      }, [
-        el("span", { class: "member-name", text: name }),
-        el("span", { class: "badge", text: member.membership }),
-      ]);
-    });
-  }
-
-  private async openChild(roomId: string, known: boolean): Promise<void> {
-    if (!known) {
-      try {
-        await this.adapter.request("joinRoom", { roomIdOrAlias: roomId });
-        await this.reloadProjection();
-      } catch (error) {
-        this.notify(messageOf(error));
-        return;
-      }
-    }
-    this.openRoom(roomId);
-  }
-
-  private updateRoomList(): void {
-    const shell = this.shell;
-    if (!shell) return;
-    const snapshot = this.store.getSnapshot();
-    const sections = roomSections(snapshot);
-    // Rebuilding the list on every render detaches the row under the pointer, so a
-    // click could land on a node that no longer exists. Only touch it when it differs.
-    const signature = roomListSignature(sections, snapshot.activeRoomId, snapshot.ui.locale);
-    if (signature === this.roomListKey) return;
-    this.roomListKey = signature;
-    const nodes: HTMLElement[] = [];
-    // Sections start closed; what the user opens is remembered. The section that
-    // holds the open room stays open so the current room is never hidden.
-    const expanded = this.expandedSections();
-    const activeSection = sections.find((section) =>
-      section.rooms.some((room) => room.roomId === snapshot.activeRoomId),
-    );
-    if (activeSection) expanded.add(activeSection.key);
-    for (const section of sections) {
-      if (section.rooms.length === 0) continue;
-      const chevron = icon("chevron");
-      chevron.classList.add("room-section-chevron");
-      const open = expanded.has(section.key);
-      const details = el("details", { class: "room-section", attrs: { open } }, [
-        el("summary", { class: "room-section-summary" }, [
-          el("span", { text: sectionTitle(section.key) }),
-          el("span", { class: "room-section-count", text: formatNumber(snapshot.ui.locale, section.rooms.length) }),
-          chevron,
-        ]),
-      ]);
-      details.addEventListener("toggle", () => this.rememberSection(section.key, details.open));
-      // The rows live in their own box: a closed section has to take no space, and
-      // a row with an explicit display would otherwise keep its own layout.
-      const rows = el("div", { class: "room-section-body" });
-      for (const room of section.rooms) rows.appendChild(this.roomRow(room, snapshot));
-      details.appendChild(rows);
-      nodes.push(details);
-    }
-    if (nodes.length === 0) {
-      nodes.push(
-        snapshot.connection === "connecting"
-          ? el("div", { class: "room-skeleton", attrs: { "aria-busy": "true", "aria-label": t("rooms.loading") } },
-              Array.from({ length: 4 }, () =>
-                el("div", { class: "room-row skeleton" }, [
-                  el("div", { class: "room-avatar" }),
-                  el("div", { class: "room-meta" }, [
-                    el("span", { class: "skeleton-line" }),
-                    el("span", { class: "skeleton-line short" }),
-                  ]),
-                ]),
-              ))
-          : el("div", { class: "empty", text: t("rooms.empty") }),
-      );
-    }
-    shell.rooms.replaceChildren(...nodes);
-  }
-
-  // Before the user has opinions every list is open; from then on the stored set is
-  // the truth, so closing a section keeps it closed.
-  private expandedSections(): Set<string> {
-    const value = this.settings["expandedSections"];
-    if (!Array.isArray(value)) return new Set<SectionKey>(["favorites", "rooms", "dms", "channels"]);
-    return new Set(value.filter((key): key is string => typeof key === "string"));
-  }
-
-  private rememberSection(key: string, expanded: boolean): void {
-    const next = this.expandedSections();
-    if (expanded) next.add(key);
-    else next.delete(key);
-    this.settings["expandedSections"] = [...next];
-    void this.db.writeSetting("expandedSections", [...next]);
-  }
-
-  private roomRow(room: RoomRecord, snapshot: ReturnType<AppStore["getSnapshot"]>): HTMLElement {
-    const avatar = el(
-      "div",
-      { class: "room-avatar" },
-      room.kind === "space" && !room.avatarMxc
-        ? [icon("hash")]
-        : [el("span", { text: initial(roomTitle(room)) })],
-    );
-    this.loadAvatar(avatar, room.avatarMxc, 48);
-    const badges = el("div", { class: "room-badges" });
-    if (room.unreadHighlight > 0) {
-      badges.appendChild(el("span", { class: "badge strong", text: formatNumber(snapshot.ui.locale, room.unreadHighlight) }));
-    } else if (room.unreadTotal > 0) {
-      badges.appendChild(el("span", { class: "badge", text: formatNumber(snapshot.ui.locale, room.unreadTotal) }));
-    }
-    if (room.muted) badges.appendChild(el("span", { class: "badge muted", text: t("rooms.muted") }));
-    const row = el("button", {
-      class: "room-row",
-      attrs: {
-        type: "button",
-        "aria-current": room.roomId === snapshot.activeRoomId ? "page" : null,
-      },
-      on: {
-        click: () => {
-          if (room.membership === "invite") return;
-          this.openRoom(room.roomId);
-        },
-      },
-    }, [
-      avatar,
-      el("div", { class: "room-meta" }, [
-        el("span", { class: "room-name", text: roomTitle(room) }),
-        el("span", {
-          class: "room-preview",
-          text: room.kind === "space" ? formatNumber(snapshot.ui.locale, room.children.length) : (room.lastEvent?.preview ?? room.topic),
-        }),
-      ]),
-      badges,
-    ]);
-    bindActionTrigger(row, (position) => this.openRoomMenu(room, position));
-    if (room.membership !== "invite") return row;
-    const wrapper = el("div", {}, [row]);
-    wrapper.appendChild(
-      el("div", { class: "room-invite-actions" }, [
-        el("button", {
-          class: "button primary",
-          text: t("rooms.accept"),
-          attrs: { type: "button" },
-          on: { click: () => void this.acceptInvite(room.roomId) },
-        }),
-        el("button", {
-          class: "button ghost",
-          text: t("rooms.decline"),
-          attrs: { type: "button" },
-          on: { click: () => void this.declineInvite(room.roomId) },
-        }),
-      ]),
-    );
-    return wrapper;
-  }
-
-  private async acceptInvite(roomId: string): Promise<void> {
-    try {
-      await this.adapter.request("joinRoom", { roomIdOrAlias: roomId });
-      this.openRoom(roomId);
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  private async declineInvite(roomId: string): Promise<void> {
-    try {
-      await this.adapter.request("leaveRoom", { roomId });
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  // The letter is the resting state: it stays until the picture is decoded, so a
-  // slow or missing avatar never leaves an empty box.
-  private loadAvatar(node: HTMLElement, mxc: string | null, size: number): void {
-    if (!mxc) return;
-    void this.media.get({ mediaKey: "", mxc, width: size, height: size, method: "scale" }).then((url) => {
-      if (url) node.replaceChildren(el("img", { attrs: { src: url, alt: "" } }));
-    });
-  }
-
-  // Warm the pictures the first screen needs in one go, instead of one request per
-  // row as it renders.
-  private prefetchAvatars(): void {
-    const snapshot = this.store.getSnapshot();
-    const requests = snapshot.rooms
-      .map((room) => room.avatarMxc)
-      .filter((mxc): mxc is string => Boolean(mxc))
-      .slice(0, 40)
-      .map((mxc) => this.media.get({ mediaKey: "", mxc, width: 48, height: 48, method: "scale" }));
-    const own = snapshot.session?.avatarMxc;
-    if (own) requests.push(this.media.get({ mediaKey: "", mxc: own, width: 48, height: 48, method: "scale" }));
-    void Promise.all(requests).catch(() => undefined);
-  }
-
-  private replyTo(event: EventRecord): void {
-    if (!this.composer) return;
-    this.composer.setContext("reply", event.eventId, displayName(this.store.getSnapshot(), event.roomId, event.senderId));
-  }
-
-  private editEvent(event: EventRecord): void {
-    if (!this.composer) return;
-    this.composer.setBody(event.body);
-    this.composer.setContext("edit", event.eventId, "");
-    this.composer.focus();
-  }
-
-  private async redact(event: EventRecord): Promise<void> {
-    if (!(await confirmAction(t("room.delete")))) return;
-    await this.queueOutbox(event.roomId, "m.room.redaction", redactionContent(event.eventId, null));
-  }
-
-  // A chip toggles: pressing your own reaction withdraws it, whether it is still in
-  // the outbox or already on the server.
-  private async react(event: EventRecord, key: string): Promise<void> {
-    const mine = event.reactions[key];
-    if (mine?.me) {
-      const queued = this.store.getSnapshot().outbox.find((row) => {
-        if (row.eventType !== "m.reaction" || row.roomId !== event.roomId) return false;
-        const relates = row.content["m.relates_to"];
-        return isRecord(relates) && relates["event_id"] === event.eventId && relates["key"] === key;
-      });
-      if (queued) {
-        await this.cancelOutbox(queued.txnId);
-        return;
-      }
-      if (mine.myReaction) {
-        await this.queueOutbox(event.roomId, "m.room.redaction", redactionContent(mine.myReaction, null));
-        return;
-      }
-    }
-    await this.queueOutbox(event.roomId, "m.reaction", {
-      "m.relates_to": { rel_type: "m.annotation", event_id: event.eventId, key },
-    });
-  }
-
-  private jumpToEvent(eventId: string): void {
-    if (!this.store.getSnapshot().events.some((event) => event.eventId === eventId)) {
-      this.notify(t("room.jumpMissing"));
-      return;
-    }
-    this.pendingFocusEvent = eventId;
-    this.requestRender();
-  }
-
-  private openMessageMenu(event: EventRecord, position: ActionPosition): void {
-    const own = event.senderId === this.store.getSnapshot().session?.userId;
-    const items: ActionMenuItem[] = [];
-    if (!event.redacted) {
-      items.push({ label: t("room.reply"), icon: "reply", action: () => this.replyTo(event) });
-      items.push({
-        label: t("room.react"),
-        icon: "smile",
-        action: () => this.openReactPicker(event),
-      });
-      if (event.body) {
-        items.push({
-          label: t("room.copy"),
-          icon: "copy",
-          action: () => void navigator.clipboard.writeText(event.body).catch(() => undefined),
+          phase: settings.keysReady ? "ready" : "gate",
         });
+        this.mount();
+      } catch {
+        await this.local.saveSettings({ lastAccount: null });
       }
     }
-    if (event.media) {
-      items.push({ label: t("room.open"), icon: event.kind === "video" ? "video" : "image", action: () => this.openMedia(event) });
-    }
-    items.push({ label: t("room.source"), icon: "copy", action: () => void this.openSource(event) });
-    if (own && !event.redacted) {
-      items.push({ label: t("room.edit"), icon: "edit", action: () => this.editEvent(event) });
-      items.push({ label: t("room.delete"), icon: "trash", danger: true, action: () => void this.redact(event) });
-    }
-    this.actionMenu.open(position, items);
-  }
 
-  private previewLocalFile(file: PendingFile): void {
-    const body = el("div", { class: "media-viewer" }, [
-      file.file.type.startsWith("image/")
-        ? el("img", { attrs: { src: file.url, alt: file.file.name } })
-        : el("div", { class: "media-placeholder", text: file.file.name }),
-    ]);
-    this.dialogs.open({ title: file.file.name, body, onClose: () => { this.dialogName = null; } });
-  }
-
-  private async openSource(event: EventRecord): Promise<void> {
     try {
-      const result = await this.adapter.request<{ json: string }>("eventSource", {
-        roomId: event.roomId,
-        eventId: event.eventId,
+      const result = await this.worker.send<{ session: { accountHash: string } | null }>({
+        type: "start",
+        accountHash: last?.hash ?? null,
       });
-      this.dialogs.open({
-        title: t("room.source"),
-        body: el("pre", { class: "source", text: result.json }),
-      });
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  private openReactPicker(event: EventRecord): void {
-    if (this.composer) this.openPicker(this.composer.pickerAnchor, { reactTo: event });
-  }
-
-  private openFormatMenu(position: ActionPosition): void {
-    const composer = this.composer;
-    if (!composer) return;
-    const active = composer.activeMarks();
-    const entry = (mark: MarkType, label: string): ActionMenuItem => ({
-      label,
-      checked: active.has(mark),
-      action: () => composer.applyFormat(mark),
-    });
-    this.actionMenu.open(position, [
-      entry("bold", t("composer.bold")),
-      entry("italic", t("composer.italic")),
-      entry("underline", t("composer.underline")),
-      entry("strike", t("composer.strike")),
-      entry("code", t("composer.code")),
-      entry("heading", t("composer.heading")),
-      entry("quote", t("composer.quote")),
-      entry("codeBlock", t("composer.codeBlock")),
-      ...(active.size > 0
-        ? [{ label: t("composer.clearFormat"), danger: true, action: () => composer.clearFormat() }]
-        : []),
-    ]);
-  }
-
-  private openRoomMenu(room: RoomRecord, position: ActionPosition): void {
-    const items: ActionMenuItem[] = [];
-    if (room.membership === "invite") {
-      items.push({ label: t("rooms.accept"), icon: "check", action: () => void this.acceptInvite(room.roomId) });
-      items.push({ label: t("rooms.decline"), icon: "close", danger: true, action: () => void this.declineInvite(room.roomId) });
-    } else {
-      if (room.lastEvent) {
-        items.push({ label: t("rooms.markRead"), icon: "check", action: () => void this.markRoomRead(room) });
+      if (!result.session) {
+        setState({ phase: "auth" });
+        this.mount();
+        return;
       }
-      const favorite = room.tags.includes("m.favourite");
-      items.push({
-        label: favorite ? t("rooms.unfavorite") : t("rooms.favorite"),
-        icon: "star",
-        action: () => void this.setFavorite(room, !favorite),
-      });
-      items.push({
-        label: room.muted ? t("rooms.unmute") : t("rooms.mute"),
-        icon: "volume",
-        action: () => void this.setRoomMuted(room, !room.muted),
-      });
-      items.push({ label: t("rooms.copyLink"), icon: "copy", action: () => void this.copyRoomLink(room) });
-      items.push({ label: t("rooms.leave"), icon: "logout", danger: true, action: () => void this.leaveRoom(room) });
-    }
-    this.actionMenu.open(position, items);
-  }
-
-  private async markRoomRead(room: RoomRecord): Promise<void> {
-    if (!room.lastEvent) return;
-    await this.adapter.request("markRead", { roomId: room.roomId, eventId: room.lastEvent.eventId }).catch((error: unknown) => {
-      this.notify(messageOf(error));
-    });
-  }
-
-  private async setFavorite(room: RoomRecord, favorite: boolean): Promise<void> {
-    await this.adapter
-      .request("setRoomTag", {
-        roomId: room.roomId,
-        tag: "m.favourite",
-        value: favorite ? {} : null,
-      })
-      .catch((error: unknown) => this.notify(messageOf(error)));
-  }
-
-  private async setRoomMuted(room: RoomRecord, muted: boolean): Promise<void> {
-    await this.adapter
-      .request("setNotificationMode", { roomId: room.roomId, mode: muted ? "mute" : "unmute" })
-      .catch((error: unknown) => this.notify(messageOf(error)));
-  }
-
-  private async copyRoomLink(room: RoomRecord): Promise<void> {
-    const url = `${window.location.origin}${window.location.pathname}#${this.router.roomPath(room.roomId)}`;
-    await navigator.clipboard.writeText(url).catch(() => undefined);
-    this.notify(t("common.copied"));
-  }
-
-  private async leaveRoom(room: RoomRecord): Promise<void> {
-    if (!(await confirmAction(t("room.leaveConfirm")))) return;
-    try {
-      await this.adapter.request("leaveRoom", { roomId: room.roomId });
-      this.router.navigate("/");
+      this.local.closeAccount();
+      await this.local.openAccount(result.session.accountHash);
+      const rooms = await this.local.rooms();
+      setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: settings.keysReady ? "ready" : "gate" });
+      const status = await this.worker.send<{ ready: boolean }>({ type: "keyStatus" });
+      setState({ keys: { ready: status.ready, backup: false, hasOtherDevices: false }, phase: status.ready ? "ready" : "gate" });
+      await this.local.saveSettings({ keysReady: status.ready });
+      this.mount();
+      this.applyRoute();
     } catch (error) {
-      this.notify(messageOf(error));
+      setState({ phase: "auth", notice: error instanceof Error ? error.message : "" });
+      this.mount();
     }
   }
 
-  private async send(message: ComposerMessage): Promise<void> {
-    const room = this.store.getSnapshot().activeRoomId;
-    if (!room) return;
-    this.closePicker();
-    if (message.body.trim()) {
-      const replyEvent =
-        message.context?.kind === "reply"
-          ? (this.store.getSnapshot().events.find((row) => row.eventId === message.context?.eventId) ?? null)
-          : null;
-      await this.queueOutbox(
-        room,
-        "m.room.message",
-        messageContent({
-          body: message.body,
-          formattedBody: message.formattedBody,
-          replyTo: replyEvent ? { eventId: replyEvent.eventId, senderId: replyEvent.senderId } : null,
-          editTarget: message.context?.kind === "edit" ? message.context.eventId : null,
-        }),
-      );
-    }
-    for (const file of message.files) {
-      const mime = file.file.type || "application/octet-stream";
-      const media: MediaDescriptor = {
-        mxc: "",
-        mimetype: mime,
-        filename: file.file.name,
-        size: file.file.size,
-        width: 0,
-        height: 0,
-        encrypted: null,
-        thumbnail: null,
-      };
-      await this.queueOutbox(
-        room,
-        "m.room.message",
-        { msgtype: msgtypeForMime(mime), body: file.file.name, info: { mimetype: mime, size: file.file.size } },
-        file.file,
-        media,
-      );
-      URL.revokeObjectURL(file.url);
-    }
+  private get routeRoom(): string | null {
+    const match = /^#\/room\/([^?]+)/.exec(location.hash);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
   }
 
-  private async queueOutbox(
-    roomId: string,
-    eventType: string,
-    content: Record<string, unknown>,
-    blob: Blob | null = null,
-    media: MediaDescriptor | null = null,
-  ): Promise<void> {
-    const txnId = crypto.randomUUID();
-    const record: OutboxRecord = {
-      txnId,
-      roomId,
-      eventType,
-      content,
-      blob,
-      media,
-      createdAt: Date.now(),
-      attempts: 0,
-      nextAttemptAt: 0,
-      status: "pending",
-      error: null,
-      eventId: null,
-    };
-    await this.db.writeOutbox(record);
-    this.store.addOutbox(record);
-    void this.adapter.request("send", { txnId }).catch((error: unknown) => {
-      this.store.updateOutbox(txnId, { status: "failed", error: messageOf(error) });
-    });
+  private get routeDialog(): string | null {
+    const query = location.hash.includes("?") ? location.hash.slice(location.hash.indexOf("?") + 1) : "";
+    return new URLSearchParams(query).get("d");
   }
 
-  private async handleOutboxEvent(
-    txnId: string,
-    status: string,
-    error?: string,
-    attempts?: number,
-  ): Promise<void> {
-    if (status === "sent") {
-      this.store.removeOutbox(txnId);
-      await this.db.deleteOutbox(txnId);
+  async enter(): Promise<void> {
+    const session = state.session;
+    if (!session) return;
+    this.local.closeAccount();
+    await this.local.openAccount(session.accountHash);
+    const rooms = await this.local.rooms();
+    setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: "ready" });
+    await this.local.saveSettings({ keysReady: true });
+    this.mount();
+    this.applyRoute();
+  }
+
+  private mount(): void {
+    this.root.replaceChildren();
+    if (state.phase === "auth") {
+      this.root.appendChild(authScreen(this));
       return;
     }
-    if (status === "failed") {
-      this.store.updateOutbox(txnId, {
-        status: "failed",
-        error: error ?? t("errors.generic"),
-        attempts: attempts ?? 0,
-      });
+    if (state.phase === "gate") {
+      this.root.appendChild(gateScreen(this));
       return;
     }
-    this.store.updateOutbox(txnId, {
-      status: "pending",
-      error: error ?? null,
-      attempts: attempts ?? 0,
-    });
-    await this.db
-      .writeOutbox({ ...this.store.getSnapshot().outbox.find((row) => row.txnId === txnId)! })
-      .catch(() => undefined);
-  }
-
-  private async retryOutbox(txnId: string): Promise<void> {
-    this.store.updateOutbox(txnId, { status: "pending", error: null });
-    try {
-      await this.adapter.request("retry", { txnId });
-    } catch (error) {
-      this.store.updateOutbox(txnId, { status: "failed", error: messageOf(error) });
+    if (state.phase === "boot") {
+      this.root.appendChild(document.createElement("div"));
+      return;
     }
+    this.root.appendChild(this.shell.root);
+    touch();
+    this.applyRoute();
+    void this.refreshPacks();
   }
 
-  private async cancelOutbox(txnId: string): Promise<void> {
-    await this.db.deleteOutbox(txnId);
-    this.store.removeOutbox(txnId);
-    await this.adapter.request("cancelSend", { txnId }).catch(() => undefined);
-  }
-
-  // Typing is a rate-limited hint, so the first keystroke of a run starts it and
-  // the rest only refresh the local stop timer.
-  private async sendTyping(typing: boolean): Promise<void> {
-    const roomId = this.store.getSnapshot().activeRoomId;
-    if (!roomId) return;
-    if (typing) {
-      const now = Date.now();
-      if (this.typingRoom === roomId && now - this.typingAt < 10_000) return;
-      this.typingRoom = roomId;
-      this.typingAt = now;
-    } else {
-      this.typingRoom = null;
-      this.typingAt = 0;
+  private applyRoute(): void {
+    if (state.phase !== "ready") return;
+    const roomId = this.routeRoom;
+    if (roomId && roomId !== state.activeRoomId) void this.loadRoom(roomId, false);
+    if (!roomId && state.activeRoomId) {
+      setState({ activeRoomId: null, messages: [], typing: [] });
     }
-    await this.adapter.request("typing", { roomId, typing }).catch(() => undefined);
-  }
-
-  private async loadOlder(): Promise<void> {
-    const roomId = this.store.getSnapshot().activeRoomId;
-    if (!roomId) return;
-    try {
-      await this.adapter.request("paginate", {
-        roomId,
-        direction: "b",
-        limit: config.limits.timelinePage,
-      });
-    } catch (error) {
-      this.notify(messageOf(error));
+    const dialog = this.routeDialog;
+    if (dialog !== state.dialog) {
+      if (dialog) showDialog(this, dialog);
+      else closeDialog();
     }
+    this.shell.render();
   }
 
-  private openMedia(event: EventRecord): void {
-    if (!event.media) return;
-    const body = el("div", { class: "media-viewer" }, [
-      el("div", { class: "media-placeholder", text: t("common.loading") }),
-    ]);
-    this.dialogs.open({
-      title: event.media.filename || t("media.file"),
-      body,
-      onClose: () => {
-        this.dialogName = null;
-      },
-    });
-    void this.media
-      .get({
-        mediaKey: "",
-        mxc: event.media.mxc,
-        width: event.media.width,
-        height: event.media.height,
-        method: "scale",
-        ...(event.media.encrypted ? { file: event.media.encrypted } : {}),
-      })
-      .then((url) => {
-        if (!url) {
-          body.replaceChildren(el("div", { class: "media-placeholder", text: t("media.error") }));
+  private route(roomId: string | null, dialog: string | null, replace = false): void {
+    const base = location.pathname;
+    const path = roomId ? `#/room/${encodeURIComponent(roomId)}` : "#/";
+    const query = dialog ? `?d=${dialog}` : "";
+    const url = `${base}${path}${query}`;
+    if (replace) history.replaceState(null, "", url);
+    else history.pushState(null, "", url);
+  }
+
+  private async onWorkerEvent(event: Event): Promise<void> {
+    switch (event.event) {
+      case "ready": {
+        if (!event.session) {
+          setState({ phase: "auth" });
+          this.mount();
           return;
         }
-        if (event.media?.mimetype.startsWith("video/")) {
-          body.replaceChildren(el("video", { attrs: { src: url, controls: true, autoplay: false } }));
-        } else if (event.media?.mimetype.startsWith("image/")) {
-          const image = el("img", { attrs: { src: url, alt: event.media.filename } });
-          image.addEventListener("dblclick", () => image.classList.toggle("zoomed"));
-          body.replaceChildren(image);
+        setState({ session: event.session });
+        const status = await this.worker.send<{ ready: boolean; backup: boolean; hasOtherDevices: boolean }>({ type: "keyStatus" });
+        setState({
+          keys: status,
+          phase: status.ready ? "ready" : "gate",
+          settings: {
+            ...state.settings,
+            lastAccount: {
+              hash: event.session.accountHash,
+              userId: event.session.userId,
+              name: event.session.displayName,
+              avatar: event.session.avatar,
+              baseUrl: event.session.baseUrl,
+            },
+          },
+        });
+        await this.local.saveSettings({ lastAccount: state.settings.lastAccount, keysReady: status.ready });
+        if (state.phase === "ready") {
+          this.local.closeAccount();
+          await this.local.openAccount(event.session.accountHash);
+          const rooms = await this.local.rooms();
+          setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])), phase: "ready" });
+          this.mount();
         } else {
-          body.replaceChildren(
-            el("a", { class: "button", text: t("common.download"), attrs: { href: url, download: event.media?.filename ?? "file" } }),
-          );
+          this.mount();
         }
-      });
-  }
-
-  // A profile is a card about a person: picture, name, id, then what can be done
-  // with them here. A room that is not a direct message also shows their standing.
-  private openProfile(userId: string): void {
-    void this.adapter
-      .request<{ profile: { userId: string; displayName: string; avatarMxc: string | null; verified: boolean; identityChanged: boolean } }>(
-        "getProfile",
-        { userId },
-      )
-      .then((result) => {
-        const profile = result.profile;
-        const snapshot = this.store.getSnapshot();
-        const room = snapshot.activeRoomId ? activeRoom(snapshot) : null;
-        const member = room ? memberFor(snapshot, room.roomId, profile.userId) : null;
-        const copy = iconButton(t("profile.copyId"), "copy", () => {
-          void navigator.clipboard.writeText(profile.userId).then(() => {
-            this.notify(t("common.copied"));
-            this.copyFeedback(copy);
-          });
-        }, "icon-button profile-copy");
-        const status = profile.identityChanged
-          ? t("profile.identityChanged")
-          : profile.verified
-            ? t("profile.verified")
-            : t("profile.notVerified");
-        const body = el("div", { class: "profile" }, [
-          this.profileAvatar(profile.avatarMxc, profile.displayName),
-          el("h3", { class: "profile-name", text: profile.displayName }),
-          el("div", { class: "profile-id" }, [el("span", { text: profile.userId }), copy]),
-          el("button", {
-            class: "button profile-primary",
-            text: t("profile.directChat"),
-            attrs: { type: "button" },
-            on: {
-              click: () => {
-                this.dialogs.close();
-                this.dialogName = null;
-                void this.startDirectMessage(profile.userId);
-              },
-            },
-          }),
-          room && !room.isDirect
-            ? el("section", { class: "profile-section" }, [
-                el("h4", { text: t("profile.inRoom", { room: roomTitle(room) }) }),
-                this.profileRow(
-                  t("profile.powerLevel"),
-                  el("span", { class: "profile-power" }, [
-                    el("span", { text: formatNumber(snapshot.ui.locale, member?.powerLevel ?? 0) }),
-                    el("span", { class: "badge", text: roleLabel(member?.powerLevel ?? 0) }),
-                  ]),
-                ),
-              ])
-            : null,
-          el("section", { class: "profile-section" }, [
-            el("h4", { text: t("settings.security") }),
-            this.profileRow(
-              status,
-              el("button", {
-                class: "button",
-                text: profile.verified ? t("profile.verified") : t("profile.verify"),
-                attrs: { type: "button" },
-                on: { click: () => void this.verifyUser(profile.userId) },
-              }),
-            ),
-          ]),
-        ]);
-        this.dialogs.open({ title: t("nav.profile"), body, onClose: () => { this.dialogName = null; } });
-      });
-  }
-
-  private profileRow(label: string, control: HTMLElement): HTMLElement {
-    return el("div", { class: "profile-row" }, [el("span", { class: "profile-row-label", text: label }), control]);
-  }
-
-  private copyFeedback(node: HTMLElement): void {
-    node.classList.add("copied");
-    window.setTimeout(() => node.classList.remove("copied"), 900);
-  }
-
-  private async startDirectMessage(userId: string): Promise<void> {
-    try {
-      const result = await this.adapter.request<{ roomId: string }>("createDm", { userId });
-      await this.reloadProjection();
-      this.openRoom(result.roomId);
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  private profileAvatar(mxc: string | null, name: string): HTMLElement {
-    const node = el("div", { class: "avatar lg" }, [el("span", { text: initial(name) })]);
-    this.loadAvatar(node, mxc, 96);
-    return node;
-  }
-
-  private async verifyUser(userId: string): Promise<void> {
-    try {
-      const result = await this.adapter.request<VerificationResult>("verifyUser", { userId });
-      this.store.setVerification({
-        requestId: result.requestId,
-        phase: "requested",
-        userId,
-        deviceId: null,
-        initiatedByMe: true,
-        sas: null,
-        error: null,
-      });
-      this.router.openDialog("verify");
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  private fatal(message: string): void {
-    this.view = "fatal";
-    this.root.classList.remove("boot");
-    this.root.replaceChildren(
-      el("div", { class: "auth" }, [
-        el("div", { class: "auth-card" }, [
-          el("h1", { text: t("session.error") }),
-          el("p", { text: message }),
-          el("button", {
-            class: "button primary",
-            text: t("common.retry"),
-            attrs: { type: "button" },
-            on: { click: () => window.location.reload() },
-          }),
-        ]),
-      ]),
-    );
-  }
-
-  private async logout(): Promise<void> {
-    if (!(await confirmAction(t("session.logoutConfirm")))) return;
-    this.store.setKeyGate("checking");
-    try {
-      if (this.hash) await this.db.clearAccountUi(this.hash);
-      this.db.closeAccount();
-      await this.adapter.request("logout", {});
-    } catch {
-      // Local logout still clears the UI.
-    }
-    this.composer?.destroy();
-    this.timeline?.destroy();
-    this.media.clear();
-    this.shell = null;
-    this.hash = null;
-    this.authStep = "server";
-    this.discovery = null;
-    this.authFields.username = "";
-    this.authFields.password = "";
-    this.authFields.confirm = "";
-    this.recoveryKey = null;
-    this.store.setSession(null);
-    this.store.setProjection({ revision: 0, rooms: [], events: [], members: [], packs: [], outbox: [] });
-    this.router.navigate("/", { replace: true });
-    this.requestRender();
-  }
-
-  private syncDialogs(): void {
-    const route = this.router.route;
-    if (!route.dialog) {
-      if (this.dialogName) {
-        this.dialogName = null;
-        this.dialogs.close();
+        return;
       }
-      return;
-    }
-    if (route.dialog !== this.dialogName) this.renderDialog(route.dialog);
-  }
-
-  private renderDialog(name: string): void {
-    this.dialogName = name;
-    switch (name) {
-      case "settings":
-        this.renderSettingsDialog();
-        break;
-      case "search":
-        this.renderSearchDialog();
-        break;
-      case "join":
-        this.renderJoinDialog();
-        break;
-      case "create":
-        this.renderCreateDialog();
-        break;
-      case "new-message":
-        this.renderNewMessageDialog();
-        break;
-      case "room-settings":
-        this.renderRoomSettingsDialog();
-        break;
-      case "verify":
-        this.renderVerificationDialog();
-        break;
+      case "session":
+        if (!event.session) {
+          setState({ phase: "auth", session: null, rooms: new Map() });
+          await this.local.saveSettings({ lastAccount: null, keysReady: false });
+          this.mount();
+        }
+        return;
+      case "connection":
+        setState({ connection: event.connection, notice: event.message });
+        this.shell.render();
+        return;
+      case "sync":
+        await this.resync(event.rooms, event.removed, event.active);
+        return;
+      case "outbox":
+        this.applyOutbox(event.txnId, event.status);
+        return;
+      case "keys":
+        setState({ keys: event.status });
+        return;
+      case "fatal":
+        setState({ notice: event.message, connection: "error" });
+        this.shell.render();
+        return;
       default:
-        this.router.closeDialog();
-    }
-  }
-
-  private openDialog(name: string, body: HTMLElement, title: string, footer?: HTMLElement): void {
-    this.dialogs.open({
-      title,
-      body,
-      ...(footer ? { footer } : {}),
-      onClose: () => {
-        if (this.dialogName === name) {
-          this.dialogName = null;
-          if (this.router.route.dialog === name) this.router.closeDialog();
-        }
-      },
-    });
-  }
-
-  private renderSettingsDialog(): void {
-    const body = el("div", { class: "settings-section" });
-    const sections: Array<[string, string]> = [
-      ["account", t("settings.account")],
-      ["notifications", t("settings.notifications")],
-      ["security", t("settings.security")],
-      ["about", t("settings.about")],
-    ];
-    const nav = el("div", { class: "settings-nav" });
-    for (const [key, label] of sections) {
-      nav.appendChild(
-        el("button", {
-          class: "button",
-          text: label,
-          attrs: { type: "button", "aria-pressed": this.settingsSection === key },
-          on: {
-            click: () => {
-              this.settingsSection = key;
-              this.dialogName = null;
-              this.dialogs.close();
-              this.renderDialog("settings");
-            },
-          },
-        }),
-      );
-    }
-    body.appendChild(nav);
-    if (this.settingsSection === "account") body.appendChild(this.settingsAccount());
-    if (this.settingsSection === "notifications") body.appendChild(this.settingsNotifications());
-    if (this.settingsSection === "security") body.appendChild(this.settingsSecurity());
-    if (this.settingsSection === "about") body.appendChild(this.settingsAbout());
-    this.openDialog("settings", body, t("settings.title"));
-  }
-
-  private settingsAccount(): HTMLElement {
-    const snapshot = this.store.getSnapshot();
-    const name = el("input", { class: "input", attrs: { value: snapshot.session?.displayName ?? "" } });
-    const avatar = el("input", { attrs: { type: "file", accept: "image/*" } });
-    avatar.addEventListener("change", () => {
-      const file = avatar.files?.[0];
-      if (file) void this.uploadAvatar(file);
-    });
-    return el("div", { class: "settings-section" }, [
-      this.settingsRow(t("settings.displayName"), name, () => {
-        void this.adapter
-          .request("setDisplayName", { displayName: name.value })
-          .then(() => this.notify(t("settings.saved")))
-          .catch((error: unknown) => this.notify(messageOf(error)));
-      }),
-      el("div", { class: "settings-row" }, [
-        el("span", { class: "settings-row-text" }, [el("strong", { text: t("settings.avatar") })]),
-        avatar,
-      ]),
-      el("div", { class: "settings-row" }, [
-        el("span", { class: "settings-row-text" }, [el("strong", { text: t("settings.language") })]),
-        this.languageSwitch(snapshot.ui.locale),
-      ]),
-      el("div", { class: "settings-row" }, [
-        el("span", { class: "settings-row-text" }, [el("strong", { text: t("settings.privacy") }), el("small", { text: t("settings.privacyBody") })]),
-      ]),
-      el("button", {
-        class: "button",
-        text: t("nav.logout"),
-        attrs: { type: "button" },
-        on: {
-          click: () => {
-            this.dialogs.close();
-            this.dialogName = null;
-            void this.logout();
-          },
-        },
-      }),
-    ]);
-  }
-
-  private settingsNotifications(): HTMLElement {
-    const enabled = this.settings["notificationsEnabled"] === true;
-    const preview = this.settings["notificationsPreview"] !== false;
-    return el("div", { class: "settings-section" }, [
-      el("p", { class: "muted", text: t("settings.notificationsHint") }),
-      this.toggleRow(t("settings.notificationsEnable"), enabled, (value) => {
-        void this.setNotificationsEnabled(value);
-      }),
-      this.toggleRow(t("settings.notificationsPreview"), preview, (value) => {
-        this.settings["notificationsPreview"] = value;
-        void this.db.writeSetting("notificationsPreview", value);
-        this.notifier.setPreview(value);
-        this.store.patchUi({ notificationsPreview: value });
-      }),
-      el("div", { class: "settings-row" }, [
-        el("span", { class: "settings-row-text" }, [
-          el("strong", { text: t("settings.notificationPermission") }),
-          el("small", { text: this.notificationPermission }),
-        ]),
-        el("button", {
-          class: "button",
-          text: t("settings.notificationsEnable"),
-          attrs: { type: "button" },
-          on: {
-            click: () => {
-              void this.notifier.requestPermission().then((permission) => {
-                this.notificationPermission = permission;
-                this.store.patchUi({ notificationPermission: permission });
-                this.dialogName = null;
-                this.dialogs.close();
-                this.renderDialog("settings");
-              });
-            },
-          },
-        }),
-      ]),
-    ]);
-  }
-
-  private settingsSecurity(): HTMLElement {
-    const body = el("div", { class: "settings-section" }, [
-      el("p", { class: "muted", text: t("settings.sessions") }),
-    ]);
-    const list = el("div", { class: "session-list" }, [el("div", { class: "empty", text: t("common.loading") })]);
-    body.appendChild(list);
-    void this.adapter.request<{ devices: DeviceRecord[] }>("getDevices", {}).then((result) => {
-      this.store.setDevices(result.devices);
-      list.replaceChildren(
-        ...result.devices.map((device) =>
-          el("div", { class: "session-row" }, [
-            el("div", { class: "session-main" }, [
-              el("div", {}, [
-                el("div", { class: "session-name", text: device.displayName || device.deviceId }),
-                el("div", { class: "session-meta", text: `${device.deviceId}${device.current ? ` · ${t("settings.current")}` : ""}` }),
-              ]),
-            ]),
-            el("div", { class: "row" }, [
-              el("span", { class: "badge", text: device.verified ? t("settings.verified") : t("settings.unverified") }),
-              device.current
-                ? null
-                : el("button", {
-                    class: "button ghost",
-                    text: t("settings.signOut"),
-                    attrs: { type: "button" },
-                    on: { click: () => void this.deleteDevice(device.deviceId) },
-                  }),
-            ]),
-          ]),
-        ),
-      );
-    }).catch((error: unknown) => {
-      list.replaceChildren(el("div", { class: "error-text", text: messageOf(error) }));
-    });
-    body.appendChild(
-      el("button", {
-        class: "button danger",
-        text: t("settings.signOutOthers"),
-        attrs: { type: "button" },
-        on: { click: () => void this.deleteOtherDevices() },
-      }),
-    );
-    body.appendChild(el("p", { class: "muted", text: t("settings.dataRemains") }));
-    return body;
-  }
-
-  private settingsAbout(): HTMLElement {
-    return el("div", { class: "settings-section" }, [
-      el("p", { text: `${config.app.name} ${t("settings.version", { version: config.app.version })}` }),
-      el("p", { class: "muted", text: t("settings.licenseBody") }),
-      el("a", { class: "button", text: t("settings.source"), attrs: { href: config.app.links.source, target: "_blank", rel: "noopener noreferrer" } }),
-    ]);
-  }
-
-  private settingsRow(label: string, control: HTMLElement, onClick: () => void): HTMLElement {
-    return el("div", { class: "settings-row" }, [
-      el("span", { class: "settings-row-text" }, [el("strong", { text: label })]),
-      el("div", { class: "row" }, [
-        control,
-        el("button", { class: "button", text: t("common.save"), attrs: { type: "button" }, on: { click: onClick } }),
-      ]),
-    ]);
-  }
-
-  private toggleRow(label: string, checked: boolean, onChange: (value: boolean) => void): HTMLElement {
-    const input = el("input", { attrs: { type: "checkbox", checked } });
-    input.addEventListener("change", () => onChange(input.checked));
-    return el("label", { class: "settings-row" }, [
-      el("span", { class: "settings-row-text" }, [el("strong", { text: label })]),
-      input,
-    ]);
-  }
-
-  private async setNotificationsEnabled(value: boolean): Promise<void> {
-    if (value) {
-      const permission = await this.notifier.requestPermission();
-      this.notificationPermission = permission;
-      this.store.patchUi({ notificationPermission: permission });
-      if (permission !== "granted") {
-        this.notify(t("settings.notificationsDenied"));
         return;
-      }
     }
-    this.settings["notificationsEnabled"] = value;
-    this.notifier.setEnabled(value);
-    await this.db.writeSetting("notificationsEnabled", value);
-    this.dialogName = null;
-    this.dialogs.close();
-    this.renderDialog("settings");
   }
 
-  private async uploadAvatar(file: File): Promise<void> {
-    const buffer = await file.arrayBuffer();
+  private async resync(rooms: string[], removed: string[], active: string | null): Promise<void> {
+    for (const roomId of removed) state.rooms.delete(roomId);
+    for (const roomId of rooms) {
+      const room = await this.local.room(roomId);
+      if (room) state.rooms.set(roomId, room);
+      else state.rooms.delete(roomId);
+    }
+    if (active && active === state.activeRoomId) {
+      const before = state.messages.length;
+      state.messages = await this.local.window(active, 80);
+      if (state.messages.length > before && document.visibilityState === "visible") this.markReadSoon();
+    }
+    touch();
+    this.detectNotifications(rooms);
+  }
+
+  private lastSeen = new Map<string, number>();
+
+  private detectNotifications(rooms: string[]): void {
+    const enabled = state.settings.desktop;
+    for (const roomId of rooms) {
+      const room = state.rooms.get(roomId);
+      if (!room) continue;
+      const previous = this.lastSeen.get(roomId) ?? 0;
+      this.lastSeen.set(roomId, room.lastTs);
+      if (!enabled || document.visibilityState === "visible" || room.muted || room.membership !== "join") continue;
+      if (room.lastTs <= previous || roomId === state.activeRoomId) continue;
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") continue;
+      const body = state.settings.preview ? room.preview : t("room.encryptedPreview");
+      new Notification(room.name, { body, tag: roomId });
+    }
+  }
+
+  private applyOutbox(txnId: string, status: "sent" | "queued" | "sending" | "failed"): void {
+    const message = state.messages.find((entry) => entry.id === txnId);
+    if (!message) return;
+    if (status === "sent") return;
+    message.status = status;
+    touch();
+  }
+
+  private markReadSoon(): void {
+    const room = activeRoom();
+    const last = state.messages.findLast((message) => message.status === "sent");
+    if (!room || !last) return;
+    void this.worker.send({ type: "markRead", roomId: room.roomId, eventId: last.id });
+  }
+
+  private async refreshPacks(): Promise<void> {
     try {
-      await this.adapter.request("uploadAvatar", { buffer, mime: file.type }, 30000, [buffer]);
-      this.notify(t("settings.saved"));
-    } catch (error) {
-      this.notify(messageOf(error));
+      const packs = await this.local.packs();
+      this.shell.picker.load(packs);
+    } catch {
+      this.shell.picker.load([]);
     }
   }
 
-  private async deleteDevice(deviceId: string): Promise<void> {
-    if (!(await confirmAction(t("settings.signOutConfirm")))) return;
-    try {
-      await this.adapter.request("deleteDevice", { deviceId });
-      this.renderSettingsDialog();
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  private async deleteOtherDevices(): Promise<void> {
-    const devices = this.store.getSnapshot().devices.filter((device) => !device.current);
-    if (devices.length === 0) return;
-    if (!(await confirmAction(t("settings.signOutOthersConfirm")))) return;
-    try {
-      await this.adapter.request("deleteDevices", { deviceIds: devices.map((device) => device.deviceId) });
-      this.renderSettingsDialog();
-    } catch (error) {
-      this.notify(messageOf(error));
-    }
-  }
-
-  private renderSearchDialog(): void {
-    const snapshot = this.store.getSnapshot();
-    const input = el("input", { class: "input", attrs: { placeholder: t("search.placeholder") } });
-    const room = el("select", { class: "select" });
-    room.appendChild(el("option", { text: t("search.allRooms"), attrs: { value: "" } }));
-    for (const item of snapshot.rooms) room.appendChild(el("option", { text: roomTitle(item), attrs: { value: item.roomId } }));
-    const results = el("div", { class: "search-results" });
-    const run = (): void => {
-      void this.search(input.value, room.value || null, results);
-    };
-    input.addEventListener("input", () => {
-      if (this.searchTimer !== null) window.clearTimeout(this.searchTimer);
-      this.searchTimer = window.setTimeout(run, 180);
-    });
-    room.addEventListener("change", run);
-    const body = el("div", { class: "settings-section" }, [
-      el("div", { class: "search-box" }, [input, room]),
-      results,
-    ]);
-    this.openDialog("search", body, t("search.title"));
-  }
-
-  private async search(query: string, roomId: string | null, target: HTMLElement): Promise<void> {
-    if (!query.trim()) {
-      target.replaceChildren();
+  openRoom(roomId: string): void {
+    if (!roomId) {
+      this.route(null, null);
+      setState({ activeRoomId: null, messages: [], typing: [] });
       return;
     }
-    target.replaceChildren(el("div", { class: "empty", text: t("common.loading") }));
-    try {
-      const results = await this.db.search(query, roomId, config.limits.searchLimit);
-      if (results.length === 0) {
-        target.replaceChildren(el("div", { class: "empty", text: t("search.noResults") }));
-        return;
-      }
-      target.replaceChildren(
-        ...results.map((event) =>
-          el("button", {
-            class: "search-row",
-            attrs: { type: "button" },
-            on: {
-              click: () => {
-                this.router.closeDialog();
-                this.openRoomAt(event);
-              },
-            },
-          }, [
-            el("div", { class: "search-row-meta" }, [
-              el("span", { text: displayName(this.store.getSnapshot(), event.roomId, event.senderId) }),
-              el("span", { text: roomTitle(roomById(this.store.getSnapshot(), event.roomId) ?? emptyRoom(event.roomId)) }),
-            ]),
-            el("div", { class: "search-row-text", text: event.body }),
-          ]),
-        ),
-      );
-    } catch (error) {
-      target.replaceChildren(el("div", { class: "error-text", text: messageOf(error) }));
-    }
+    void this.loadRoom(roomId);
   }
 
-  private openRoomAt(event: EventRecord): void {
-    this.pendingFocusEvent = event.eventId;
-    this.openRoom(event.roomId);
+  private async loadRoom(roomId: string, updateRoute = true): Promise<void> {
+    if (updateRoute) this.route(roomId, null);
+    const draft = (await this.local.draft(state.session?.accountHash ?? "", roomId)) ?? EMPTY_DRAFT;
+    this.draftState = draft;
+    setState({ activeRoomId: roomId, messages: [], draft });
+    this.draftState = draft;;
+    const window = await this.worker.send<RoomWindow>({ type: "openRoom", roomId });
+    setState({ messages: window.messages, hasOlder: window.hasOlder });
+    this.shell.composer.load(draft, activeRoom());
+    this.shell.render();
+    requestAnimationFrame(() => this.shell.timeline.root.scrollTo({ top: this.shell.timeline.root.scrollHeight }));
+    this.markReadSoon();
+    this.shell.composer.focus();
   }
 
-  private renderJoinDialog(): void {
-    const input = el("input", { class: "input", attrs: { placeholder: "#room:server" } });
-    const error = el("p", { class: "error-text", attrs: { hidden: true } });
-    const submit = (): void => {
-      error.hidden = true;
-      void this.adapter
-        .request<{ roomId: string }>("joinRoom", { roomIdOrAlias: input.value.trim() })
-        .then((result) => {
-          this.router.closeDialog();
-          this.openRoom(result.roomId);
-        })
-        .catch((reason: unknown) => {
-          error.textContent = messageOf(reason);
-          error.hidden = false;
-        });
-    };
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") submit();
-    });
-    this.openDialog(
-      "join",
-      el("div", { class: "settings-section" }, [
-        this.field(t("join.room"), input),
-        error,
-        el("button", { class: "button primary", text: t("join.action"), attrs: { type: "button" }, on: { click: submit } }),
-      ]),
-      t("join.title"),
-    );
+  openDialog(name: string, roomId?: string): void {
+    if (name === "picker") return;
+    this.route(state.activeRoomId, name);
+    showDialog(this, name, roomId);
   }
 
-  private renderCreateDialog(): void {
-    const name = el("input", { class: "input" });
-    const topic = el("textarea", { class: "textarea" });
-    const visibility = el("select", { class: "select" }, [
-      el("option", { text: t("create.private"), attrs: { value: "private" } }),
-      el("option", { text: t("create.public"), attrs: { value: "public" } }),
-    ]);
-    const invite = el("textarea", { class: "textarea", attrs: { placeholder: "@user:server" } });
-    const encrypted = el("input", { attrs: { type: "checkbox", checked: true } });
-    const error = el("p", { class: "error-text", attrs: { hidden: true } });
-    const submit = (): void => {
-      error.hidden = true;
-      void this.adapter
-        .request<{ roomId: string }>("createRoom", {
-          name: name.value,
-          topic: topic.value,
-          visibility: visibility.value,
-          invite: invite.value.split(/[\s,]+/).filter(Boolean),
-          encrypted: encrypted.checked,
-        })
-        .then((result) => {
-          this.router.closeDialog();
-          this.openRoom(result.roomId);
-        })
-        .catch((reason: unknown) => {
-          error.textContent = messageOf(reason);
-          error.hidden = false;
-        });
-    };
-    this.openDialog(
-      "create",
-      el("div", { class: "settings-section" }, [
-        this.field(t("create.name"), name),
-        this.field(t("create.topic"), topic),
-        this.field(t("create.visibility"), visibility),
-        this.field(t("create.invite"), invite),
-        el("label", { class: "switch" }, [encrypted, t("create.encrypted")]),
-        error,
-        el("button", { class: "button primary", text: t("create.action"), attrs: { type: "button" }, on: { click: submit } }),
-      ]),
-      t("create.title"),
-    );
+  closeDialog(): void {
+    closeDialog();
+    this.route(state.activeRoomId, null, true);
   }
 
-  private renderNewMessageDialog(): void {
-    const input = el("input", { class: "input", attrs: { placeholder: "@user:server" } });
-    const error = el("p", { class: "error-text", attrs: { hidden: true } });
-    const submit = (): void => {
-      error.hidden = true;
-      void this.adapter
-        .request<{ roomId: string }>("createDm", { userId: input.value.trim() })
-        .then((result) => {
-          this.router.closeDialog();
-          this.openRoom(result.roomId);
-        })
-        .catch((reason: unknown) => {
-          error.textContent = messageOf(reason);
-          error.hidden = false;
-        });
-    };
-    this.openDialog(
-      "new-message",
-      el("div", { class: "settings-section" }, [
-        this.field(t("newMessage.user"), input),
-        error,
-        el("button", { class: "button primary", text: t("newMessage.action"), attrs: { type: "button" }, on: { click: submit } }),
-      ]),
-      t("newMessage.title"),
-    );
+  setDraft(patch: Partial<Draft>): void {
+    this.draftState = { ...this.draftState, ...patch };
+    setState({ draft: this.draftState });
+    const room = activeRoom();
+    if (room) void this.local.saveDraft(state.session?.accountHash ?? "", room.roomId, this.draftState);
   }
 
-  private renderRoomSettingsDialog(): void {
-    const snapshot = this.store.getSnapshot();
-    const room = snapshot.activeRoomId ? roomById(snapshot, snapshot.activeRoomId) : null;
-    if (!room) {
-      this.router.closeDialog();
-      return;
-    }
-    // State events need the power level the server enforces; the form mirrors it
-    // so a control that cannot work is disabled instead of failing on submit.
-    const canEditState = room.selfPowerLevel >= 50;
-    const canInvite = room.selfPowerLevel >= 50;
-    const name = el("input", { class: "input", attrs: { value: room.name, disabled: !canEditState } });
-    const topic = el("textarea", { class: "textarea", text: room.topic });
-    if (!canEditState) topic.disabled = true;
-    const avatarInput = el("input", {
-      attrs: { type: "file", accept: "image/*", disabled: !canEditState, hidden: true },
-    });
-    const avatarName = el("span", { class: "muted", text: "" });
-    avatarInput.addEventListener("change", () => {
-      avatarName.textContent = avatarInput.files?.[0]?.name ?? "";
-    });
-    const uploadAvatar = async (): Promise<void> => {
-      const file = avatarInput.files?.[0];
-      if (!file) return;
-      const buffer = await file.arrayBuffer();
-      await this.adapter.request(
-        "uploadRoomAvatar",
-        { roomId: room.roomId, buffer, mime: file.type },
-        30000,
-        [buffer],
-      );
-    };
-    const save = (): void => {
-      void this.adapter.request("setRoomState", { roomId: room.roomId, eventType: "m.room.name", content: { name: name.value } });
-      void this.adapter.request("setRoomState", { roomId: room.roomId, eventType: "m.room.topic", content: { topic: topic.value } });
-      this.router.closeDialog();
-    };
-    const members = snapshot.members
-      .filter((member) => member.roomId === room.roomId)
-      .toSorted((left, right) => (left.displayName || left.userId).localeCompare(right.displayName || right.userId));
-    // lazyLoadMembers only knows the members it has seen, so the full list is asked
-    // for once the dialog is open and replaced in place when it arrives.
-    const memberList = el("div", { class: "member-list" }, this.memberRows(snapshot, members));
-    void this.adapter
-      .request<{ members: MemberRecord[] }>("members", { roomId: room.roomId })
-      .then((result) => {
-        const sorted = [...result.members].toSorted((left, right) =>
-          (left.displayName || left.userId).localeCompare(right.displayName || right.userId),
-        );
-        memberList.replaceChildren(...this.memberRows(this.store.getSnapshot(), sorted));
-      })
-      .catch(() => undefined);
-    const invite = el("input", { class: "input", attrs: { placeholder: "@user:server" } });
-    const body = el("div", { class: "settings-section" }, [
-      el("div", { class: "room-settings-tabs" }, [
-        el("span", { class: "badge", text: room.isEncrypted ? t("roomSettings.encryptionOn") : t("roomSettings.encryptionOff") }),
-      ]),
-      this.field(t("roomSettings.name"), name),
-      this.field(t("roomSettings.topic"), topic),
-      this.field(
-        t("roomSettings.avatar"),
-        el("div", { class: "row" }, [
-          avatarInput,
-          el("button", {
-            class: "button",
-            text: t("roomSettings.chooseFile"),
-            attrs: { type: "button", disabled: !canEditState },
-            on: { click: () => avatarInput.click() },
-          }),
-          avatarName,
-          el("button", {
-            class: "button",
-            text: t("settings.uploadAvatar"),
-            attrs: { type: "button", disabled: !canEditState },
-            on: { click: () => void uploadAvatar().catch((error: unknown) => this.notify(messageOf(error))) },
-          }),
-        ]),
-      ),
-      canEditState ? null : el("p", { class: "muted", text: t("roomSettings.noPermission") }),
-      el("button", {
-        class: "button primary",
-        text: t("common.save"),
-        attrs: { type: "button", disabled: !canEditState },
-        on: { click: save },
-      }),
-      el("h3", { text: `${t("roomSettings.members")} (${formatNumber(snapshot.ui.locale, room.memberCount)})` }),
-      memberList,
-      this.field(t("roomSettings.invite"), invite),
-      el("button", {
-        class: "button",
-        text: t("roomSettings.invite"),
-        attrs: { type: "button", disabled: !canInvite },
-        on: {
-          click: () => {
-            void this.adapter
-              .request("invite", { roomId: room.roomId, userId: invite.value.trim() })
-              .then(() => {
-                invite.value = "";
-                this.notify(t("settings.saved"));
-              })
-              .catch((error: unknown) => this.notify(messageOf(error)));
-          },
-        },
-      }),
-      el("div", { class: "settings-row" }, [
-        el("span", { class: "settings-row-text" }, [el("strong", { text: t("roomSettings.notifications") })]),
-        el("button", {
-          class: "button",
-          text: room.muted ? t("rooms.unmute") : t("settings.notificationsMute"),
-          attrs: { type: "button" },
-          on: { click: () => void this.setRoomMuted(room, !room.muted) },
-        }),
-      ]),
-      el("button", {
-        class: "button danger",
-        text: t("roomSettings.leave"),
-        attrs: { type: "button" },
-        on: {
-          click: async () => {
-            if (!(await confirmAction(t("room.leaveConfirm")))) return;
-            void this.adapter.request("leaveRoom", { roomId: room.roomId }).then(() => {
-              this.router.navigate("/");
-              this.router.closeDialog();
-            });
-          },
-        },
-      }),
-    ]);
-    this.openDialog("room-settings", body, t("roomSettings.title"));
+  draft(): Draft {
+    return this.draftState;
   }
 
-  private renderVerificationDialog(): void {
-    const verification = this.store.getSnapshot().verification;
-    if (!verification) {
-      this.router.closeDialog();
-      return;
-    }
-    const body = el("div", { class: "settings-section" }, [
-      el("p", { text: t("keygate.sasBody") }),
-    ]);
-    if (verification.phase === "requested" && !verification.initiatedByMe) {
-      body.append(
-        el("button", {
-          class: "button primary",
-          text: t("common.confirm"),
-          attrs: { type: "button" },
-          on: { click: () => void this.adapter.request("acceptVerification", { requestId: verification.requestId }) },
-        }),
-      );
-    }
-    if (verification.sas) {
-      body.append(
-        this.sasGrid(verification.sas.emoji),
-        el("div", { class: "row" }, [
-          el("button", {
-            class: "button primary",
-            text: t("keygate.sasConfirm"),
-            attrs: { type: "button" },
-            on: { click: () => void this.confirmSas(verification.requestId) },
-          }),
-          el("button", {
-            class: "button ghost",
-            text: t("keygate.sasMismatch"),
-            attrs: { type: "button" },
-            on: { click: () => void this.cancelVerification(verification.requestId) },
-          }),
-        ]),
-      );
-    }
-    this.openDialog("verify", body, t("keygate.sasTitle"));
+  draftMarks(): Mark[] {
+    return this.draftState.marks;
   }
 
-  private openUia(request: UiaEvent): void {
-    this.uia = request;
-    this.uiaAnswering = false;
-    const password = el("input", { class: "input", attrs: { type: "password" } });
-    const token = el("input", { class: "input" });
-    const terms = el("input", { attrs: { type: "checkbox" } });
-    const body = el("div", { class: "settings-section" });
-    if (request.stages.includes("m.login.password")) {
-      body.appendChild(this.field(t("auth.uiaPassword"), password));
-    }
-    if (request.stages.includes("m.login.registration_token")) {
-      body.appendChild(this.field(t("auth.token"), token));
-    }
-    if (request.stages.includes("m.login.terms")) {
-      body.appendChild(el("label", { class: "switch" }, [terms, t("auth.terms")]));
-      const policies = uiaPolicies(request.params);
-      if (policies.length > 0) {
-        body.appendChild(
-          el("div", { class: "policy-list" }, policies.map((policy) =>
-            el("a", {
-              text: policy.name,
-              attrs: { href: policy.url, target: "_blank", rel: "noopener noreferrer" },
-            }),
-          )),
-        );
-      }
-    }
-    if (
-      !request.stages.includes("m.login.password") &&
-      !request.stages.includes("m.login.registration_token") &&
-      !request.stages.includes("m.login.terms") &&
-      !request.stages.includes("m.login.dummy")
-    ) {
-      body.appendChild(el("p", { class: "error-text", text: t("auth.registerUnsupported") }));
-    }
-    const submit = (): void => {
-      this.uiaAnswering = true;
-      this.uia = null;
-      this.dialogs.close();
-      this.adapter.answerUia(request.requestId, {
-        password: password.value,
-        token: token.value,
-        terms: terms.checked,
-      });
-    };
-    this.dialogs.open({
-      title: t("auth.uiaTitle"),
+  startReply(message: Message): void {
+    this.setDraft({ reply: { id: message.id, name: message.name, body: message.body }, edit: null });
+    this.shell.composer.updateBanner();
+    this.shell.composer.focus();
+  }
+
+  startEdit(message: Message): void {
+    this.setDraft({ edit: { id: message.id, body: message.body }, reply: null, text: message.body });
+    this.shell.composer.load(this.draftState, activeRoom());
+    this.shell.composer.focus();
+  }
+
+  async submitText(body: string, html: string | null, replyTo: string | null): Promise<void> {
+    const room = activeRoom();
+    if (!room) return;
+    const txnId = `m${Date.now()}${Math.random().toString(16).slice(2, 8)}`;
+    const pending: Message = {
+      id: txnId,
+      roomId: room.roomId,
+      sender: state.session?.userId ?? "",
+      name: state.session?.displayName ?? "",
+      avatar: state.session?.avatar ?? null,
+      ts: Date.now(),
+      kind: "text",
       body,
-      footer: el("button", { class: "button primary", text: t("common.confirm"), attrs: { type: "button" }, on: { click: submit } }),
-      onClose: () => {
-        this.dialogName = null;
-        if (this.uia && !this.uiaAnswering) {
-          this.adapter.cancelUia(this.uia.requestId);
-          this.uia = null;
-        }
-      },
+      html,
+      media: null,
+      reply: replyTo ? (this.draftState.reply ?? null) : null,
+      mentions: [],
+      edited: false,
+      reactions: [],
+      status: "queued",
+      error: null,
+      encrypted: room.encrypted,
+      search: [],
+    };
+    await this.local.putMessage(pending);
+    setState({ messages: [...state.messages, pending] });
+    this.shell.render();
+    void this.worker.send({ type: "text", roomId: room.roomId, txnId, body, html, replyTo }).catch((error: unknown) => {
+      this.toast(error instanceof Error ? error.message : t("error.unknown"));
     });
   }
 
-  private packImage(url: string, shortcode: string): HTMLElement {
-    const image = el("img", { attrs: { alt: shortcode } });
-    void this.media.get({ mediaKey: "", mxc: url, width: 64, height: 64, method: "scale" }).then((loaded) => {
-      if (loaded) image.setAttribute("src", loaded);
-    });
-    return image;
+  async submitEdit(eventId: string, body: string, html: string | null): Promise<void> {
+    const room = activeRoom();
+    if (!room) return;
+    await this.worker.send({ type: "edit", roomId: room.roomId, eventId, body, html });
   }
 
-  private async sendEmote(entry: RecentEntry): Promise<void> {
-    const body = entry.body || entry.shortcode;
-    const roomId = this.store.getSnapshot().activeRoomId;
-    if (!roomId) return;
-    await this.queueOutbox(roomId, "m.emote", {
+  async submitFile(file: File): Promise<void> {
+    const room = activeRoom();
+    if (!room) return;
+    const txnId = `f${Date.now()}${Math.random().toString(16).slice(2, 8)}`;
+    const pending: Message = {
+      id: txnId,
+      roomId: room.roomId,
+      sender: state.session?.userId ?? "",
+      name: state.session?.displayName ?? "",
+      avatar: state.session?.avatar ?? null,
+      ts: Date.now(),
+      kind: file.type.startsWith("image/") ? "image" : "file",
+      body: file.name,
+      html: null,
+      media: null,
+      reply: null,
+      mentions: [],
+      edited: false,
+      reactions: [],
+      status: "queued",
+      error: null,
+      encrypted: room.encrypted,
+      search: [],
+    };
+    await this.local.putMessage(pending);
+    setState({ messages: [...state.messages, pending] });
+    this.shell.render();
+    const data = await file.arrayBuffer();
+    void this.worker.send({ type: "sendFile", roomId: room.roomId, txnId, name: file.name, mime: file.type || "application/octet-stream", data }).catch(() => undefined);
+  }
+
+  sendSticker(url: string, body: string): void {
+    const room = activeRoom();
+    if (!room) return;
+    const txnId = `s${Date.now()}${Math.random().toString(16).slice(2, 8)}`;
+    const pending: Message = {
+      id: txnId,
+      roomId: room.roomId,
+      sender: state.session?.userId ?? "",
+      name: state.session?.displayName ?? "",
+      avatar: state.session?.avatar ?? null,
+      ts: Date.now(),
+      kind: "sticker",
       body,
-      format: "org.matrix.custom.html",
-      formatted_body: `<img data-mx-emoticon src="${entry.url}" alt="${escapeHtml(body)}" title="${escapeHtml(entry.shortcode)}" height="32">`,
-      msgtype: "m.emote",
-    }).catch(() => undefined);
-    this.rememberEmoji(entry);
-  }
-
-  private async sendSticker(image: { url: string; body: string; shortcode: string; info: Record<string, unknown> }): Promise<void> {
-    const roomId = this.store.getSnapshot().activeRoomId;
-    if (!roomId) return;
-    await this.queueOutbox(roomId, "m.sticker", {
-      body: image.body || image.shortcode,
-      url: image.url,
-      info: image.info,
+      html: null,
+      media: { mxc: url, mime: "image/png", size: 0, width: null, height: null, duration: null, name: body, file: null },
+      reply: null,
+      mentions: [],
+      edited: false,
+      reactions: [],
+      status: "queued",
+      error: null,
+      encrypted: room.encrypted,
+      search: [],
+    };
+    void this.local.putMessage(pending).then(() => {
+      setState({ messages: [...state.messages, pending] });
+      this.shell.render();
     });
+    void this.worker.send({ type: "sticker", roomId: room.roomId, txnId, body, url, replyTo: null }).catch(() => undefined);
   }
 
-  // Two surfaces with one shape: the emoji panel lists emoticons and stickers in
-  // one scroll, the sticker panel picks a pack and shows its contents.
-  private openPicker(trigger: HTMLElement, options: { reactTo?: EventRecord; mode?: "emoji" | "sticker" } = {}): void {
-    const previous = this.picker;
-    if (previous) {
-      const same = previous.trigger === trigger && previous.mode === (options.mode ?? "emoji");
-      previous.close();
-      if (same) return;
-    }
-    const snapshot = this.store.getSnapshot();
-    const reactTo = options.reactTo ?? null;
-    const mode = options.mode ?? "emoji";
-    let packId: string | null = null;
-    const picker = el("div", {
-      class: `picker${mode === "sticker" ? " picker-sticker" : ""}`,
-      attrs: { role: "dialog", "aria-label": t("picker.title") },
-    });
-    const search = el("input", {
-      class: "input picker-input",
-      attrs: { placeholder: t("picker.search"), "aria-label": t("picker.search") },
-    });
-    const tabs = el("div", { class: "picker-packs" });
-    const body = el("div", { class: "picker-body" });
-    const close = (): void => {
-      if (this.picker?.element !== picker) return;
-      this.picker = null;
-      picker.remove();
-      document.removeEventListener("pointerdown", outside, true);
-      document.removeEventListener("keydown", escape);
-      window.removeEventListener("resize", place);
-      trigger.setAttribute("aria-expanded", "false");
-    };
-    const outside = (event: Event): void => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (picker.contains(target) || trigger.contains(target)) return;
-      close();
-    };
-    const escape = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
-      close();
-      trigger.focus();
-    };
-    const place = (): void => {
-      const rect = trigger.getBoundingClientRect();
-      picker.style.visibility = "hidden";
-      picker.classList.toggle("picker-sticker", mode === "sticker");
-      const width = picker.offsetWidth;
-      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-      picker.style.left = `${left}px`;
-      picker.style.bottom = `${window.innerHeight - rect.top + 8}px`;
-      picker.style.visibility = "";
-    };
-
-    type PackImage = { shortcode: string; url: string; body: string; info: Record<string, unknown> };
-    const packGrid = (images: PackImage[]): HTMLElement =>
-      el(
-        "div",
-        { class: "emoji-grid pack-grid" },
-        images.map((image) =>
-          el(
-            "button",
-            {
-              class: "emoji-cell pack-cell",
-              attrs: { type: "button", title: image.shortcode },
-              on: {
-                click: () => {
-                  if (reactTo) {
-                    void this.react(reactTo, image.shortcode);
-                    close();
-                    return;
-                  }
-                  this.rememberEmoji({ shortcode: image.shortcode, url: image.url, body: image.body, info: image.info, sticker: false });
-                  void this.media
-                    .get({ mediaKey: "", mxc: image.url, width: 32, height: 32, method: "scale" })
-                    .then((url) => {
-                      if (url) this.composer?.insertEmoji(image.shortcode, image.url, image.body, image.info);
-                    });
-                },
-              },
-            },
-            [this.packImage(image.url, image.shortcode)],
-          ),
-        ),
-      );
-    const unicodeGrid = (entries: string[]): HTMLElement =>
-      el(
-        "div",
-        { class: "emoji-grid" },
-        entries.map((emoji) =>
-          el("button", {
-            class: "emoji-cell",
-            text: emoji,
-            attrs: { type: "button" },
-            on: {
-              click: () => {
-                if (reactTo) {
-                  void this.react(reactTo, emoji);
-                  close();
-                  return;
-                }
-                this.composer?.insertUnicode(emoji);
-              },
-            },
-          }),
-        ),
-      );
-    const stickerGrid = (packs: typeof snapshot.packs): HTMLElement =>
-      el(
-        "div",
-        { class: "emoji-grid pack-grid" },
-        packs.flatMap((pack) =>
-          Object.values(pack.images).map((image) =>
-            el(
-              "button",
-              {
-                class: "emoji-cell pack-cell",
-                attrs: { type: "button", title: image.shortcode },
-                on: {
-                  click: () => {
-                    this.rememberEmoji({ shortcode: image.shortcode, url: image.url, body: image.body, info: image.info, sticker: true });
-                    void this.sendSticker(image);
-                    close();
-                  },
-                },
-              },
-              [this.packImage(image.url, image.shortcode)],
-            ),
-          ),
-        ),
-      );
-
-    const renderEmoji = (query: string): void => {
-      tabs.hidden = true;
-      body.replaceChildren();
-      const matches = (value: string): boolean => value.includes(query);
-      const recent = query ? [] : this.recentEntries();
-      if (recent.length > 0) {
-        body.appendChild(
-          el("div", { class: "picker-section" }, [
-            el("h3", { text: t("picker.recent") }),
-            el("div", { class: "emoji-grid pack-grid" }, recent.map((entry) =>
-              el("button", {
-                class: "emoji-cell pack-cell",
-                attrs: { type: "button", title: entry.shortcode },
-                on: {
-                  click: () => {
-                    if (reactTo) {
-                      void this.react(reactTo, entry.shortcode);
-                      close();
-                      return;
-                    }
-                    if (entry.sticker) {
-                      void this.sendSticker(entry);
-                      close();
-                      return;
-                    }
-                    void this.media
-                      .get({ mediaKey: "", mxc: entry.url, width: 32, height: 32, method: "scale" })
-                      .then((url) => {
-                        if (url) this.composer?.insertEmoji(entry.shortcode, entry.url, entry.body, entry.info);
-                      });
-                  },
-                },
-              }, [this.packImage(entry.url, entry.shortcode)]),
-            )),
-          ]),
-        );
-      }
-      const unicode = EMOJI.filter(matches);
-      if (unicode.length > 0) {
-        body.appendChild(
-          el("div", { class: "picker-section" }, [el("h3", { text: t("picker.emoticons") }), unicodeGrid(unicode)]),
-        );
-      }
-      for (const pack of snapshot.packs) {
-        if (!isEmoticonPack(pack)) continue;
-        const images = Object.values(pack.images).filter((image) => matches(image.shortcode));
-        if (images.length === 0) continue;
-        body.appendChild(el("div", { class: "picker-section" }, [el("h3", { text: pack.displayName }), packGrid(images)]));
-      }
-      const stickers = snapshot.packs.filter(isStickerPack);
-      if (!reactTo && stickers.length > 0) {
-        const any = stickers.some((pack) => Object.values(pack.images).some((image) => matches(image.shortcode)));
-        if (any) {
-          body.appendChild(
-            el("div", { class: "picker-section" }, [el("h3", { text: t("picker.stickers") }), stickerGrid(stickers)]),
-          );
-        }
-      }
-      if (!body.hasChildNodes()) body.appendChild(el("div", { class: "empty", text: t("picker.empty") }));
-    };
-
-    // A sticker surface picks a pack first; its emoji tab sends the emoticon as a
-    // message, which is what an emoji sent as a sticker is.
-    const renderStickers = (query: string): void => {
-      const packs = snapshot.packs.filter(isStickerPack);
-      const emoticonPacks = snapshot.packs.filter(isEmoticonPack);
-      tabs.hidden = false;
-      const tabsFor = [EMOJI_TAB, ...packs.map((pack) => pack.packId)];
-      if (!packId || !tabsFor.includes(packId)) {
-        // open on something that exists: emoticons if there are any, else a pack
-        packId = emoticonPacks.length > 0 ? EMOJI_TAB : (packs[0]?.packId ?? null);
-      }
-      tabs.replaceChildren(
-        ...tabsFor.map((id) => {
-          const pack = packs.find((entry) => entry.packId === id) ?? null;
-          return el("button", {
-            class: "picker-pack",
-            attrs: { type: "button", "aria-pressed": String(id === packId) },
-            on: {
-              click: () => {
-                packId = id;
-                renderStickers(query);
-              },
-            },
-          }, [el("span", { text: id === EMOJI_TAB ? t("picker.emoticons") : (pack?.displayName ?? "") })]);
-        }),
-      );
-      const images =
-        packId === EMOJI_TAB
-          ? emoticonPacks.flatMap((pack) => Object.values(pack.images)).filter((image) => image.shortcode.includes(query))
-          : (packs.find((pack) => pack.packId === packId) ?? null
-              ? Object.values(packs.find((pack) => pack.packId === packId)?.images ?? {}).filter((image) =>
-                  image.shortcode.includes(query),
-                )
-              : []);
-      body.replaceChildren(
-        images.length === 0
-          ? el("div", { class: "empty", text: t("picker.empty") })
-          : el("div", { class: "emoji-grid pack-grid" }, images.map((image) =>
-              el("button", {
-                class: "emoji-cell pack-cell",
-                attrs: { type: "button", title: image.shortcode },
-                on: {
-                  click: () => {
-                    this.rememberEmoji({ shortcode: image.shortcode, url: image.url, body: image.body, info: image.info, sticker: true });
-                    if (packId === EMOJI_TAB) void this.sendEmote({ ...image, sticker: true });
-                    else void this.sendSticker(image);
-                    close();
-                  },
-                },
-              }, [this.packImage(image.url, image.shortcode)]),
-            )),
-      );
-    };
-
-    const renderMode = (query: string): void => {
-      if (mode === "sticker" && !reactTo) renderStickers(query);
-      else renderEmoji(query);
-      place();
-    };
-
-    search.addEventListener("input", () => renderMode(search.value.trim()));
-    const closeButton = iconButton(t("common.close"), "close", () => close(), "icon-button picker-close");
-    picker.append(
-      el("div", { class: "picker-head" }, [search, closeButton]),
-      tabs,
-      body,
-    );
-    document.body.appendChild(picker);
-    renderMode("");
-    this.picker = { element: picker, trigger, mode, close };
-    trigger.setAttribute("aria-expanded", "true");
-    place();
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      picker.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "ease-out" });
-    }
-    document.addEventListener("pointerdown", outside, true);
-    document.addEventListener("keydown", escape);
-    window.addEventListener("resize", place);
+  react(message: Message, key: string): void {
+    const mine = message.reactions.find((reaction) => reaction.key === key)?.me ?? false;
+    void this.worker.send({ type: "react", roomId: message.roomId, eventId: message.id, key, on: !mine });
   }
 
-  private recentEntries(): RecentEntry[] {
-    const value = this.settings["recentEmoji"];
-    if (!Array.isArray(value)) return [];
-    return value.filter((entry): entry is RecentEntry => isRecord(entry) && typeof entry["shortcode"] === "string" && typeof entry["url"] === "string");
+  redact(message: Message): void {
+    void this.worker.send({ type: "redact", roomId: message.roomId, eventId: message.id });
+    setState({ messages: state.messages.filter((entry) => entry.id !== message.id) });
+    this.shell.render();
   }
 
-  private rememberEmoji(entry: RecentEntry): void {
-    const next = [entry, ...this.recentEntries().filter((item) => item.shortcode !== entry.shortcode || item.url !== entry.url)].slice(0, 30);
-    this.settings["recentEmoji"] = next;
-    void this.db.writeSetting("recentEmoji", next);
+  retry(message: Message): void {
+    void this.worker.send({ type: "retry", txnId: message.id });
   }
 
-  private closePicker(): void {
-    this.picker?.close();
+  removePending(message: Message): void {
+    void this.local.deleteMessage(message.id);
+    void this.worker.send({ type: "cancel", txnId: message.id });
+    setState({ messages: state.messages.filter((entry) => entry.id !== message.id) });
+    this.shell.render();
   }
-}
 
-const EMOJI_TAB = "emoticons";
-
-interface RecentEntry {
-  shortcode: string;
-  url: string;
-  body: string;
-  info: Record<string, unknown>;
-  sticker: boolean;
-}
-
-const EMOJI = [
-  "😀", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "😍", "🥰", "😘", "😎", "🤓", "🤔",
-  "😐", "😑", "😴", "😮", "😲", "🤯", "😢", "😭", "😤", "😡", "🤬", "🥳", "🤝", "👍", "👎", "👏",
-  "🙏", "💪", "👀", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💯", "✨", "🔥", "🎉", "🎂", "☕",
-  "🍵", "🍕", "🍔", "🌙", "⭐", "☀️", "🌈", "🌊", "🌸", "🌻", "🐱", "🐶", "🦊", "🐼", "🚀", "💡",
-];
-
-function roleLabel(powerLevel: number): string {
-  if (powerLevel >= 100) return t("profile.admin");
-  if (powerLevel >= 50) return t("profile.moderator");
-  return t("profile.defaultRole");
-}
-
-function channelSignature(room: RoomRecord, snapshot: AppSnapshot): string {
-  return [
-    room.roomId,
-    roomTitle(room),
-    room.topic,
-    room.avatarMxc ?? "",
-    ...room.children.map((childId) => {
-      const child = roomById(snapshot, childId);
-      return `${childId}:${child ? `${roomTitle(child)}|${child.topic}|${child.avatarMxc ?? ""}` : ""}`;
-    }),
-  ].join("|");
-}
-
-function gateComplete(status: RecoveryStatus): boolean {
-  return status.secretStorage && status.crossSigning;
-}
-
-function uiaPolicies(params: Record<string, unknown>): { name: string; url: string }[] {
-  const stage = params["m.login.terms"];
-  const terms = isRecord(stage) ? stage["terms"] : null;
-  if (!isRecord(terms)) return [];
-  const policies: { name: string; url: string }[] = [];
-  for (const term of Object.values(terms)) {
-    const entries = isRecord(term) ? term["policies"] : null;
-    if (!isRecord(entries)) continue;
-    for (const policy of Object.values(entries)) {
-      if (!isRecord(policy)) continue;
-      const localized = Object.values(policy).find(
-        (value) => isRecord(value) && typeof value["url"] === "string",
-      );
-      if (!isRecord(localized)) continue;
-      const url = localized["url"];
-      if (typeof url !== "string") continue;
-      policies.push({ name: typeof localized["name"] === "string" ? localized["name"] : url, url });
-    }
+  profile(userId: string): void {
+    this.openDialog("profile", userId);
   }
-  return policies;
-}
 
-function messageOf(error: unknown): string {
-  if (error instanceof WorkerError) return error.message;
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
-
-function sectionTitle(key: SectionKey): string {
-  switch (key) {
-    case "invites":
-      return t("rooms.invites");
-    case "channels":
-      return t("rooms.channels");
-    case "favorites":
-      return t("rooms.favorites");
-    case "dms":
-      return t("rooms.dms");
-    case "lowPriority":
-      return t("rooms.lowPriority");
-    default:
-      return t("rooms.joined");
+  copy(text: string, done: string): void {
+    void copyText(text, done);
   }
-}
 
-function msgtypeForMime(mime: string): string {
-  if (mime.startsWith("image/")) return "m.image";
-  if (mime.startsWith("video/")) return "m.video";
-  if (mime.startsWith("audio/")) return "m.audio";
-  return "m.file";
-}
+  toast(message: string): void {
+    toast(message);
+  }
 
-function roomListSignature(
-  sections: ReturnType<typeof roomSections>,
-  activeRoomId: string | null,
-  locale: Locale,
-): string {
-  const parts = sections.map(
-    (section) =>
-      `${section.key}:${section.rooms
-        .map((room) => `${room.roomId},${room.lastTs},${room.unreadTotal},${room.unreadHighlight},${room.muted ? 1 : 0}`)
-        .join(";")}`,
-  );
-  return [locale, activeRoomId ?? "", ...parts].join("|");
-}
+  typing(on: boolean): void {
+    const room = activeRoom();
+    if (!room) return;
+    window.clearTimeout(this.typingTimer);
+    void this.worker.send({ type: "typing", roomId: room.roomId, on });
+    if (on) this.typingTimer = window.setTimeout(() => this.typing(false), 15000);
+  }
 
-function emptyRoom(roomId: string): RoomRecord {
-  return {
-    roomId,
-    kind: "room",
-    children: [],
-    name: roomId,
-    topic: "",
-    avatarMxc: null,
-    canonicalAlias: null,
-    isDirect: false,
-    membership: "leave",
-    selfMembership: "leave",
-    selfPowerLevel: 0,
-    memberCount: 0,
-    isEncrypted: false,
-    joinRule: "invite",
-    lastTs: 0,
-    lastEvent: null,
-    unreadTotal: 0,
-    unreadHighlight: 0,
-    readUpToEventId: null,
-    tags: [],
-    order: 0,
-    hasOlder: false,
-    updatedAt: 0,
-  };
+  togglePicker(mode: "emoji" | "sticker"): void {
+    this.shell.picker.toggle(mode);
+  }
+
+  activeRoom(): RoomSummary | null {
+    return activeRoom();
+  }
+
+  sections(): Record<SectionId, boolean> {
+    return state.settings.sections;
+  }
+
+  async refreshRooms(): Promise<void> {
+    const rooms = await this.local.rooms();
+    setState({ rooms: new Map(rooms.map((room) => [room.roomId, room])) });
+  }
+
+  get locale(): string {
+    return getLocale();
+  }
 }

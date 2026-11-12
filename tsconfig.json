@@ -18,10 +18,7 @@
     "useUnknownInCatchVariables": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "node"],
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "types": ["vite/client", "node"]
   },
   "include": ["src", "scripts", "test", "vite.config.ts", "vitest.config.ts"]
 }

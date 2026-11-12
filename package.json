@@ -5,8 +5,8 @@
   "type": "module",
   "description": "A fast, local-first Matrix client",
   "scripts": {
-    "dev": "tsx scripts/dev.ts",
-    "build": "tsx scripts/build.ts",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
     "verify": "tsx scripts/verify.ts",
     "code": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" --max-warnings=0",
@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "dompurify": "3.4.17",
-    "matrix-js-sdk": "45.1.0"
+    "matrix-js-sdk": "45.1.0",
+    "@matrix-org/matrix-sdk-crypto-wasm": "18.9.2"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

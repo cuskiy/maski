@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; connect-src *" />
+    <title>maski</title>
+    <meta name="description" content="快速、本地优先的 Matrix 客户端" />
+    <meta name="theme-color" content="#141414" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/src/styles/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="screen-auth" id="boot">
+        <div class="auth-card">
+          <p class="auth-brand">maski</p>
+          <h1 class="auth-title">快速、本地优先的 Matrix 客户端</h1>
+        </div>
+      </div>
+    </div>
+    <noscript>
+      <div class="screen-auth noscript">
+        <div class="auth-card">
+          <p class="auth-brand">maski</p>
+          <h1 class="auth-title">需要启用 JavaScript</h1>
+          <p class="auth-text">Matrix 同步和端到端加密都在浏览器中运行，因此这个客户端需要 JavaScript 才能启动。</p>
+          <p><a class="link" href="/">English</a></p>
+        </div>
+      </div>
+    </noscript>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

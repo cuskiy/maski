@@ -1,206 +1,175 @@
-import {
-  ACCOUNT_DB_VERSION,
-  ACCOUNT_STORES,
-  STORE,
-  UI_DB_VERSION,
-  UI_DB_NAME,
-  UI_STORES,
-  accountDb,
-  deleteOne,
-  getAll,
-  getOne,
-  openDb,
-  putOne,
-  requestResult,
-  transactionDone,
-} from "../data";
-import type {
-  DraftRecord,
-  MediaRecord,
-  EventRecord,
-  MemberRecord,
-  MetaRecord,
-  OutboxRecord,
-  PackRecord,
-  RoomRecord,
-  ScrollRecord,
-  SettingRecord,
-} from "../data/records";
-import { matchesTokens, searchTokens } from "../data/text";
+import { INDEX, STORE, UI_DB, UI_VERSION, accountDbName, upgradeAccount, upgradeUi } from "../core/schema.ts";
+import type { Draft, Member, Message, Pack, RoomSummary, SectionId } from "../core/types.ts";
 
-export interface ProjectionRead {
-  revision: number;
-  rooms: RoomRecord[];
-  events: EventRecord[];
-  members: MemberRecord[];
-  packs: PackRecord[];
-  outbox: OutboxRecord[];
+export interface Settings {
+  locale: "en" | "zh-CN" | null;
+  lastAccount: { hash: string; userId: string; name: string; avatar: string | null; baseUrl: string } | null;
+  sections: Record<SectionId, boolean>;
+  desktop: boolean;
+  preview: boolean;
+  keysReady: boolean;
 }
 
-export class MainDb {
+const DEFAULT_SETTINGS: Settings = {
+  locale: null,
+  lastAccount: null,
+  sections: { invites: true, favorites: true, direct: true, rooms: true, low: false },
+  desktop: false,
+  preview: true,
+  keysReady: false,
+};
+
+function request<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("indexeddb request failed"));
+  });
+}
+
+function done(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("indexeddb transaction failed"));
+  });
+}
+
+export class LocalDb {
   private account: IDBDatabase | null = null;
   private ui: IDBDatabase | null = null;
-  private hash: string | null = null;
 
-  async open(): Promise<void> {
-    if (!this.ui) {
-      this.ui = await openDb(UI_DB_NAME, UI_DB_VERSION, UI_STORES);
-    }
+  async openUi(): Promise<void> {
+    if (this.ui) return;
+    this.ui = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(UI_DB, UI_VERSION);
+      req.onupgradeneeded = () => upgradeUi(req.result);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error ?? new Error("cannot open the local database"));
+    });
   }
 
   async openAccount(hash: string): Promise<void> {
-    await this.open();
-    if (this.hash === hash && this.account) return;
-    this.account?.close();
-    this.account = await openDb(accountDb(hash), ACCOUNT_DB_VERSION, ACCOUNT_STORES);
-    this.hash = hash;
+    if (this.account) return;
+    this.account = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(accountDbName(hash));
+      req.onupgradeneeded = () => upgradeAccount(req.result);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error ?? new Error("cannot open the account database"));
+    });
+    this.account.onversionchange = () => this.closeAccount();
   }
 
   closeAccount(): void {
     this.account?.close();
     this.account = null;
-    this.hash = null;
   }
 
-  // Only the open room's timeline is read: every other room is a summary in
-  // `rooms`, and its events stay on disk until it is opened.
-  async readProjection(roomId: string | null): Promise<ProjectionRead> {
-    const account = this.requireAccount();
-    const [rooms, members, packs, outbox, meta] = await Promise.all([
-      getAll<RoomRecord>(account, STORE.rooms),
-      getAll<MemberRecord>(account, STORE.members),
-      getAll<PackRecord>(account, STORE.packs),
-      getAll<OutboxRecord>(account, STORE.outbox),
-      getOne<MetaRecord>(account, STORE.meta, "projectionRevision"),
-    ]);
-    const events = roomId ? await this.readRoomEvents(roomId) : [];
-    return {
-      revision: typeof meta?.value === "number" ? meta.value : 0,
-      rooms: rooms.toSorted((a, b) => b.lastTs - a.lastTs),
-      events: events.toSorted((a, b) => a.ts - b.ts),
-      members,
-      packs,
-      outbox,
-    };
-  }
-
-  // Read backwards so the newest `limit` rows are the ones that come back.
-  async readRoomEvents(roomId: string, limit = 2000): Promise<EventRecord[]> {
-    const account = this.requireAccount();
-    const tx = account.transaction(STORE.events, "readonly");
-    const index = tx.objectStore(STORE.events).index("roomTs");
-    const range = IDBKeyRange.bound(
-      [roomId, Number.MIN_SAFE_INTEGER, ""],
-      [roomId, Number.MAX_SAFE_INTEGER, "\uffff"],
-    );
-    const request = index.openCursor(range, "prev");
-    const events: EventRecord[] = [];
-    await new Promise<void>((resolve, reject) => {
-      request.addEventListener("success", () => {
-        const cursor = request.result;
-        if (!cursor || events.length >= limit) {
-          resolve();
-          return;
-        }
-        events.push(cursor.value as EventRecord);
-        cursor.continue();
-      });
-      request.addEventListener("error", () => reject(request.error ?? new Error("IndexedDB cursor failed")));
-    });
-    return events.toSorted((a, b) => a.ts - b.ts);
-  }
-
-  async search(query: string, roomId: string | null, limit: number): Promise<EventRecord[]> {
-    const tokens = searchTokens(query);
-    if (tokens.length === 0) return [];
-    const account = this.requireAccount();
-    const tx = account.transaction(STORE.events, "readonly");
-    const index = tx.objectStore(STORE.events).index("byToken");
-    const results = new Map<string, EventRecord>();
-    for (const token of tokens) {
-      const range = IDBKeyRange.bound(token, `${token}\uffff`);
-      const rows = (await requestResult(index.getAll(range))) as EventRecord[];
-      for (const row of rows) {
-        if (roomId && row.roomId !== roomId) continue;
-        if (!matchesTokens(row.tokens, tokens)) continue;
-        results.set(row.eventId, row);
-      }
-    }
-    return [...results.values()]
-      .toSorted((a, b) => b.ts - a.ts)
-      .slice(0, limit);
-  }
-
-  async writeOutbox(record: OutboxRecord): Promise<void> {
-    await putOne(this.requireAccount(), STORE.outbox, record);
-  }
-
-  async deleteOutbox(txnId: string): Promise<void> {
-    await deleteOne(this.requireAccount(), STORE.outbox, txnId);
-  }
-
-  async readMediaBlob(key: string): Promise<Blob | null> {
-    if (!this.account) return null;
-    const record = await getOne<MediaRecord>(this.account, STORE.media, key);
-    return record?.blob ?? null;
-  }
-
-  async readOutbox(): Promise<OutboxRecord[]> {
-    return getAll<OutboxRecord>(this.requireAccount(), STORE.outbox);
-  }
-
-  async readSettings(): Promise<Record<string, unknown>> {
-    const rows = await getAll<SettingRecord>(this.requireUi(), STORE.settings);
-    return Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  }
-
-  async writeSetting(key: string, value: unknown): Promise<void> {
-    await putOne(this.requireUi(), STORE.settings, { key, value } satisfies SettingRecord);
-  }
-
-  async lastAccountHash(): Promise<string | null> {
-    const row = await getOne<SettingRecord>(this.requireUi(), STORE.settings, "lastAccountHash");
-    return typeof row?.value === "string" ? row.value : null;
-  }
-
-  async readDraft(accountHash: string, roomId: string): Promise<DraftRecord | null> {
-    return (await getOne<DraftRecord>(this.requireUi(), STORE.drafts, [accountHash, roomId])) ?? null;
-  }
-
-  async writeDraft(record: DraftRecord): Promise<void> {
-    await putOne(this.requireUi(), STORE.drafts, record);
-  }
-
-  async deleteDraft(accountHash: string, roomId: string): Promise<void> {
-    await deleteOne(this.requireUi(), STORE.drafts, [accountHash, roomId]);
-  }
-
-  async readScroll(accountHash: string, roomId: string): Promise<ScrollRecord | null> {
-    return (await getOne<ScrollRecord>(this.requireUi(), STORE.scroll, [accountHash, roomId])) ?? null;
-  }
-
-  async writeScroll(record: ScrollRecord): Promise<void> {
-    await putOne(this.requireUi(), STORE.scroll, record);
-  }
-
-  async clearAccountUi(accountHash: string): Promise<void> {
-    const ui = this.requireUi();
-    const tx = ui.transaction([STORE.drafts, STORE.scroll, STORE.settings], "readwrite");
-    tx.objectStore(STORE.drafts).delete(IDBKeyRange.bound([accountHash, ""], [accountHash, "\uffff"]));
-    tx.objectStore(STORE.scroll).delete(IDBKeyRange.bound([accountHash, ""], [accountHash, "\uffff"]));
-    tx.objectStore(STORE.settings).delete("lastAccountHash");
-    tx.objectStore(STORE.settings).delete("lastSession");
-    tx.objectStore(STORE.settings).delete(`keyGate:${accountHash}`);
-    await transactionDone(tx);
-  }
-
-  private requireAccount(): IDBDatabase {
-    if (!this.account) throw new Error("Account database is not open");
+  private handle(): IDBDatabase {
+    if (!this.account) throw new Error("account database is not open");
     return this.account;
   }
 
-  private requireUi(): IDBDatabase {
-    if (!this.ui) throw new Error("UI database is not open");
-    return this.ui;
+  async rooms(): Promise<RoomSummary[]> {
+    const tx = this.handle().transaction(STORE.rooms, "readonly");
+    return (await request(tx.objectStore(STORE.rooms).getAll())) as RoomSummary[];
+  }
+
+  async room(roomId: string): Promise<RoomSummary | undefined> {
+    const tx = this.handle().transaction(STORE.rooms, "readonly");
+    return (await request(tx.objectStore(STORE.rooms).get(roomId))) as RoomSummary | undefined;
+  }
+
+  async window(roomId: string, limit: number): Promise<Message[]> {
+    const tx = this.handle().transaction(STORE.events, "readonly");
+    const index = tx.objectStore(STORE.events).index(INDEX.eventsRoomTs);
+    const range = IDBKeyRange.bound([roomId, 0, ""], [roomId, Number.MAX_SAFE_INTEGER, "\uffff"]);
+    const rows: Message[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const cursor = index.openCursor(range, "prev");
+      cursor.onsuccess = () => {
+        const at = cursor.result;
+        if (!at || rows.length >= limit) {
+          resolve();
+          return;
+        }
+        rows.push(at.value as Message);
+        at.continue();
+      };
+      cursor.onerror = () => reject(cursor.error ?? new Error("cursor failed"));
+    });
+    return rows.toReversed();
+  }
+
+  async message(id: string): Promise<Message | undefined> {
+    const tx = this.handle().transaction(STORE.events, "readonly");
+    return (await request(tx.objectStore(STORE.events).get(id))) as Message | undefined;
+  }
+
+  async putMessage(message: Message): Promise<void> {
+    const tx = this.handle().transaction(STORE.events, "readwrite");
+    tx.objectStore(STORE.events).put(message);
+    await done(tx);
+  }
+
+  async deleteMessage(id: string): Promise<void> {
+    const tx = this.handle().transaction(STORE.events, "readwrite");
+    tx.objectStore(STORE.events).delete(id);
+    await done(tx);
+  }
+
+  async members(roomId: string): Promise<Member[]> {
+    const tx = this.handle().transaction(STORE.members, "readonly");
+    const index = tx.objectStore(STORE.members).index(INDEX.membersRoom);
+    return (await request(index.getAll(roomId))) as Member[];
+  }
+
+  async packs(): Promise<Pack[]> {
+    const tx = this.handle().transaction(STORE.packs, "readonly");
+    return (await request(tx.objectStore(STORE.packs).getAll())) as Pack[];
+  }
+
+  async media(key: string): Promise<{ data: Blob; mime: string } | undefined> {
+    const tx = this.handle().transaction(STORE.media, "readonly");
+    const row = (await request(tx.objectStore(STORE.media).get(key))) as { data: Blob; mime: string } | undefined;
+    return row;
+  }
+
+  async settings(): Promise<Settings> {
+    await this.openUi();
+    const db = this.ui;
+    if (!db) return { ...DEFAULT_SETTINGS };
+    const tx = db.transaction("settings", "readonly");
+    const row = (await request(tx.objectStore("settings").get("settings"))) as { value: Partial<Settings> } | undefined;
+    return { ...DEFAULT_SETTINGS, ...row?.value };
+  }
+
+  async saveSettings(patch: Partial<Settings>): Promise<Settings> {
+    const next = { ...(await this.settings()), ...patch };
+    await this.openUi();
+    const db = this.ui;
+    if (!db) return next;
+    const tx = db.transaction("settings", "readwrite");
+    tx.objectStore("settings").put({ key: "settings", value: next });
+    await done(tx);
+    return next;
+  }
+
+  async draft(accountHash: string, roomId: string): Promise<Draft | null> {
+    await this.openUi();
+    const db = this.ui;
+    if (!db) return null;
+    const tx = db.transaction("drafts", "readonly");
+    const row = (await request(tx.objectStore("drafts").get(`${accountHash}:${roomId}`))) as { value: Draft } | undefined;
+    return row?.value ?? null;
+  }
+
+  async saveDraft(accountHash: string, roomId: string, draft: Draft): Promise<void> {
+    await this.openUi();
+    const db = this.ui;
+    if (!db) return;
+    const tx = db.transaction("drafts", "readwrite");
+    const store = tx.objectStore("drafts");
+    if (draft.text.length === 0 && draft.marks.length === 0 && !draft.reply && !draft.edit) store.delete(`${accountHash}:${roomId}`);
+    else store.put({ key: `${accountHash}:${roomId}`, value: draft });
+    await done(tx);
   }
 }

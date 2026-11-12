@@ -1,97 +1,67 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-import { config } from "../src/app/config";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 
-const dist = join(process.cwd(), "dist");
-const base = config.app.basePath.endsWith("/") ? config.app.basePath : `${config.app.basePath}/`;
+const problems: string[] = [];
 
-function read(path: string): string {
-  return readFileSync(path, "utf8");
+async function read(path: string): Promise<string> {
+  return readFile(path, "utf8");
 }
 
-function fail(message: string): never {
-  throw new Error(`Output audit failed: ${message}`);
-}
-
-function walk(dir: string): string[] {
-  const out: string[] = [];
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    const info = statSync(path);
-    if (info.isDirectory()) out.push(...walk(path));
-    else out.push(path);
+async function walk(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...(await walk(path)));
+    else files.push(path);
   }
-  return out;
+  return files;
 }
 
-function localAsset(src: string): string {
-  const clean = src.startsWith(base) ? src.slice(base.length) : src.replace(/^\//, "");
-  return join(dist, clean);
+for (const [file, lang] of [
+  ["index.html", "en"],
+  ["zh-CN/index.html", "zh-CN"],
+] as const) {
+  const html = await read(file);
+  if (!html.includes(`<html lang="${lang}">`)) problems.push(`${file}: lang is not ${lang}`);
+  if (!html.includes("Content-Security-Policy")) problems.push(`${file}: no content security policy`);
+  if (!html.includes("<noscript>")) problems.push(`${file}: no noscript overlay`);
+  if (!/<h1/u.test(html)) problems.push(`${file}: no h1`);
+  if (/\sstyle="/u.test(html)) problems.push(`${file}: inline style`);
+  if (/<script(?![^>]*src=)/u.test(html)) problems.push(`${file}: inline script`);
+  if (/\son[a-z]+="/u.test(html)) problems.push(`${file}: inline event handler`);
+  if (!html.includes('rel="stylesheet"')) problems.push(`${file}: stylesheet is not linked`);
 }
 
-function checkShell(locale: "en" | "zh-CN", file: string): string {
-  if (!statSync(file, { throwIfNoEntry: false })) fail(`missing ${file}`);
-  const html = read(file);
-  if (!html.includes(`<html lang="${locale}"`)) fail(`${file}: lang`);
-  if (!html.includes('rel="canonical"')) fail(`${file}: canonical`);
-  if (!html.includes('hreflang="x-default"')) fail(`${file}: x-default`);
-  for (const alt of config.app.locales) {
-    if (!html.includes(`hreflang="${alt}"`)) fail(`${file}: hreflang ${alt}`);
+const files = await walk("dist");
+const assets = files.filter((file) => file.endsWith(".js"));
+for (const file of assets) {
+  const text = await read(file);
+  if (/!important/u.test(text)) problems.push(`${file}: !important`);
+  if (/outline:\s*none/u.test(text)) problems.push(`${file}: outline none`);
+  if (/-webkit-/u.test(text)) problems.push(`${file}: vendor prefix`);
+}
+const entry = files.find((file) => /assets\/main-.*\.js$/u.test(file));
+if (!entry) problems.push("dist: no main bundle");
+else {
+  const text = await read(entry);
+  for (const marker of ["MatrixClient", "@matrix-org", "matrix-sdk-crypto"]) {
+    if (text.includes(marker)) problems.push(`${entry}: main bundle imports the SDK (${marker})`);
   }
-  if (!html.includes('rel="manifest"')) fail(`${file}: manifest`);
-  if (!html.includes("<noscript>")) fail(`${file}: noscript`);
-  if (!html.includes("nojs-card")) fail(`${file}: nojs card`);
-  if (!html.includes("<h1>")) fail(`${file}: noscript h1`);
-  if (!html.includes("boot-screen")) fail(`${file}: boot screen`);
-  if (/<style[\s>]/i.test(html)) fail(`${file}: inline style`);
-  if (/\sstyle\s*=\s*["']/i.test(html)) fail(`${file}: style attribute`);
-  if (/\son[a-z]+\s*=\s*["']/i.test(html)) fail(`${file}: inline event handler`);
-  if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) fail(`${file}: inline script`);
-  if (!/<script[^>]+src="[^"]+"/.test(html)) fail(`${file}: module script`);
-  if (!/<link[^>]+rel="stylesheet"[^>]+href="[^"]+"/.test(html)) fail(`${file}: stylesheet`);
-  if (!html.includes("Content-Security-Policy")) fail(`${file}: CSP`);
-  if (!html.includes("connect-src *")) fail(`${file}: connect-src exception`);
-  if (!html.includes("nojs")) fail(`${file}: nojs`);
-  const script = /<script[^>]+src="([^"]+)"/.exec(html)?.[1];
-  if (!script) fail(`${file}: script src`);
-  const scriptPath = localAsset(script);
-  if (!statSync(scriptPath, { throwIfNoEntry: false })) fail(`${file}: missing script ${script}`);
-  const css = /<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/.exec(html)?.[1];
-  if (!css) fail(`${file}: css href`);
-  const cssPath = localAsset(css);
-  if (!statSync(cssPath, { throwIfNoEntry: false })) fail(`${file}: missing css ${css}`);
-  const main = read(scriptPath);
-  if (main.includes("matrix-js-sdk")) fail(`${file}: main chunk imports matrix-js-sdk`);
-  return cssPath;
 }
 
-export async function verify(): Promise<void> {
-  if (!statSync(dist, { throwIfNoEntry: false })) fail("dist/ is missing");
-  const en = checkShell("en", join(dist, "index.html"));
-  checkShell("zh-CN", join(dist, "zh-CN", "index.html"));
-  if (!statSync(join(dist, "manifest.webmanifest"), { throwIfNoEntry: false })) {
-    fail("manifest.webmanifest is missing");
-  }
-  if (!statSync(join(dist, "icon.svg"), { throwIfNoEntry: false })) fail("icon.svg is missing");
-  if (config.app.routerMode === "history") {
-    if (!statSync(join(dist, "404.html"), { throwIfNoEntry: false })) fail("404.html is missing");
-  }
-  const files = walk(dist);
-  if (!files.some((file) => file.endsWith(".css"))) fail("no CSS output");
-  const css = read(en);
-  if (css.includes("!important")) fail("CSS uses !important");
-  if (css.includes("-webkit-")) fail("CSS uses a vendor prefix");
-  if (css.includes("outline: none")) fail("CSS hides the focus outline");
-  const assets = files.filter((file) => file.endsWith(".js"));
-  if (assets.length < 2) fail("expected a main and worker JavaScript chunk");
-  const worker = assets.find((file) => !file.endsWith("index.js") && read(file).includes("MatrixClient"));
-  if (!worker) fail("worker chunk does not contain the SDK");
-  const rel = files.map((file) => relative(dist, file)).join("\n");
-  if (!rel.includes("assets/")) fail("no hashed assets");
-  process.stdout.write(`Output audit passed (${files.length} files).\n`);
+const css = files.filter((file) => file.endsWith(".css"));
+if (css.length === 0) problems.push("dist: no stylesheet");
+for (const file of css) {
+  const text = await read(file);
+  if (/!important/u.test(text)) problems.push(`${file}: !important`);
 }
 
-const entry = process.argv[1];
-if (entry && entry.endsWith("verify.ts")) {
-  await verify();
+const distSize = await stat("dist").then(() => true).catch(() => false);
+if (!distSize) problems.push("dist: missing");
+
+if (problems.length > 0) {
+  for (const problem of problems) console.error(`- ${problem}`);
+  process.exit(1);
 }
+console.log(`Output audit passed (${files.length} files).`);

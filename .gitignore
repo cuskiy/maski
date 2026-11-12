@@ -1,20 +1,6 @@
-node_modules/
-dist/
-coverage/
-*.tsbuildinfo
-index.html
-zh-CN/
-404.html
-manifest.webmanifest
-public/manifest.webmanifest
-public/icon.svg
-public/.nojekyll
-.direnv/
-result
-blog/
-git/
+node_modules
+dist
 *.log
-
-# pi session exports and agent state
-pi-session-*.html
-.pi/
+/tmp
+.screenshots
+backup
