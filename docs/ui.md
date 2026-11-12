@@ -1,70 +1,86 @@
 # Interface
 
+The visual language is in `AGENTS.md` §1. This document says how the interface is built from
+it: which element owns which region, and which rule a new piece reuses.
+
 ## Shell
 
-Two regions: navigation and content. `100dvh`, no page scroll. One container query at
-`44rem` on `body` turns the shell into two screens — `data-view="home"` shows the
-navigation, `data-view="room"` shows the content — and reveals the back control. There is
-no second layout and no width media query.
+```
+.shell                     100dvh grid: navigation, content
+  .nav                     quick actions, sections, account row
+  .content                 header, timeline, composer
+  .connection-banner       appears only while the client cannot sync
+```
 
-Navigation: quick actions in two columns, then the sections from the selector, then the
-account row. A section header toggles the section and the choice is stored. A room row is
-avatar, name, time, preview and badge; right-click and long-press open the row menu.
+One container query on `body` at `44rem` switches `data-view` between `home` and `room`; a
+room shows the back control. Nothing else changes with width.
 
-Header: back control, room name, a subtitle that shows typing or the member count, and the
-room settings entry. An invite shows the invite card in place of the timeline.
+`Shell.render()` runs on a state change and rebuilds the navigation, the header, the invite
+panel, the intro panel and the timeline. The composer, the picker and an open dialog are not
+rebuilt by it.
 
-## Timeline
+## Regions
 
-`<ol>` of rows. Display items are day separators and messages. A message row is avatar slot,
-body, bubble. The bubble holds an optional quote, the content, the time, and the reactions.
-Own rows mirror the layout and place the avatar on the right.
+| Region | Built by | Notes |
+| --- | --- | --- |
+| Quick actions | `shell.ts` | five rows in two columns, always visible |
+| Sections | `shell.ts` | one `<details>`-like pair of a header and a body; the open state is stored |
+| Room row | `shell.ts` | avatar, name, time, preview, badge; a menu on right-click and long press |
+| Room header | `shell.ts` | back control, avatar, name, subtitle, room settings |
+| Invite panel | `shell.ts` | replaces the timeline until the invitation is answered |
+| Intro panel | `shell.ts` | shown for a joined room with no messages |
+| Timeline | `timeline.ts` | keyed `<ol>` of day separators and rows |
+| Composer | `composer.ts` | attach, field with emoji, send; the tray sits above |
+| Picker | `picker.ts` | popover above the composer, fixed height, tabs per pack |
+| Dialogs | `dialog-kit.ts` + `dialogs/` | one frame, one dialog at a time |
+| Menu, toast, viewer | `overlay.ts`, `media.ts` | fixed layers outside the shell |
 
-- Grouping: same sender, same day, within five minutes. The avatar and the name appear at
-  the start of a group only.
-- Media and stickers have no bubble; the time becomes a chip on the picture.
-- A queued or failed row shows a status line under the bubble; a failed row is a button.
-- Reactions are buttons; the current user's reactions are marked; a click toggles.
+## Timeline rows
 
-The list is keyed by message id. An update rebuilds the row in place, so an edit, a
-reaction or a status change never removes a node the reader is looking at.
+A row is an `<li>` with `data-id`. Its class carries three facts: `row-own` or `row-other`,
+`row-start` when it opens a group, `row-state` for a membership line. The row is focusable
+so the message menu has a keyboard path as well as a pointer one.
 
-Scroll: at the bottom, a new row keeps the bottom. Scrolled away, the position is kept and
-the older page loads when the top is reached, with the height difference added back.
+Inside: an avatar slot (empty until the group starts), a column with the sender name at a
+group start, the bubble, an optional status line and the reactions.
+
+The bubble owns its content: an optional quote, the text or the media, and the time. A media
+message has no bubble surface; the time becomes `.bubble-time-chip` over the picture.
+
+The list is keyed by message id; an update rebuilds the row's children and keeps the node, so
+a reaction or an edit never removes what the reader is looking at. A signature string decides
+whether the rebuild is needed at all.
 
 ## Composer
 
-Attachment, field, send. The field is a `<textarea>`; the emoji control sits inside the same
-surface and opens the picker; the send control is disabled only when there is neither text
-nor an attachment.
+Three parts in one row: attach, the field group (textarea plus emoji control), send. The field
+grows to `--composer-max` and then scrolls; the text is a plain textarea, and marks are kept
+beside it (`ui/marks.ts`).
 
-Styled text is a range model over the plain text. The menu on a selection offers bold,
-italic, underline, strikethrough, code and clear; Ctrl/Cmd+B, I, U and Shift+X apply the
-same marks. When the field loses focus and a mark exists, the formatted text is rendered in
-place; a pointer on that rendering maps back to the plain text offset and returns to
-editing at that character. The caret can therefore never disagree with a styled copy.
+When the field is not focused and the draft has a mark, the formatted draft is rendered in
+place; a pointer on that rendering maps back to a plain offset and returns to editing there.
 
-`formatted_body` is generated from the marks, and a custom emoji shortcode that resolves to
-a pack image becomes `<img data-mx-emoticon>` there while the body keeps the shortcode.
-
-Enter inserts a newline, Ctrl/Cmd+Enter and the send button send. The field grows to the
-composer cap and then scrolls. The tray holds files; a paste and a drop add to it.
+The tray holds attachments with a preview each; an upload reports progress in the row, not in
+the composer.
 
 ## Picker
 
-One panel above the composer with a search field, a tab per pack and a fixed height, so
-switching a pack never moves the controls underneath. The emoji surface lists recently used
-images first, then Unicode emoji; the sticker surface lists stickers and sends on click.
-A pack that offers both appears on both surfaces.
+A popover anchored above the composer: a search field and a close control, a tab per pack, a
+fixed-height grid. Switching a pack never moves the controls underneath. The emoji surface
+lists recently used pictures first, then Unicode emoji; the sticker surface sends on click.
 
 ## Dialogs
 
-Native `<dialog>`, one at a time, opened from the URL. The browser owns the focus trap,
-Escape and the return of focus. Settings, room settings, profile, search, join, create and
-new message share the same frame: title, scrolling body, optional footer. The close control
-and Escape both go through `app.closeDialog`, which also rewrites the URL.
+`dialog-kit.ts` owns the frame: title, scrolling body, optional footer, the close control and
+Escape. Opening replaces the previous dialog. `dialogs.ts` maps a name from the URL to a
+builder; `dialogs/` holds settings, room settings, a person's card and the four action
+dialogs.
+
+Settings is one scroll of sections separated by hairlines: account, notifications, security
+(sessions and verification), about. Room settings is general, encryption, members, mute,
+leave; the member list offers moderation only when the account has the power for it.
 
 ## Feedback
 
-One toast host, one menu host, one media viewer. A toast is the only visible error and
-confirmation surface; internal state is never shown.
+One toast host, one menu host, one media viewer. A toast is the only confirmation surface. A
+failure inside a dialog is text in that dialog, not a toast.
