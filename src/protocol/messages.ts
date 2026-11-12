@@ -274,6 +274,11 @@ export interface OutboxEvent {
   attempts?: number;
 }
 
+export interface SessionEvent {
+  type: "session";
+  session: SessionSummary;
+}
+
 export interface ReadyEvent {
   type: "ready";
   session: SessionSummary | null;
@@ -343,6 +348,7 @@ export type WorkerToClient =
   | DeltaEvent
   | ReloadEvent
   | OutboxEvent
+  | SessionEvent
   | TypingEvent
   | SyncEvent
   | ProgressEvent

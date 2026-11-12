@@ -248,6 +248,9 @@ export class App {
       case "ready":
         this.handleReady(event.session);
         break;
+      case "session":
+        this.store.setSession(event.session);
+        break;
       case "reload":
         void this.reloadProjection();
         break;

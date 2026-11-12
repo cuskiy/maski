@@ -369,22 +369,9 @@ export class Runtime {
   }
 
   private async onTimeline(event: MatrixEvent, room: Room): Promise<void> {
+    if (await this.projectRelation(event, room)) return;
     const client = this.requireClient();
     const projection = this.requireProjection();
-    const relation = relationFromEvent(event, client.getSafeUserId());
-    if (relation) {
-      const target = await projection.getEvent(relation.targetEventId);
-      const updated = await projection.applyRelation(relation, target ?? null);
-      if (!updated) return;
-      const roomRecord = normalizeRoom(room, client.getSafeUserId(), directRoomIds(client), client);
-      await projection.putRooms([roomRecord]);
-      await projection.bumpRevision();
-      this.post({
-        type: "delta",
-        delta: await projection.delta([roomRecord], [updated], [], [], [], [], "SYNCING"),
-      });
-      return;
-    }
     const normalized = normalizeEvent(event, room);
     if (!normalized) return;
     await projection.putEvents([normalized]);
@@ -440,9 +427,30 @@ export class Runtime {
     });
   }
 
+  // A relation that only becomes readable after decryption still has to reach the
+  // event it changes, so both paths share this.
+  private async projectRelation(event: MatrixEvent, room: Room): Promise<boolean> {
+    const client = this.requireClient();
+    const projection = this.requireProjection();
+    const relation = relationFromEvent(event, client.getSafeUserId());
+    if (!relation) return false;
+    const target = await projection.getEvent(relation.targetEventId);
+    const updated = await projection.applyRelation(relation, target ?? null);
+    if (!updated) return true;
+    const roomRecord = normalizeRoom(room, client.getSafeUserId(), directRoomIds(client), client);
+    await projection.putRooms([roomRecord]);
+    await projection.bumpRevision();
+    this.post({
+      type: "delta",
+      delta: await projection.delta([roomRecord], [updated], [], [], [], [], "SYNCING"),
+    });
+    return true;
+  }
+
   private async onDecrypted(event: MatrixEvent): Promise<void> {
     const room = event.getRoomId() ? this.requireClient().getRoom(event.getRoomId() ?? "") : null;
     if (!room) return;
+    if (await this.projectRelation(event, room)) return;
     const normalized = normalizeEvent(event, room);
     if (!normalized) return;
     const projection = this.requireProjection();
@@ -804,6 +812,7 @@ export class Runtime {
   private async setDisplayName(payloadValue: unknown): Promise<Record<string, never>> {
     const displayName = readStringField(readRecord(payloadValue, "payload"), "displayName");
     await this.requireClient().setDisplayName(displayName);
+    this.post({ type: "session", session: this.sessionSummary() });
     return {};
   }
 
@@ -818,6 +827,7 @@ export class Runtime {
     });
     if (!uploaded.content_uri) throw new Error("Avatar upload failed");
     await this.requireClient().setAvatarUrl(uploaded.content_uri);
+    this.post({ type: "session", session: this.sessionSummary() });
     return { avatarMxc: uploaded.content_uri };
   }
 
