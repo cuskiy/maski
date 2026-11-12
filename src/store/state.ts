@@ -7,7 +7,6 @@ import type {
   Message,
   Phase,
   RoomSummary,
-  SectionId,
   Session,
   TypingUser,
   VerifyState,
@@ -98,10 +97,3 @@ export function sortRooms(rooms: RoomSummary[]): RoomSummary[] {
   return rooms.toSorted((a, b) => b.lastTs - a.lastTs);
 }
 
-export function sectionOf(room: RoomSummary): SectionId {
-  if (room.membership === "invite") return "invites";
-  if (room.favorite) return "favorites";
-  if (room.isDirect) return "direct";
-  if (room.lowPriority) return "low";
-  return "rooms";
-}

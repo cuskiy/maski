@@ -1,7 +1,7 @@
 import { config } from "../app/config.ts";
 import type { Message, RoomSummary, SectionId } from "../core/types.ts";
 import { dayLabel, t } from "../i18n/index.ts";
-import { sectionOf, sortRooms, state } from "./state.ts";
+import { sortRooms, state } from "./state.ts";
 
 export interface DayItem {
   kind: "day";
@@ -32,6 +32,14 @@ export function timelineItems(messages: Message[]): TimelineItem[] {
     previous = message;
   }
   return items;
+}
+
+export function sectionOf(room: RoomSummary): SectionId {
+  if (room.membership === "invite") return "invites";
+  if (room.favorite) return "favorites";
+  if (room.isDirect) return "direct";
+  if (room.lowPriority) return "low";
+  return "rooms";
 }
 
 export interface Section {
