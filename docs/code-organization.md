@@ -16,7 +16,10 @@ src/
     messages.ts     Command, Event, Reply and the reply payloads
   worker/
     worker.ts       message dispatch, error mapping
-    api.ts          the dispatcher: session, gate, rooms, send, media
+    api.ts          the dispatcher: lifecycle, gate, sending, reads
+    rooms.ts        join, create, direct, tags, mute, profile, room state
+    media.ts        authenticated fetch, decrypt, encrypt-then-upload
+    verify.ts       one SAS verification and the device list
     db.ts           the account database, worker side
     normalize.ts    MatrixEvent -> record, the only normalizer
     project.ts      the sync pass and pack discovery
