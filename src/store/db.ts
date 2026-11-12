@@ -61,16 +61,18 @@ export class MainDb {
     this.hash = null;
   }
 
-  async readProjection(): Promise<ProjectionRead> {
+  // Only the open room's timeline is read: every other room is a summary in
+  // `rooms`, and its events stay on disk until it is opened.
+  async readProjection(roomId: string | null): Promise<ProjectionRead> {
     const account = this.requireAccount();
-    const [rooms, events, members, packs, outbox, meta] = await Promise.all([
+    const [rooms, members, packs, outbox, meta] = await Promise.all([
       getAll<RoomRecord>(account, STORE.rooms),
-      getAll<EventRecord>(account, STORE.events),
       getAll<MemberRecord>(account, STORE.members),
       getAll<PackRecord>(account, STORE.packs),
       getAll<OutboxRecord>(account, STORE.outbox),
       getOne<MetaRecord>(account, STORE.meta, "projectionRevision"),
     ]);
+    const events = roomId ? await this.readRoomEvents(roomId) : [];
     return {
       revision: typeof meta?.value === "number" ? meta.value : 0,
       rooms: rooms.toSorted((a, b) => b.lastTs - a.lastTs),
@@ -81,7 +83,8 @@ export class MainDb {
     };
   }
 
-  async readRoomEvents(roomId: string): Promise<EventRecord[]> {
+  // Read backwards so the newest `limit` rows are the ones that come back.
+  async readRoomEvents(roomId: string, limit = 2000): Promise<EventRecord[]> {
     const account = this.requireAccount();
     const tx = account.transaction(STORE.events, "readonly");
     const index = tx.objectStore(STORE.events).index("roomTs");
@@ -89,7 +92,20 @@ export class MainDb {
       [roomId, Number.MIN_SAFE_INTEGER, ""],
       [roomId, Number.MAX_SAFE_INTEGER, "\uffff"],
     );
-    const events = (await requestResult(index.getAll(range))) as EventRecord[];
+    const request = index.openCursor(range, "prev");
+    const events: EventRecord[] = [];
+    await new Promise<void>((resolve, reject) => {
+      request.addEventListener("success", () => {
+        const cursor = request.result;
+        if (!cursor || events.length >= limit) {
+          resolve();
+          return;
+        }
+        events.push(cursor.value as EventRecord);
+        cursor.continue();
+      });
+      request.addEventListener("error", () => reject(request.error ?? new Error("IndexedDB cursor failed")));
+    });
     return events.toSorted((a, b) => a.ts - b.ts);
   }
 

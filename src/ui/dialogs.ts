@@ -1,5 +1,6 @@
 import { el } from "./dom";
 import { iconButton } from "./icons";
+import { t } from "../i18n";
 
 export interface DialogOptions {
   title: string;
@@ -17,10 +18,11 @@ export class DialogHost {
     this.dialog = el("dialog", {
       attrs: { "aria-modal": "true" },
       on: {
-        close: () => {
-          const options = this.current;
-          this.current = null;
-          options?.onClose?.();
+        // Escape runs the same path as every other close, so the queued close event
+        // of a replaced dialog can never reach the one that replaced it.
+        cancel: (event) => {
+          event.preventDefault();
+          this.close();
         },
         click: (event) => {
           if (event.target === this.dialog) this.close();
@@ -35,13 +37,13 @@ export class DialogHost {
   }
 
   open(options: DialogOptions): void {
-    if (this.dialog.open) this.close();
+    this.close();
     this.current = options;
     const titleId = `dialog-title-${crypto.randomUUID()}`;
     const card = el("div", { class: "dialog-card" }, [
       el("div", { class: "dialog-head" }, [
         el("h2", { text: options.title, id: titleId }),
-        iconButton("Close", "close", () => this.close()),
+        iconButton(t("common.close"), "close", () => this.close()),
       ]),
       el("div", { class: "dialog-body" }, [options.body]),
       options.footer ? el("div", { class: "dialog-foot" }, [options.footer]) : null,
@@ -52,6 +54,10 @@ export class DialogHost {
   }
 
   close(): void {
+    const options = this.current;
+    if (!options) return;
+    this.current = null;
     if (this.dialog.open) this.dialog.close();
+    options.onClose?.();
   }
 }

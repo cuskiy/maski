@@ -2,15 +2,12 @@ import type { MediaPayload, MediaResult } from "../protocol";
 import type { WorkerClient } from "../matrix/client";
 import { mediaCacheKey } from "../data/ids";
 
-interface Entry {
-  url: string;
-  refs: number;
-}
-
+// Object urls stay alive until they are evicted, so a row that scrolls back into
+// view reuses the decoded image instead of decoding it again.
 const maxEntries = 240;
 
 export class MediaCache {
-  private readonly entries = new Map<string, Entry>();
+  private readonly entries = new Map<string, string>();
   private readonly pending = new Map<string, Promise<string | null>>();
   private readonly client: WorkerClient;
 
@@ -20,12 +17,11 @@ export class MediaCache {
 
   async get(request: MediaPayload): Promise<string | null> {
     const key = request.mediaKey || mediaCacheKey(request.mxc, request.width, request.height, request.method, null);
-    const entry = this.entries.get(key);
-    if (entry) {
-      entry.refs += 1;
+    const cached = this.entries.get(key);
+    if (cached) {
       this.entries.delete(key);
-      this.entries.set(key, entry);
-      return entry.url;
+      this.entries.set(key, cached);
+      return cached;
     }
     const pending = this.pending.get(key);
     if (pending) return pending;
@@ -38,25 +34,15 @@ export class MediaCache {
     }
   }
 
-  release(key: string): void {
-    const entry = this.entries.get(key);
-    if (!entry) return;
-    entry.refs -= 1;
-    if (entry.refs > 0) return;
-    URL.revokeObjectURL(entry.url);
-    this.entries.delete(key);
-  }
-
-  releaseAll(): void {
-    for (const entry of this.entries.values()) URL.revokeObjectURL(entry.url);
+  clear(): void {
+    for (const url of this.entries.values()) URL.revokeObjectURL(url);
     this.entries.clear();
   }
 
   private evict(): void {
-    for (const [key, entry] of this.entries) {
+    for (const [key, url] of this.entries) {
       if (this.entries.size <= maxEntries) break;
-      if (entry.refs > 1) continue;
-      URL.revokeObjectURL(entry.url);
+      URL.revokeObjectURL(url);
       this.entries.delete(key);
     }
   }
@@ -65,7 +51,7 @@ export class MediaCache {
     try {
       const result = await this.client.request<MediaResult>("media", request);
       const url = URL.createObjectURL(new Blob([result.buffer], { type: result.mime }));
-      this.entries.set(key, { url, refs: 1 });
+      this.entries.set(key, url);
       this.evict();
       return url;
     } catch {

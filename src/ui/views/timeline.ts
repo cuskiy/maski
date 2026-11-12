@@ -1,8 +1,9 @@
 import type { AppSnapshot } from "../../store/app-store";
+import { config, type Locale } from "../../app/config";
 import type { EventRecord, MemberRecord, OutboxRecord, RoomRecord } from "../../data/records";
 import { displayName, dayLabel, type TimelineItem } from "../../store/selectors";
-import { formatTime, t } from "../../i18n";
-import { el } from "../dom";
+import { formatDate, formatTime, t } from "../../i18n";
+import { el, initial } from "../dom";
 import { icon } from "../icons";
 import { bindActionTrigger, type ActionPosition } from "../action-menu";
 import { KeyedList } from "../keyed-list";
@@ -156,7 +157,7 @@ export class TimelineView {
 
   private createItem(item: TimelineItem): HTMLElement {
     if (item.type === "day") {
-      return el("li", { class: "day-separator", text: dayText(item.ts) });
+      return el("li", { class: "day-separator", text: dayText(this.snapshot?.ui.locale ?? config.app.defaultLocale, item.ts) });
     }
     if (item.type === "older") {
       return el("li", { class: "day-separator" }, [
@@ -179,7 +180,7 @@ export class TimelineView {
 
   // The selector rebuilds every item each render, so the signature decides whether a
   // row is already correct. Replacing a row would drop focus and an opened preview.
-  private updateItem(node: HTMLElement, item: TimelineItem): void {
+  private updateItem(node: HTMLElement, item: TimelineItem): HTMLElement | void {
     const signature = itemSignature(item);
     if (this.signatures.get(node) === signature) {
       this.updateReactions(node, item);
@@ -188,6 +189,7 @@ export class TimelineView {
     const next = this.createItem(item);
     this.signatures.set(next, signature);
     node.replaceWith(next);
+    return next;
   }
 
   private updateReactions(node: HTMLElement, item: TimelineItem): void {
@@ -216,7 +218,7 @@ export class TimelineView {
         attrs: { type: "button", "aria-label": sender, tabindex: item.showAvatar ? "0" : "-1" },
         on: { click: () => this.callbacks.onProfile(event.senderId) },
       },
-      [initialNode(sender)],
+      [el("span", { text: initial(sender) })],
     );
     if (item.showAvatar) this.loadAvatar(avatar, member);
     const bubble = el("div", { class: "event-bubble" }, [
@@ -309,7 +311,7 @@ export class TimelineView {
           on: { click: () => this.callbacks.onCancelOutbox(outbox.txnId) },
         }, [icon("close")]),
       ]),
-      el("div", { class: "event-avatar avatar" }, [initialNode(snapshot.session?.displayName ?? "?")]),
+      el("div", { class: "event-avatar avatar" }, [el("span", { text: initial(snapshot.session?.displayName ?? "?") })]),
       el("div", { class: "event-content" }, [pendingBubble]),
     ]);
   }
@@ -464,7 +466,9 @@ export class TimelineView {
   }
 
   private replyNode(event: EventRecord): HTMLElement {
+    const snapshot = this.snapshot;
     const target = event.replyTo?.eventId;
+    const sender = snapshot ? displayName(snapshot, event.roomId, event.replyTo?.senderId ?? "") : "";
     return el("button", {
       class: "event-reply",
       attrs: { type: "button" },
@@ -474,7 +478,7 @@ export class TimelineView {
         },
       },
     }, [
-      el("strong", { text: displayName(this.snapshot as AppSnapshot, event.roomId, event.replyTo?.senderId ?? "") }),
+      el("strong", { text: sender }),
       el("span", { text: event.replyTo?.body ?? "" }),
     ]);
   }
@@ -579,15 +583,9 @@ function stateText(snapshot: AppSnapshot, event: EventRecord, room: RoomRecord):
   }
 }
 
-function dayText(ts: number): string {
+function dayText(locale: Locale, ts: number): string {
   const label = dayLabel(ts);
   if (label === "today") return t("time.today");
   if (label === "yesterday") return t("time.yesterday");
-  return label;
-}
-
-function initialNode(value: string): HTMLElement {
-  const trimmed = value.trim();
-  const codePoint = trimmed.codePointAt(0);
-  return el("span", { text: codePoint === undefined ? "?" : String.fromCodePoint(codePoint).toUpperCase() });
+  return formatDate(locale, ts);
 }

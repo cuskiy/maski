@@ -184,4 +184,33 @@ describe("timeline composition", () => {
       expect(item.pending).toBe(true);
     }
   });
+
+  it("marks a queued reaction of the current user as pressed", () => {
+    const event = eventRecord("$e1", 1, "hi");
+    const state = snapshot({
+      session: { userId: "@me:x", deviceId: "D", displayName: "Me", avatarMxc: null, accountHash: "h" },
+      activeRoomId: "!a",
+      rooms: [room("!a", "room")],
+      events: [event],
+      outbox: [
+        {
+          txnId: "t3",
+          roomId: "!a",
+          eventType: "m.reaction",
+          content: { "m.relates_to": { rel_type: "m.annotation", event_id: "$e1", key: "👍" } },
+          blob: null,
+          media: null,
+          createdAt: 2,
+          attempts: 0,
+          nextAttemptAt: 0,
+          status: "pending",
+          error: null,
+          eventId: null,
+        },
+      ],
+    });
+    const item = timelineItems(state, "!a", 300).find((entry) => entry.type === "event");
+    if (item?.type !== "event") throw new Error("expected an event row");
+    expect(item.event.reactions["👍"]).toMatchObject({ count: 1, me: true });
+  });
 });

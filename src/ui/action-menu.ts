@@ -16,12 +16,14 @@ export interface ActionPosition {
   above?: number;
 }
 
+const MENU_ITEM = '[role="menuitem"], [role="menuitemcheckbox"]';
+
 export class ActionMenu {
   private menu: HTMLElement | null = null;
   private lastFocus: HTMLElement | null = null;
   private readonly onOutside = (event: PointerEvent): void => {
     if (!this.menu || this.menu.contains(event.target as Node)) return;
-    this.close();
+    this.close(false);
   };
   private readonly onScroll = (): void => this.close(false);
   private readonly onResize = (): void => this.close(false);
@@ -72,15 +74,7 @@ export class ActionMenu {
     menu.style.left = `${left}px`;
     menu.style.top = `${top}px`;
     menu.addEventListener("keydown", (event) => this.onKeydown(event));
-    const first = menu.querySelector<HTMLElement>('[role="menuitem"]');
-    first?.focus();
-  }
-
-  openForElement(element: HTMLElement, items: readonly ActionMenuItem[]): void {
-    const rect = element.getBoundingClientRect();
-    // Beside the trigger and bottom aligned: a sidebar button near the bottom edge
-    // then grows upwards instead of being clamped to the top of the window.
-    this.open({ x: rect.right + 8, y: rect.bottom, above: rect.bottom }, items);
+    menu.querySelector<HTMLElement>(MENU_ITEM)?.focus();
   }
 
   close(restoreFocus = true): void {
@@ -93,7 +87,7 @@ export class ActionMenu {
 
   private onKeydown(event: KeyboardEvent): void {
     if (!this.menu) return;
-    const items = [...this.menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    const items = [...this.menu.querySelectorAll<HTMLElement>(MENU_ITEM)];
     const index = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === "Escape") {
       event.preventDefault();

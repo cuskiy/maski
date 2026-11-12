@@ -179,9 +179,10 @@ export function timelineItems(snapshot: AppSnapshot, roomId: string, windowSize:
       if (target && isRecord(replacement)) edits.set(target, replacement);
     }
   }
+  const selfId = snapshot.session?.userId ?? "";
   const events = roomEvents(snapshot, roomId)
     .filter((event) => event.kind !== "state" && !event.redacted && !redacted.has(event.eventId))
-    .map((event) => applyLocal(event, edits, reactions));
+    .map((event) => applyLocal(event, edits, reactions, selfId));
   const sliced = events.slice(Math.max(0, events.length - windowSize));
   const outbox = pendingRows
     .filter((row) => row.eventType === "m.room.message" || row.eventType === "m.sticker")
@@ -236,6 +237,7 @@ function applyLocal(
   event: EventRecord,
   edits: ReadonlyMap<string, Record<string, unknown>>,
   reactions: ReadonlyMap<string, { key: string; senderId: string }[]>,
+  selfId: string,
 ): LocalEvent {
   const edit = edits.get(event.eventId);
   const addReactions = reactions.get(event.eventId);
@@ -256,7 +258,7 @@ function applyLocal(
     for (const { key, senderId } of addReactions) {
       const existing = merged[key] ?? { count: 0, me: false, myReaction: null };
       if (existing.me) continue;
-      merged[key] = { ...existing, count: existing.count + 1, me: senderId === next.senderId ? existing.me : true };
+      merged[key] = { ...existing, count: existing.count + 1, me: senderId === selfId };
     }
     next = { ...next, reactions: merged, pending: true };
   }

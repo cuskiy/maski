@@ -163,6 +163,10 @@ const icons: Record<string, readonly Node[]> = {
     ["circle", 18, 16, 3],
   ],
   chevron: [["path", "m9 18 6-6-6-6"]],
+  person: [
+    ["path", "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"],
+    ["circle", 12, 7, 4],
+  ],
   eye: [
     [
       "path",

@@ -340,6 +340,24 @@ export class Runtime {
       if (!this.ready) return;
       void this.onDecrypted(event).catch((error: unknown) => this.logError(error));
     });
+    client.on(ClientEvent.Event, (event) => {
+      if (!this.ready || this.initializing) return;
+      const roomId = event.getRoomId();
+      const room = roomId ? client.getRoom(roomId) : null;
+      if (!room) return;
+      if (event.getType() === EventType.RoomMessageEncrypted) {
+        // A relation inside an encrypted event only becomes readable after decryption
+        void client
+          .decryptEventIfNeeded(event)
+          .then(async () => {
+            if (this.ready) await this.onDecrypted(event);
+          })
+          .catch((error: unknown) => this.logError(error));
+        return;
+      }
+      if (!relationFromEvent(event, client.getSafeUserId())) return;
+      void this.projectRelation(event, room).catch((error: unknown) => this.logError(error));
+    });
     client.on(ClientEvent.AccountData, () => {
       if (!this.ready) return;
       void this.refreshPacks().catch((error: unknown) => this.logError(error));

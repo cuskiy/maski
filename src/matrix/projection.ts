@@ -14,6 +14,7 @@ import {
   transactionDone,
 } from "../data";
 import { normalizeText, tokenize } from "../data/text";
+import { relationOf } from "./normalize";
 import type {
   DeltaPayload,
   EventRecord,
@@ -148,6 +149,10 @@ export class Projection {
 
   async applyRelation(relation: RelationRecord, target: EventRecord | null): Promise<EventRecord | null> {
     const db = this.requireDb();
+    if (relation.type === "annotation") {
+      const seen = await getOne<RelationRecord>(db, STORE.relations, relation.relationEventId);
+      if (seen) return null;
+    }
     if (relation.type === "redaction") {
       const withdrawn = await this.withdrawReaction(relation, db);
       if (withdrawn) return withdrawn;
@@ -247,20 +252,27 @@ export function relationFromEvent(event: {
   getTs: () => number;
   getType: () => string;
   getContent: () => Record<string, unknown>;
+  getAssociatedId?: () => string | undefined;
   getRelation: () => { event_id?: string; rel_type?: string; key?: string } | null;
   getUnsigned: () => Record<string, unknown>;
 }, selfUserId: string): RelationRecord | null {
   const eventId = event.getId();
   const roomId = event.getRoomId();
-  if (!eventId || !roomId) return null;
+  // The SDK marks a local echo with a ~ id; the server echo carries the real one, and
+  // a redaction can only ever target that.
+  if (!eventId || !roomId || eventId.startsWith("~")) return null;
   const content = event.getContent();
-  const relation = event.getRelation();
+  const relation = event.getRelation() ?? relationOf(content);
   const type = event.getType();
   const isRedaction = type === "m.room.redaction";
   if (!isRedaction && !relation?.event_id) return null;
-  const redacts = isRedaction ? (typeof content["redacts"] === "string" ? content["redacts"] : null) : null;
+  // Room v11 moved redacts out of the content; getAssociatedId reads both places.
+  const associated = isRedaction ? event.getAssociatedId?.() : undefined;
+  const redacts = isRedaction
+    ? (associated ?? (typeof content["redacts"] === "string" ? content["redacts"] : null))
+    : null;
   const targetEventId = isRedaction ? redacts : (relation?.event_id ?? null);
-  if (!targetEventId) return null;
+  if (!targetEventId || targetEventId.startsWith("~")) return null;
   return {
     relationEventId: eventId,
     roomId,

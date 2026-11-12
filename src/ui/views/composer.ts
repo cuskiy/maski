@@ -59,10 +59,16 @@ export class Composer {
     this.attachments = el("div", { class: "attachments" });
     this.fileInput = el("input", { attrs: { type: "file", multiple: true, hidden: true } });
     this.attachButton = iconButton(t("composer.attach"), "paperclip", () => this.fileInput.click(), "icon-button attach-button");
-    this.emojiButton = iconButton(t("composer.emoji"), "smile", () => this.callbacks.onOpenPicker(this.element, "emoji"), "icon-button field-emoji");
+    this.emojiButton = iconButton(
+      t("composer.emoji"),
+      "smile",
+      () => this.callbacks.onOpenPicker(this.emojiButton, "emoji"),
+      "icon-button field-emoji",
+    );
+    this.emojiButton.setAttribute("aria-expanded", "false");
     this.sendButton = el("button", {
       class: "icon-button action-button",
-      attrs: { type: "button" },
+      attrs: { type: "button", "aria-expanded": "false" },
       on: { click: () => this.primaryAction() },
     });
     this.contextBar = el("div", { class: "composer-context", attrs: { hidden: true } });
@@ -126,6 +132,10 @@ export class Composer {
     for (const mark of this.model.activeMarks()) this.model.toggleMark(mark);
     if (document.activeElement !== this.textarea) this.showRich();
     this.callbacks.onChange();
+  }
+
+  get pickerAnchor(): HTMLElement {
+    return this.emojiButton;
   }
 
   get contextTarget(): { kind: "reply" | "edit"; eventId: string } | null {
@@ -342,7 +352,7 @@ export class Composer {
 
   private primaryAction(): void {
     if (this.hasContent()) this.send();
-    else this.callbacks.onOpenPicker(this.element, "emoji");
+    else this.callbacks.onOpenPicker(this.sendButton, "sticker");
   }
 
   private send(): void {

@@ -33,8 +33,25 @@ export function toMembership(value: string | undefined): Membership {
   }
 }
 
+export interface EventRelation {
+  event_id?: string;
+  rel_type?: string;
+  key?: string;
+}
+
+export function relationOf(content: Record<string, unknown>): EventRelation | null {
+  const relates = content["m.relates_to"];
+  if (typeof relates !== "object" || relates === null || Array.isArray(relates)) return null;
+  const record = relates as Record<string, unknown>;
+  return {
+    ...(typeof record["event_id"] === "string" ? { event_id: record["event_id"] } : {}),
+    ...(typeof record["rel_type"] === "string" ? { rel_type: record["rel_type"] } : {}),
+    ...(typeof record["key"] === "string" ? { key: record["key"] } : {}),
+  };
+}
+
 export function normalizeEvent(event: MatrixEvent, room: Room | null): EventRecord | null {
-  const relation = event.getRelation();
+  const relation = event.getRelation() ?? relationOf(contentRecord(event));
   if (
     relation &&
     (relation.rel_type === "m.annotation" ||

@@ -1,7 +1,8 @@
 export interface KeyedOptions<T> {
   key: (item: T) => string;
   create: (item: T) => HTMLElement;
-  update?: (node: HTMLElement, item: T) => void;
+  // A row that cannot be updated in place returns the node that replaced it
+  update?: (node: HTMLElement, item: T) => HTMLElement | void;
   remove?: (node: HTMLElement) => void;
 }
 
@@ -35,7 +36,8 @@ export class KeyedList<T> {
       if (existing) {
         if (existing.item !== item) {
           existing.item = item;
-          this.options.update?.(existing.node, item);
+          const replaced = this.options.update?.(existing.node, item);
+          if (replaced && replaced !== existing.node) existing.node = replaced;
         }
       } else {
         const node = this.options.create(item);

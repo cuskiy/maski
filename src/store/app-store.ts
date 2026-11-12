@@ -123,13 +123,15 @@ export class AppStore {
     });
   }
 
-  applyDelta(delta: DeltaPayload): void {
-    if (delta.revision <= this.snapshot.revision && delta.events.length === 0) return;
+  applyDelta(delta: DeltaPayload): boolean {
+    if (delta.revision <= this.snapshot.revision) return false;
     const rooms = new Map(this.snapshot.rooms.map((room) => [room.roomId, room]));
     for (const room of delta.rooms) rooms.set(room.roomId, room);
     for (const roomId of delta.removedRooms) rooms.delete(roomId);
     const events = new Map(this.snapshot.events.map((event) => [event.eventId, event]));
-    for (const event of delta.events) events.set(event.eventId, event);
+    for (const event of delta.events) {
+      if (event.roomId === this.snapshot.activeRoomId) events.set(event.eventId, event);
+    }
     const members = new Map(
       this.snapshot.members.map((member) => [`${member.roomId}|${member.userId}`, member]),
     );
@@ -144,14 +146,13 @@ export class AppStore {
       members: [...members.values()],
       packs: [...packs.values()],
     });
+    return true;
   }
 
-  setActiveRoom(roomId: string | null, events?: readonly EventRecord[]): void {
-    const merged = new Map(this.snapshot.events.map((event) => [event.eventId, event]));
-    for (const event of events ?? []) merged.set(event.eventId, event);
+  setActiveRoom(roomId: string | null, events: readonly EventRecord[] = []): void {
     this.patch({
       activeRoomId: roomId,
-      events: [...merged.values()].toSorted((a, b) => a.ts - b.ts),
+      events: [...events].toSorted((a, b) => a.ts - b.ts),
     });
   }
 

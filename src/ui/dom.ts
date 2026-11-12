@@ -36,9 +36,9 @@ export function append(parent: Node, children: readonly Child[]): void {
 }
 
 export function initial(value: string): string {
-  const trimmed = value.trim();
-  const codePoint = trimmed.codePointAt(0);
-  return codePoint === undefined ? "?" : String.fromCodePoint(codePoint).toUpperCase();
+  // A display name may start with a sigil such as the @ of a user id
+  const first = /[\p{L}\p{N}]/u.exec(value);
+  return first ? first[0].toUpperCase() : "?";
 }
 
 export function focusable(node: HTMLElement): void {

@@ -1,6 +1,6 @@
 import { config, type Locale } from "./config";
 import { MainDb } from "../store/db";
-import { AppStore } from "../store/app-store";
+import { AppStore, type AppSnapshot } from "../store/app-store";
 import {
   activeRoom,
   displayName,
@@ -74,6 +74,8 @@ interface ShellRefs {
   body: HTMLElement;
   typing: HTMLElement;
   composerHost: HTMLElement;
+  accountButton: HTMLElement;
+  accountCard: HTMLElement;
 }
 
 export class App {
@@ -91,6 +93,7 @@ export class App {
   private shell: ShellRefs | null = null;
   private timeline: TimelineView | null = null;
   private composer: Composer | null = null;
+  private picker: { element: HTMLElement; trigger: HTMLElement; close: () => void } | null = null;
   private renderQueued = false;
   private shellLocale: Locale | null = null;
   private authStep: AuthStep = "server";
@@ -121,11 +124,15 @@ export class App {
   private locksHeld = false;
   private activating: string | null = null;
   private roomListKey = "";
+  private headerKey = "";
+  private channelKey = "";
   private notificationPermission: NotificationPermission | "unsupported" = "unsupported";
   private settingsSection = "account";
   private searchTimer: number | null = null;
   private draftTimer: number | null = null;
   private draftRoom: string | null = null;
+  private typingRoom: string | null = null;
+  private typingAt = 0;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -255,8 +262,16 @@ export class App {
         void this.reloadProjection();
         break;
       case "delta": {
+        const revision = this.store.getSnapshot().revision;
+        if (event.delta.revision > revision + 1) {
+          // A delta went missing, so the projection is re-read instead of guessing.
+          void this.reloadProjection();
+          break;
+        }
+        // The known ids have to be read before the delta lands, or every arriving
+        // event already looks known and nothing is announced.
         const prior = new Set(this.store.getSnapshot().events.map((row) => row.eventId));
-        this.store.applyDelta(event.delta);
+        if (!this.store.applyDelta(event.delta)) break;
         for (const row of event.delta.events) {
           if (prior.has(row.eventId)) continue;
           const room = roomById(this.store.getSnapshot(), row.roomId);
@@ -348,7 +363,7 @@ export class App {
   private async reloadProjection(): Promise<void> {
     if (!this.hash) return;
     await this.db.openAccount(this.hash);
-    const projection = await this.db.readProjection();
+    const projection = await this.db.readProjection(this.router.roomId());
     this.store.setProjection(projection);
     if (this.readOnly) this.store.setConnection("readonly");
     const routeRoom = this.router.roomId();
@@ -410,9 +425,17 @@ export class App {
     // which used to stack IndexedDB work and freeze the switch.
     if (this.activating === roomId) return;
     this.activating = roomId;
+    this.closePicker();
     try {
       const snapshot = this.store.getSnapshot();
       const previous = snapshot.activeRoomId;
+      // Switching rooms replaces the composer, so a draft still waiting on its
+      // debounce is written first.
+      if (this.draftTimer !== null) {
+        window.clearTimeout(this.draftTimer);
+        this.draftTimer = null;
+        if (previous !== roomId) await this.saveDraft();
+      }
       if (previous !== roomId) await this.storeScroll(previous);
       const scroll = previous === roomId ? null : await this.readScroll(roomId);
       const events = await this.db.readRoomEvents(roomId);
@@ -1332,6 +1355,7 @@ export class App {
   }
 
   private renderShell(): void {
+    this.picker?.close();
     this.view = "shell";
     this.root.classList.remove("boot");
     const snapshot = this.store.getSnapshot();
@@ -1345,8 +1369,8 @@ export class App {
       el("div", { class: "nav-brand" }, [icon("message"), config.app.name]),
     ]);
     const rooms = el("div", { class: "rooms" });
-    const user = this.userButton(snapshot);
-    nav.append(navHead, user, rooms);
+    const account = this.accountBlock(snapshot);
+    nav.append(navHead, account.element, rooms);
 
     const headerAvatar = el("div", { class: "avatar" });
     const headerTitle = el("h1", { text: "" });
@@ -1395,9 +1419,11 @@ export class App {
       app,
       nav,
       rooms,
-      userName: user.querySelector<HTMLElement>(".nav-user-name") ?? el("span"),
-      userSub: user.querySelector<HTMLElement>(".nav-user-sub") ?? el("span"),
-      userAvatar: user.querySelector<HTMLElement>(".avatar") ?? el("div"),
+      userName: account.name,
+      userSub: account.sub,
+      userAvatar: account.avatar,
+      accountButton: account.button,
+      accountCard: account.card,
       content,
       headerTitle,
       headerSubtitle,
@@ -1412,35 +1438,121 @@ export class App {
     this.updateShell();
   }
 
-  private userButton(snapshot: ReturnType<AppStore["getSnapshot"]>): HTMLElement {
+  // The account is a card that unfolds under its row, not a floating menu: what it
+  // offers belongs to the same column and stays put while it is used.
+  private accountBlock(snapshot: AppSnapshot): {
+    element: HTMLElement;
+    button: HTMLButtonElement;
+    card: HTMLElement;
+    name: HTMLElement;
+    sub: HTMLElement;
+    avatar: HTMLElement;
+  } {
     const name = snapshot.session?.displayName ?? t("nav.profile");
     const avatar = el("div", { class: "avatar" }, [el("span", { text: initial(name) })]);
     this.loadAvatar(avatar, snapshot.session?.avatarMxc ?? null, 48);
+    const nameEl = el("span", { class: "nav-user-name", text: name });
+    const subEl = el("span", { class: "nav-user-sub", text: snapshot.session?.userId ?? "" });
     const button = el("button", {
       class: "nav-user",
-      attrs: { type: "button", "aria-label": t("nav.settings") },
-      on: { click: () => this.openUserMenu(button) },
+      attrs: {
+        type: "button",
+        "aria-expanded": "false",
+        "aria-controls": "account-card",
+        "aria-label": t("nav.account", { name }),
+      },
     }, [
       avatar,
-      el("div", { class: "nav-user-text" }, [
-        el("span", { class: "nav-user-name", text: name }),
-        el("span", { class: "nav-user-sub", text: snapshot.session?.userId ?? "" }),
+      el("div", { class: "nav-user-text" }, [nameEl, subEl]),
+      el("span", { class: "nav-user-chevron" }, [icon("chevron")]),
+    ]);
+
+    const actions: { label: string; icon: string; run: () => void }[] = [
+      { label: t("nav.search"), icon: "search", run: () => this.router.openDialog("search") },
+      { label: t("nav.newMessage"), icon: "userPlus", run: () => this.router.openDialog("new-message") },
+      { label: t("nav.join"), icon: "hash", run: () => this.router.openDialog("join") },
+      { label: t("nav.create"), icon: "plus", run: () => this.router.openDialog("create") },
+      { label: t("nav.settings"), icon: "settings", run: () => this.router.openDialog("settings") },
+      {
+        label: t("nav.profile"),
+        icon: "person",
+        run: () => {
+          const userId = this.store.getSnapshot().session?.userId;
+          if (userId) this.openProfile(userId);
+        },
+      },
+    ];
+    const card = el("div", { class: "nav-card", attrs: { id: "account-card", hidden: true } }, [
+      el(
+        "div",
+        { class: "nav-card-grid" },
+        actions.map((action) =>
+          el("button", {
+            class: "nav-action",
+            attrs: { type: "button" },
+            on: {
+              click: () => {
+                close();
+                action.run();
+              },
+            },
+          }, [icon(action.icon), el("span", { text: action.label })]),
+        ),
+      ),
+      el("div", { class: "nav-card-foot" }, [
+        el("button", {
+          class: "nav-action danger",
+          attrs: { type: "button" },
+          on: {
+            click: () => {
+              close();
+              void this.logout();
+            },
+          },
+        }, [icon("logout"), el("span", { text: t("nav.logout") })]),
       ]),
     ]);
-    return button;
-  }
 
-  private openUserMenu(anchor: HTMLElement): void {
-    const items: ActionMenuItem[] = [
-      { label: t("nav.search"), icon: "search", action: () => this.router.openDialog("search") },
-      { label: t("nav.newMessage"), icon: "userPlus", action: () => this.router.openDialog("new-message") },
-      { label: t("nav.join"), icon: "hash", action: () => this.router.openDialog("join") },
-      { label: t("nav.create"), icon: "plus", action: () => this.router.openDialog("create") },
-      { label: t("nav.settings"), icon: "settings", action: () => this.router.openDialog("settings") },
-      { label: t("nav.profile"), icon: "message", action: () => this.store.getSnapshot().session && this.openProfile(this.store.getSnapshot().session?.userId ?? "") },
-      { label: t("nav.logout"), icon: "logout", danger: true, action: () => void this.logout() },
-    ];
-    this.actionMenu.openForElement(anchor, items);
+    const outside = (event: Event): void => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (card.contains(target) || button.contains(target)) return;
+      close();
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      close();
+      button.focus();
+    };
+    const close = (): void => {
+      if (card.hidden) return;
+      card.hidden = true;
+      button.setAttribute("aria-expanded", "false");
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", escape);
+    };
+    const open = (): void => {
+      card.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      document.addEventListener("pointerdown", outside, true);
+      document.addEventListener("keydown", escape);
+      card.querySelector<HTMLElement>("button")?.focus();
+    };
+    button.addEventListener("click", () => {
+      if (card.hidden) {
+        this.closePicker();
+        open();
+      } else close();
+    });
+
+    return {
+      element: el("div", { class: "nav-account" }, [button, card]),
+      button,
+      card,
+      name: nameEl,
+      sub: subEl,
+      avatar,
+    };
   }
 
   private updateShell(): void {
@@ -1471,28 +1583,34 @@ export class App {
       shell.typing.hidden = true;
       return;
     }
-    if (room.kind === "space") {
-      shell.composerHost.hidden = true;
-      shell.typing.hidden = true;
+    // Replacing the header would recreate its avatar image on every delta.
+    const headerKey = `${room.roomId}|${room.kind}|${roomTitle(room)}|${room.topic}|${room.avatarMxc ?? ""}`;
+    if (headerKey !== this.headerKey) {
+      this.headerKey = headerKey;
       shell.headerTitle.textContent = roomTitle(room);
-      shell.headerSubtitle.textContent = room.topic;
+      shell.headerSubtitle.textContent = room.kind === "space" ? room.topic : room.topic || room.roomId;
       shell.headerAvatar.replaceChildren(el("span", { text: initial(roomTitle(room)) }));
       this.loadAvatar(shell.headerAvatar, room.avatarMxc, 48);
       shell.headerActions.replaceChildren(
-        iconButton(t("channel.settings"), "more", () => this.router.openDialog("room-settings")),
+        iconButton(
+          t(room.kind === "space" ? "channel.settings" : "room.settings"),
+          "more",
+          () => this.router.openDialog("room-settings"),
+        ),
       );
-      shell.body.replaceChildren(this.channelPage(room, snapshot));
+    }
+    if (room.kind === "space") {
+      shell.composerHost.hidden = true;
+      shell.typing.hidden = true;
+      const channelKey = channelSignature(room, snapshot);
+      if (channelKey !== this.channelKey) {
+        this.channelKey = channelKey;
+        shell.body.replaceChildren(this.channelPage(room, snapshot));
+      }
       return;
     }
     shell.composerHost.hidden = false;
     shell.typing.hidden = false;
-    shell.headerTitle.textContent = roomTitle(room);
-    shell.headerSubtitle.textContent = room.topic || room.roomId;
-    shell.headerAvatar.replaceChildren(el("span", { text: initial(roomTitle(room)) }));
-    this.loadAvatar(shell.headerAvatar, room.avatarMxc, 48);
-    shell.headerActions.replaceChildren(
-      iconButton(t("room.settings"), "more", () => this.router.openDialog("room-settings")),
-    );
     if (this.timeline && !shell.body.contains(this.timeline.element)) {
       shell.body.replaceChildren(this.timeline.element);
     }
@@ -1593,7 +1711,11 @@ export class App {
         ]),
       ]);
       details.addEventListener("toggle", () => this.rememberSection(section.key, details.open));
-      for (const room of section.rooms) details.appendChild(this.roomRow(room, snapshot));
+      // The rows live in their own box: a closed section has to take no space, and
+      // a row with an explicit display would otherwise keep its own layout.
+      const rows = el("div", { class: "room-section-body" });
+      for (const room of section.rooms) rows.appendChild(this.roomRow(room, snapshot));
+      details.appendChild(rows);
       nodes.push(details);
     }
     if (nodes.length === 0) {
@@ -1615,9 +1737,12 @@ export class App {
     shell.rooms.replaceChildren(...nodes);
   }
 
+  // Before the user has opinions every list is open; from then on the stored set is
+  // the truth, so closing a section keeps it closed.
   private expandedSections(): Set<string> {
     const value = this.settings["expandedSections"];
-    return new Set(Array.isArray(value) ? value.filter((key): key is string => typeof key === "string") : []);
+    if (!Array.isArray(value)) return new Set<SectionKey>(["favorites", "rooms", "dms", "channels"]);
+    return new Set(value.filter((key): key is string => typeof key === "string"));
   }
 
   private rememberSection(key: string, expanded: boolean): void {
@@ -1730,13 +1855,35 @@ export class App {
     await this.queueOutbox(event.roomId, "m.room.redaction", redactionContent(event.eventId, null));
   }
 
+  // A chip toggles: pressing your own reaction withdraws it, whether it is still in
+  // the outbox or already on the server.
   private async react(event: EventRecord, key: string): Promise<void> {
+    const mine = event.reactions[key];
+    if (mine?.me) {
+      const queued = this.store.getSnapshot().outbox.find((row) => {
+        if (row.eventType !== "m.reaction" || row.roomId !== event.roomId) return false;
+        const relates = row.content["m.relates_to"];
+        return isRecord(relates) && relates["event_id"] === event.eventId && relates["key"] === key;
+      });
+      if (queued) {
+        await this.cancelOutbox(queued.txnId);
+        return;
+      }
+      if (mine.myReaction) {
+        await this.queueOutbox(event.roomId, "m.room.redaction", redactionContent(mine.myReaction, null));
+        return;
+      }
+    }
     await this.queueOutbox(event.roomId, "m.reaction", {
       "m.relates_to": { rel_type: "m.annotation", event_id: event.eventId, key },
     });
   }
 
   private jumpToEvent(eventId: string): void {
+    if (!this.store.getSnapshot().events.some((event) => event.eventId === eventId)) {
+      this.notify(t("room.jumpMissing"));
+      return;
+    }
     this.pendingFocusEvent = eventId;
     this.requestRender();
   }
@@ -1770,8 +1917,7 @@ export class App {
   }
 
   private openReactPicker(event: EventRecord): void {
-    if (!this.composer) return;
-    this.openPicker(this.composer.element, { reactTo: event });
+    if (this.composer) this.openPicker(this.composer.pickerAnchor, { reactTo: event });
   }
 
   private openFormatMenu(position: ActionPosition): void {
@@ -1866,6 +2012,7 @@ export class App {
   private async send(message: ComposerMessage): Promise<void> {
     const room = this.store.getSnapshot().activeRoomId;
     if (!room) return;
+    this.closePicker();
     if (message.body.trim()) {
       const replyEvent =
         message.context?.kind === "reply"
@@ -1978,9 +2125,20 @@ export class App {
     await this.adapter.request("cancelSend", { txnId }).catch(() => undefined);
   }
 
+  // Typing is a rate-limited hint, so the first keystroke of a run starts it and
+  // the rest only refresh the local stop timer.
   private async sendTyping(typing: boolean): Promise<void> {
     const roomId = this.store.getSnapshot().activeRoomId;
     if (!roomId) return;
+    if (typing) {
+      const now = Date.now();
+      if (this.typingRoom === roomId && now - this.typingAt < 10_000) return;
+      this.typingRoom = roomId;
+      this.typingAt = now;
+    } else {
+      this.typingRoom = null;
+      this.typingAt = 0;
+    }
     await this.adapter.request("typing", { roomId, typing }).catch(() => undefined);
   }
 
@@ -2129,7 +2287,7 @@ export class App {
     }
     this.composer?.destroy();
     this.timeline?.destroy();
-    this.media.releaseAll();
+    this.media.clear();
     this.shell = null;
     this.hash = null;
     this.authStep = "server";
@@ -2148,9 +2306,8 @@ export class App {
     const route = this.router.route;
     if (!route.dialog) {
       if (this.dialogName) {
-        const previous = this.dialogName;
         this.dialogName = null;
-        if (previous) this.dialogs.close();
+        this.dialogs.close();
       }
       return;
     }
@@ -2825,12 +2982,19 @@ export class App {
   }
 
   private openPicker(
-    anchor: HTMLElement,
+    trigger: HTMLElement,
     options: { reactTo?: EventRecord; tab?: "emoji" | "sticker" } = {},
   ): void {
+    // A second press on the same trigger closes the panel instead of stacking one more.
+    const previous = this.picker;
+    if (previous) {
+      const sameTrigger = previous.trigger === trigger;
+      previous.close();
+      if (sameTrigger) return;
+    }
     const snapshot = this.store.getSnapshot();
     const reactTo = options.reactTo ?? null;
-    const picker = el("div", { class: "picker" });
+    const picker = el("div", { class: "picker", attrs: { role: "dialog" } });
     let tab: "emoji" | "sticker" = options.tab ?? "emoji";
     const search = el("input", { class: "input", attrs: { placeholder: t("picker.search"), "aria-label": t("picker.search") } });
     const clearSearch = iconButton(t("composer.clear"), "close", () => {
@@ -2841,11 +3005,12 @@ export class App {
     }, "icon-button search-clear");
     clearSearch.hidden = true;
     const searchField = el("div", { class: "picker-search" }, [search, clearSearch]);
+    const title = el("span", {
+      class: "picker-title",
+      text: reactTo ? t("room.react") : tab === "sticker" ? t("picker.stickers") : t("picker.emoticons"),
+    });
     const head = el("div", { class: "picker-head" }, [
-      el("span", {
-        class: "picker-title",
-        text: reactTo ? t("room.react") : tab === "sticker" ? t("picker.stickers") : t("picker.emoticons"),
-      }),
+      title,
       iconButton(t("common.close"), "close", () => close(), "icon-button picker-close"),
     ]);
     const body = el("div", { class: "picker-body" });
@@ -2853,23 +3018,45 @@ export class App {
     const emojiTab = el("button", { class: "picker-tab", text: t("picker.emoticons"), attrs: { type: "button" } });
     const stickerTab = el("button", { class: "picker-tab", text: t("picker.stickers"), attrs: { type: "button" } });
     const close = (): void => {
+      if (this.picker?.element !== picker) return;
+      this.picker = null;
       picker.remove();
-      document.removeEventListener("click", outside, true);
+      document.removeEventListener("pointerdown", outside, true);
       document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", place);
+      trigger.setAttribute("aria-expanded", "false");
     };
-    const outside = (event: MouseEvent): void => {
-      if (!picker.contains(event.target as Node) && !anchor.contains(event.target as Node)) close();
+    const outside = (event: Event): void => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (picker.contains(target) || trigger.contains(target)) return;
+      close();
     };
     const escape = (event: KeyboardEvent): void => {
       if (event.key !== "Escape") return;
       close();
-      anchor.focus();
+      trigger.focus();
+    };
+    // The panel floats above the composer bar so a growing draft cannot move it.
+    const place = (): void => {
+      const bar = this.composer?.element.querySelector(".composer-bar") ?? trigger;
+      const rect = bar.getBoundingClientRect();
+      const width = Math.min(
+        picker.offsetWidth,
+        window.innerWidth - 2 * Number.parseFloat(getComputedStyle(picker).getPropertyValue("--space-3") || "8"),
+      );
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      picker.style.left = `${left}px`;
+      picker.style.bottom = `${window.innerHeight - rect.top + 8}px`;
     };
     const setTab = (next: "emoji" | "sticker"): void => {
       tab = next;
       emojiTab.setAttribute("aria-selected", String(tab === "emoji"));
       stickerTab.setAttribute("aria-selected", String(tab === "sticker"));
+      if (!reactTo) title.textContent = tab === "sticker" ? t("picker.stickers") : t("picker.emoticons");
       renderList(search.value.trim());
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "ease-out" });
     };
     const renderList = (query: string): void => {
       body.replaceChildren();
@@ -2940,10 +3127,19 @@ export class App {
     if (reactTo) stickerTab.hidden = true;
     tabs.append(emojiTab, stickerTab);
     picker.append(head, searchField, tabs, body);
-    anchor.appendChild(picker);
-    setTab(tab);
-    document.addEventListener("click", outside, true);
+    document.body.appendChild(picker);
+    setTab(options.tab ?? "emoji");
+    if (reactTo) search.focus();
+    this.picker = { element: picker, trigger, close };
+    trigger.setAttribute("aria-expanded", "true");
+    place();
+    document.addEventListener("pointerdown", outside, true);
     document.addEventListener("keydown", escape);
+    window.addEventListener("resize", place);
+  }
+
+  private closePicker(): void {
+    this.picker?.close();
   }
 }
 
@@ -2953,6 +3149,19 @@ const EMOJI = [
   "🙏", "💪", "👀", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💯", "✨", "🔥", "🎉", "🎂", "☕",
   "🍵", "🍕", "🍔", "🌙", "⭐", "☀️", "🌈", "🌊", "🌸", "🌻", "🐱", "🐶", "🦊", "🐼", "🚀", "💡",
 ];
+
+function channelSignature(room: RoomRecord, snapshot: AppSnapshot): string {
+  return [
+    room.roomId,
+    roomTitle(room),
+    room.topic,
+    room.avatarMxc ?? "",
+    ...room.children.map((childId) => {
+      const child = roomById(snapshot, childId);
+      return `${childId}:${child ? `${roomTitle(child)}|${child.topic}|${child.avatarMxc ?? ""}` : ""}`;
+    }),
+  ].join("|");
+}
 
 function gateComplete(status: RecoveryStatus): boolean {
   return status.secretStorage && status.crossSigning;
