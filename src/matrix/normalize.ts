@@ -176,6 +176,7 @@ export function normalizeRoom(
       ? room.currentState
           .getStateEvents("m.space.child")
           .filter((child) => Array.isArray(child.getContent()["via"]) && child.getContent()["via"].length > 0)
+          .toSorted(compareSpaceChildren)
           .map((child) => child.getStateKey() ?? "")
           .filter((childId) => childId.startsWith("!"))
       : [];
@@ -346,6 +347,19 @@ function mentionsFromContent(content: Record<string, unknown>): string[] {
 }
 
 /** A room rule with dont_notify is what the client sets when a room is muted. */
+// Spec: children with an order sort lexicographically first, then the rest by the
+// timestamp of their child event, then by room id.
+function compareSpaceChildren(left: MatrixEvent, right: MatrixEvent): number {
+  const leftOrder = left.getContent()["order"];
+  const rightOrder = right.getContent()["order"];
+  const leftHas = typeof leftOrder === "string";
+  const rightHas = typeof rightOrder === "string";
+  if (leftHas && rightHas && leftOrder !== rightOrder) return leftOrder < rightOrder ? -1 : 1;
+  if (leftHas !== rightHas) return leftHas ? -1 : 1;
+  if (left.getTs() !== right.getTs()) return left.getTs() - right.getTs();
+  return (left.getStateKey() ?? "").localeCompare(right.getStateKey() ?? "");
+}
+
 function isRoomMuted(client: MatrixClient | null, roomId: string): boolean {
   if (!client) return false;
   try {
