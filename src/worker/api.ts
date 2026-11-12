@@ -753,8 +753,7 @@ export class WorkerApi {
       }
       await projectRooms(db, client, [roomId]);
     }
-    const stored = await db.getAll<Member>(STORE.members);
-    return { members: stored.filter((member) => member.roomId === roomId) };
+    return { members: await db.members(roomId) };
   }
 
   private replyContent(replyTo: string | null, roomId: string): Record<string, unknown> {
@@ -870,7 +869,7 @@ export class WorkerApi {
     if (!row) return {};
     await db.putMessage({ ...row, status: "queued", error: null });
     if (row.kind === "sticker") return this.sendSticker(row.roomId, txnId, row.body, row.media?.mxc ?? "", row.reply?.id ?? null);
-    if (row.kind === "image" || row.kind === "file") return {};
+    // Only text is retried; an attachment is removed instead, because its bytes are gone.
     return this.sendText(row.roomId, txnId, row.body, row.html, row.reply?.id ?? null);
   }
 

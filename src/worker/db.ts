@@ -196,6 +196,11 @@ export class AccountDb {
     return count > 0;
   }
 
+  async members(roomId: string): Promise<Member[]> {
+    const tx = this.handle().transaction(STORE.members, "readonly");
+    return (await request(tx.objectStore(STORE.members).index(INDEX.membersRoom).getAll(roomId))) as Member[];
+  }
+
   async putMembers(members: Member[]): Promise<void> {
     await this.putAll(STORE.members, members);
   }
