@@ -181,6 +181,7 @@ export class WorkerApi {
   private activeRoomId: string | null = null;
   private ready: Promise<{ session: Session | null }> = Promise.resolve({ session: null });
   private verification: Verification | null = null;
+  private uploads = new Map<string, AbortController>();
   private booting: Promise<void> | null = null;
 
   constructor(post: Post) {
@@ -390,9 +391,16 @@ export class WorkerApi {
         this.post({ event: "connection", connection: "online", message: "" });
         this.collectTouched(data);
         this.schedule();
-      } else if (state === SyncState.Error || state === SyncState.Reconnecting) {
-        this.post({ event: "connection", connection: "offline", message: "" });
+        return;
       }
+      if (state !== SyncState.Error && state !== SyncState.Reconnecting) return;
+      const failure = isRecord(data) && data["error"] instanceof MatrixError ? data["error"] : null;
+      if (failure?.errcode === "M_UNKNOWN_TOKEN" || failure?.errcode === "M_MISSING_TOKEN") {
+        // The device was signed out elsewhere; keeping the session would hide that.
+        void this.forgetSession();
+        return;
+      }
+      this.post({ event: "connection", connection: "offline", message: "" });
     });
     client.on(RoomEvent.Timeline, (_event: MatrixEvent, room?: Room) => {
       if (room) this.touched.add(room.roomId);
@@ -575,6 +583,15 @@ export class WorkerApi {
       this.afterBoot(stored);
       return { session: stored.session, uia: null, uiaSession: null };
     }
+  }
+
+  private async forgetSession(): Promise<void> {
+    this.client?.stopClient();
+    this.client = null;
+    this.session = null;
+    this.db?.close();
+    this.db = null;
+    this.post({ event: "session", session: null });
   }
 
   private async logout(): Promise<unknown> {
@@ -780,31 +797,50 @@ export class WorkerApi {
     const db = this.requireDb();
     const room = client.getRoom(roomId);
     if (!room) throw new Error("unknown room");
-    const msgtype = msgTypeOf(mime);
-    return this.deliver(txnId, async () => {
-      const uploaded = await uploadAttachment(client, name, mime, data, room.hasEncryptionStateEvent());
-      const content: Record<string, unknown> = {
-        msgtype,
-        body: name,
-        info: { mimetype: mime, size: data.byteLength },
-        ...(uploaded.file ? { file: uploaded.file } : { url: uploaded.url }),
-      };
-      const pending = await db.get<StoredMessage>(STORE.events, txnId);
-      if (pending) {
-        const media: MediaRef = {
-          mxc: uploaded.url,
-          mime,
-          size: data.byteLength,
-          width: null,
-          height: null,
-          duration: null,
-          name,
-          file: uploaded.file,
-        };
-        await db.putMessage({ ...pending, kind: kindOfMime(mime), body: name, media });
-      }
-      await send(client, roomId, "m.room.message", content, txnId);
+    const controller = new AbortController();
+    this.uploads.set(txnId, controller);
+    try {
+      return await this.deliver(txnId, () => this.uploadFile(client, db, room, txnId, name, mime, data, controller.signal));
+    } finally {
+      this.uploads.delete(txnId);
+    }
+  }
+
+  private async uploadFile(
+    client: MatrixClient,
+    db: AccountDb,
+    room: Room,
+    txnId: string,
+    name: string,
+    mime: string,
+    data: ArrayBuffer,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const uploaded = await uploadAttachment(client, name, mime, data, room.hasEncryptionStateEvent(), {
+      signal,
+      onProgress: (loaded, total) => this.post({ event: "progress", txnId, loaded, total }),
     });
+    const content: Record<string, unknown> = {
+      msgtype: msgTypeOf(mime),
+      body: name,
+      info: { mimetype: mime, size: data.byteLength },
+      ...(uploaded.file ? { file: uploaded.file } : { url: uploaded.url }),
+    };
+    const pending = await db.get<StoredMessage>(STORE.events, txnId);
+    if (pending) {
+      const media: MediaRef = {
+        mxc: uploaded.url,
+        mime,
+        size: data.byteLength,
+        width: null,
+        height: null,
+        duration: null,
+        name,
+        file: uploaded.file,
+      };
+      await db.putMessage({ ...pending, kind: kindOfMime(mime), body: name, media });
+    }
+    await send(client, room.roomId, "m.room.message", content, txnId);
   }
 
   private async retry(txnId: string): Promise<unknown> {
@@ -818,6 +854,8 @@ export class WorkerApi {
   }
 
   private async cancel(txnId: string): Promise<unknown> {
+    this.uploads.get(txnId)?.abort();
+    this.uploads.delete(txnId);
     await this.requireDb().del(STORE.events, txnId);
     return {};
   }

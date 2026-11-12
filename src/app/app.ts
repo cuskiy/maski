@@ -203,6 +203,13 @@ export class App implements UiContext {
       case "outbox":
         this.applyOutbox(event.txnId, event.status);
         return;
+      case "progress": {
+        const percent = event.total > 0 ? Math.round((event.loaded / event.total) * 100) : 0;
+        const previous = state.progress[event.txnId] ?? 0;
+        if (percent - previous < 5 && percent !== 100) return;
+        setState({ progress: { ...state.progress, [event.txnId]: percent } });
+        return;
+      }
       case "keys":
         setState({ keys: event.status });
         return;
@@ -211,6 +218,13 @@ export class App implements UiContext {
         if (event.update.state === "requested") {
           this.toast(t("profile.verifyRequest"));
           if (!state.dialog) this.openDialog("settings");
+        }
+        if (event.update.state === "done" || event.update.state === "cancelled") {
+          const pending = event.update.state;
+          setTimeout(() => {
+            if (state.verify?.state === pending) setState({ verify: null });
+          }, 4000);
+          void this.loadDevices();
         }
         return;
       case "typing":
@@ -279,7 +293,14 @@ export class App implements UiContext {
   }
 
   private applyOutbox(txnId: string, status: "sent" | "queued" | "sending" | "failed"): void {
-    if (status === "sent") return;
+    if (status === "sent") {
+      if (state.progress[txnId] !== undefined) {
+        const next = { ...state.progress };
+        delete next[txnId];
+        setState({ progress: next });
+      }
+      return;
+    }
     const message = state.messages.find((entry) => entry.id === txnId);
     if (!message) return;
     message.status = status;

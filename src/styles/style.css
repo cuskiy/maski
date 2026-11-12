@@ -811,6 +811,35 @@ a {
   text-decoration: underline;
 }
 
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 12rem;
+}
+
+.progress-track {
+  flex: 1;
+  block-size: 3px;
+  border-radius: var(--radius-full);
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  block-size: 100%;
+  inline-size: var(--progress, 0%);
+  background: var(--page-text);
+  transition: inline-size var(--ease) linear;
+}
+
+.progress-text {
+  color: var(--page-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 .reactions {
   display: flex;
   flex-wrap: wrap;

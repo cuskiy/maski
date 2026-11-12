@@ -50,14 +50,40 @@ export interface EncryptedUpload {
 }
 
 /** Encrypt before uploading, so an encrypted room never receives plaintext media. */
-export async function uploadAttachment(client: MatrixClient, name: string, mime: string, data: ArrayBuffer, encrypted: boolean): Promise<EncryptedUpload> {
+export interface UploadOptions {
+  onProgress?: (loaded: number, total: number) => void;
+  signal?: AbortSignal;
+}
+
+export async function uploadAttachment(
+  client: MatrixClient,
+  name: string,
+  mime: string,
+  data: ArrayBuffer,
+  encrypted: boolean,
+  options: UploadOptions = {},
+): Promise<EncryptedUpload> {
+  const abortController = options.signal ? toAbortController(options.signal) : undefined;
+  const opts = {
+    type: mime,
+    ...(options.onProgress ? { progressHandler: (progress: { loaded: number; total: number }) => options.onProgress?.(progress.loaded, progress.total) } : {}),
+    ...(abortController ? { abortController } : {}),
+  };
   if (!encrypted) {
-    const uploaded = await client.uploadContent(new File([data], name, { type: mime }));
+    // The filename would leak the plaintext name of an encrypted upload.
+    const uploaded = await client.uploadContent(new File([data], name, { type: mime }), opts);
     return { url: uploaded.content_uri, file: null };
   }
   const attachment = Attachment.encrypt(new Uint8Array(data));
   const file = JSON.parse(attachment.mediaEncryptionInfo ?? "{}") as Record<string, unknown>;
   const bytes = new Uint8Array(attachment.encryptedData).buffer as ArrayBuffer;
-  const uploaded = await client.uploadContent(new File([bytes], name, { type: mime }));
+  const uploaded = await client.uploadContent(new File([bytes], name, { type: mime }), { ...opts, includeFilename: false });
   return { url: uploaded.content_uri, file: { ...file, url: uploaded.content_uri } };
+}
+
+function toAbortController(signal: AbortSignal): AbortController {
+  const controller = new AbortController();
+  if (signal.aborted) controller.abort();
+  else signal.addEventListener("abort", () => controller.abort(), { once: true });
+  return controller;
 }

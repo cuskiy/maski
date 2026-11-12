@@ -85,7 +85,14 @@ function statusRow(message: Message, ctx: UiContext): HTMLElement | null {
       el("span", { text: t("room.retry") }),
     ]);
   }
-  return el("span", { class: "row-status", text: t("room.sending") });
+  const percent = state.progress[message.id];
+  if (percent === undefined) return el("span", { class: "row-status", text: t("room.sending") });
+  const fill = el("span", { class: "progress-fill" });
+  fill.style.setProperty("--progress", `${percent}%`);
+  return el("span", { class: "row-status progress" }, [
+    el("span", { class: "progress-track" }, [fill]),
+    el("span", { class: "progress-text", text: `${percent}%` }),
+  ]);
 }
 
 function menuFor(message: Message, x: number, y: number, ctx: UiContext): void {
@@ -147,8 +154,9 @@ function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: Ui
 function signature(item: TimelineItem): string {
   if (item.kind === "day") return item.label;
   const message = item.message;
+  const progress = state.progress[message.id] ?? -1;
   const reactions = message.reactions.map((reaction) => `${reaction.key}${reaction.count}${reaction.me ? "+" : ""}`).join(",");
-  return `${item.groupStart}${item.own}${message.status}${message.edited}${message.body.length}${message.html?.length ?? 0}${reactions}${message.reply?.id ?? ""}`;
+  return `${item.groupStart}${item.own}${message.status}${message.edited}${message.body.length}${message.html?.length ?? 0}${reactions}${message.reply?.id ?? ""}${progress}`;
 }
 
 export class TimelineView {

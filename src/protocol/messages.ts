@@ -66,6 +66,7 @@ export type Event =
   | { event: "sync"; revision: number; rooms: string[]; active: string | null; removed: string[] }
   | { event: "connection"; connection: "connecting" | "online" | "offline" | "error"; message: string }
   | { event: "outbox"; txnId: string; status: SendStatus; error: string }
+  | { event: "progress"; txnId: string; loaded: number; total: number }
   | { event: "keys"; status: KeyStatus }
   | { event: "typing"; roomId: string; users: { userId: string; name: string }[] }
   | { event: "verify"; update: VerifyState }

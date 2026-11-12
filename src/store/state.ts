@@ -27,6 +27,7 @@ export interface AppState {
   typing: TypingUser[];
   keys: KeyStatus | null;
   devices: DeviceEntry[];
+  progress: Record<string, number>;
   verify: VerifyState | null;
   locale: Locale;
   settings: Settings;
@@ -49,6 +50,7 @@ export const state: AppState = {
   typing: [],
   keys: null,
   devices: [],
+  progress: {},
   verify: null,
   locale: "en",
   settings: {

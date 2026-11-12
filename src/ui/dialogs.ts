@@ -269,18 +269,26 @@ function settingsDialog(app: App): void {
     }, [el("span", { text: locale.label })]),
   ));
 
-  const desktop = el("div", { class: "setting-value" }, [
-    el("span", { class: "status-text", text: desktopStatus() }),
-    button(t("settings.enable"), () => {
-      void Notification.requestPermission().then((permission) => {
-        const on = permission === "granted";
-        void app.local.saveSettings({ desktop: on }).then((settings) => {
-          setState({ settings });
-          desktop.replaceChildren(el("span", { class: "status-text", text: desktopStatus() }));
-        });
-      });
-    }),
-  ]);
+  const desktop = el("div", { class: "setting-value" });
+  const paintDesktop = (): void => {
+    const pending = typeof Notification !== "undefined" && Notification.permission === "default";
+    desktop.replaceChildren(
+      el("span", { class: "status-text", text: desktopStatus() }),
+      ...(pending
+        ? [
+            button(t("settings.enable"), () => {
+              void Notification.requestPermission().then((permission) => {
+                void app.local.saveSettings({ desktop: permission === "granted" }).then((settings) => {
+                  setState({ settings });
+                  paintDesktop();
+                });
+              });
+            }),
+          ]
+        : []),
+    );
+  };
+  paintDesktop();
 
   const body = el("div", { class: "dialog-sections" }, [
     el("section", { class: "section" }, [
