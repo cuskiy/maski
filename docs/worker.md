@@ -62,8 +62,9 @@ sentence per code instead of one vague error.
 `worker/verify.ts` holds one SAS verification. An incoming request is tracked from
 `CryptoEvent.VerificationRequestReceived`; a request from this side starts with
 `crypto.requestDeviceVerification(userId, deviceId)`. Once the request is `Ready` the side
-that asked for it calls `startVerification("m.sas.v1")` and the side that accepted waits for
-`request.verifier`. Seven emoji arrive through `VerifierEvent.ShowSas`, the user compares
+that asked for it calls `startVerification("m.sas.v1")`. A client that only answered the
+request starts SAS itself after a pause, because some clients never send the start and the
+two sides would otherwise wait for each other. Seven emoji arrive through `VerifierEvent.ShowSas`, the user compares
 them and confirms with `sas.confirm()`; the SDK completes the MAC exchange and signs the
 device, which is what lets senders share room keys with it.
 

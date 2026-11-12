@@ -28,6 +28,10 @@ rate-limit budget. The account used for the runs lives on `unredacted.org`; the 
 the server, the user and the password from `MASKI_SERVER`, `MASKI_USER` and
 `MASKI_PASSWORD`.
 
+Verification needs a second client. Start it from another client, or from this one through
+the Verify button in Settings; the seven emoji are the same on both screens, and only a
+confirmation on both sides finishes the exchange.
+
 A room whose history was encrypted before this device joined shows "This message cannot be
 decrypted" until the device is verified: the sender's client does not share a Megolm key
 with an unverified device. That is the expected state, not a projection bug.
