@@ -120,17 +120,17 @@ describe("roomPreview", () => {
   });
 });
 
-describe("canModerate", () => {
-  const member = (overrides: Partial<Member>): Member => ({
-    roomId: "!room",
-    userId: "@b:example.org",
-    name: "B",
-    avatar: null,
-    membership: "join",
-    power: 0,
-    ...overrides,
-  });
+const member = (overrides: Partial<Member>): Member => ({
+  roomId: "!room",
+  userId: "@b:example.org",
+  name: "B",
+  avatar: null,
+  membership: "join",
+  power: 0,
+  ...overrides,
+});
 
+describe("canModerate", () => {
   it("needs the power to act and a member below it", () => {
     expect(canModerate(room({ myPower: 100 }), member({}), "@me:example.org")).toBe(true);
     expect(canModerate(room({ myPower: 50 }), member({ power: 50 }), "@me:example.org")).toBe(false);
