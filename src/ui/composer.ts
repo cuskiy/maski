@@ -63,6 +63,7 @@ export class Composer {
   readonly root: HTMLElement;
   private textarea: HTMLTextAreaElement;
   private sendButton: HTMLButtonElement;
+  private stickerButton: HTMLButtonElement;
   private tray: HTMLElement;
   private banner: HTMLElement;
   private note: HTMLElement;
@@ -105,6 +106,11 @@ export class Composer {
       attrs: { type: "button", "aria-label": t("room.send") },
       on: { click: () => void this.send() },
     }, [icon(ICON.send, 20)]);
+    this.stickerButton = el("button", {
+      class: "icon-button composer-send",
+      attrs: { type: "button", "aria-label": t("picker.stickers") },
+      on: { click: () => this.ctx.togglePicker("sticker") },
+    }, [icon(ICON.sticker, 20)]);
     const attach = el("button", {
       class: "icon-button",
       attrs: { type: "button", "aria-label": t("room.attach") },
@@ -123,7 +129,7 @@ export class Composer {
       this.banner,
       this.note,
       this.tray,
-      el("div", { class: "composer-row" }, [attach, el("div", { class: "composer-field-group" }, [field, emoji]), this.sendButton]),
+      el("div", { class: "composer-row" }, [attach, el("div", { class: "composer-field-group" }, [field, emoji]), this.sendButton, this.stickerButton]),
     ]);
   }
 
@@ -282,7 +288,10 @@ export class Composer {
     const text = this.textarea.value;
     this.ctx.setDraft({ text });
     this.resize();
-    this.sendButton.disabled = text.trim().length === 0 && this.files.length === 0;
+    const empty = text.trim().length === 0 && this.files.length === 0;
+    // An empty field offers stickers; the send control only exists when there is something to send.
+    this.sendButton.hidden = empty;
+    this.stickerButton.hidden = !empty;
     if (!this.textarea.matches(":focus")) this.showRendered();
     this.ctx.typing(text.length > 0);
   }

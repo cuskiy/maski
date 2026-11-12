@@ -198,6 +198,8 @@ export class WorkerApi {
     switch (command.type) {
       case "start":
         return this.start(command.accountHash);
+      case "discover":
+        return this.discover(command.baseUrl);
       case "login":
         return this.login(command.baseUrl, command.user, command.password);
       case "register":
@@ -487,6 +489,27 @@ export class WorkerApi {
   private async saveSession(stored: StoredSession): Promise<void> {
     await this.requireDb().setMeta("session", { session: stored.session, token: stored.token });
     this.session = stored.session;
+  }
+
+  /** What a homeserver offers, so the sign-in screen shows only methods that work. */
+  private async discover(input: string): Promise<{ baseUrl: string; password: boolean; sso: boolean; registration: boolean }> {
+    const base = await discoverBaseUrl(input, "");
+    const login = await fetch(`${base}/_matrix/client/v3/login`).then((response) => (response.ok ? response.json() : null));
+    const flows = isRecord(login) && Array.isArray(login["flows"]) ? login["flows"] : [];
+    const types = flows.map((flow: unknown) => (isRecord(flow) ? asString(flow["type"]) : "")).filter(Boolean);
+    let registration = false;
+    try {
+      const response = await fetch(`${base}/_matrix/client/v3/register`);
+      registration = response.ok || response.status === 401;
+    } catch {
+      registration = false;
+    }
+    return {
+      baseUrl: base,
+      password: types.includes("m.login.password"),
+      sso: types.some((type: string) => type === "m.login.sso" || type === "m.login.cas"),
+      registration,
+    };
   }
 
   private async login(baseUrl: string, user: string, password: string): Promise<Session> {

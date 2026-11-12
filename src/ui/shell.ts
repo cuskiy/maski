@@ -219,7 +219,11 @@ export class Shell {
           class: "section-head",
           attrs: { type: "button", "aria-expanded": String(open) },
           on: { click: () => this.toggleSection(section.id) },
-        }, [el("span", { text: t(SECTION_LABEL[section.id]) }), el("span", { class: "section-count", text: String(section.rooms.length) })]),
+        }, [
+          el("span", { text: t(SECTION_LABEL[section.id]) }),
+          el("span", { class: "section-count", text: String(section.rooms.length) }),
+          el("span", { class: "section-chevron" }, [icon(ICON.chevron, 14)]),
+        ]),
       );
       if (!open) continue;
       const body = el("div", { class: "section-body" });
@@ -291,15 +295,17 @@ export class Shell {
         : state.typing.length === 1
           ? t("room.typingOne", { name: state.typing[0]?.name ?? "" })
           : t("room.typingMany", { n: state.typing.length });
+    const members = room.joined === 1 ? t("room.joinedOne") : t("room.joined", { n: room.joined });
     this.header.replaceChildren(
       el("button", {
         class: "icon-button back-button",
         attrs: { type: "button", "aria-label": t("common.back") },
         on: { click: () => this.ctx.openRoom("") },
       }, [icon(ICON.back, 20)]),
+      avatar(room.avatar, room.name, 32),
       el("div", { class: "room-head-text" }, [
         el("h1", { class: "room-title", text: room.name }),
-        ...(typing ? [el("p", { class: "room-subtitle", text: typing })] : []),
+        el("p", { class: "room-subtitle", text: typing ?? (room.topic || (room.membership === "join" ? members : "")) }),
       ]),
       iconButton(ICON.more, t("roomSettings.title"), () => this.ctx.openDialog("room-settings", room.roomId)),
     );

@@ -13,19 +13,20 @@
   </head>
   <body>
     <div id="app">
-      <div class="screen-auth" id="boot">
-        <div class="auth-card">
-          <p class="auth-brand">maski</p>
-          <h1 class="auth-title">A fast, local-first Matrix client</h1>
+      <div class="boot" id="boot">
+        <div class="boot-screen" aria-busy="true">
+          <p class="brand">maski</p>
+          <p class="boot-text">Starting</p>
+          <span class="spinner" aria-hidden="true"></span>
         </div>
       </div>
     </div>
     <noscript>
-      <div class="screen-auth noscript">
-        <div class="auth-card">
-          <p class="auth-brand">maski</p>
-          <h1 class="auth-title">JavaScript is required</h1>
-          <p class="auth-text">Matrix sync and end-to-end encryption run in your browser, so this client cannot start without JavaScript.</p>
+      <div class="nojs">
+        <div class="nojs-card">
+          <p class="brand">maski</p>
+          <h1>JavaScript is required</h1>
+          <p>Matrix sync and end-to-end encryption run in your browser, so this client cannot start without JavaScript.</p>
           <p><a class="link" href="/zh-CN/">简体中文</a></p>
         </div>
       </div>

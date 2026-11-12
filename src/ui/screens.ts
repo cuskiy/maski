@@ -1,69 +1,36 @@
 import type { App } from "../app/app.ts";
 import { config } from "../app/config.ts";
 import type { KeyStatus, Session } from "../core/types.ts";
-import type { UiaStage } from "../protocol/messages.ts";
+import type { Discovery, UiaStage } from "../protocol/messages.ts";
 import { setLocale, t } from "../i18n/index.ts";
 import { setState, state } from "../store/state.ts";
-import { el, icon, ICON } from "./dom.ts";
+import { el } from "./dom.ts";
+import { note, textField } from "./dialog-kit.ts";
 import { copyText } from "./overlay.ts";
 
-function gateMessage(error: unknown): string {
-  const code = error instanceof Error ? error.message : "";
-  if (code === "no-keys") return t("gate.noKeys");
-  if (code === "restore") return t("gate.restore");
-  if (code === "uia") return t("gate.uia");
-  return t("gate.invalid");
+type Step = "landing" | "server" | "methods" | "register";
+
+function labelled(label: string, control: HTMLElement, hint?: string): HTMLElement {
+  return el("div", { class: "form-field" }, [
+    el("label", {}, [el("span", { class: "field-label", text: label }), control]),
+    hint ? el("small", { class: "field-hint", text: hint }) : null,
+  ]);
 }
 
-function askStages(app: App, stages: UiaStage[], session: string, baseUrl: string, username: string, password: string, notice: HTMLElement): void {
-  const token = stages.some((stage) => stage.stage === "token") ? field(t("auth.token"), { name: "token" }) : null;
-  const terms = stages.some((stage) => stage.stage === "terms") ? el("label", { class: "form-row" }, [el("input", { attrs: { type: "checkbox" } }), el("span", { class: "form-label", text: t("auth.terms") })]) : null;
-  const boxes = stages.map((stage) => {
-    if (stage.stage === "token") return token?.wrap ?? el("span");
-    if (stage.stage === "terms") return terms ?? el("span");
-    if (stage.stage === "password") return el("p", { class: "form-label", text: t("auth.stagePassword") });
-    return el("span");
-  });
-  const continueButton = el("button", { class: "button button-primary", attrs: { type: "button" } }, [el("span", { text: t("auth.continue") })]);
-  notice.replaceChildren(...boxes, continueButton);
-  continueButton.addEventListener("click", () => {
-    const auth: Record<string, unknown> = { session };
-    for (const stage of stages) {
-      if (stage.stage === "dummy") auth["type"] = "m.login.dummy";
-      if (stage.stage === "terms") auth["type"] = "m.login.terms";
-      if (stage.stage === "password") auth["type"] = "m.login.password";
-      if (stage.stage === "token") auth["type"] = "m.login.registration_token";
-    }
-    if (token && token.input.value) auth["token"] = token.input.value;
-    if (terms) {
-      const checkbox = terms.querySelector("input");
-      if (!checkbox?.checked) {
-        notice.textContent = t("auth.terms");
-        return;
-      }
-    }
-    app.worker
-      .send<{ session: Session | null; uia: UiaStage[] | null; uiaSession: string | null }>({
-        type: "register",
-        baseUrl,
-        username,
-        password,
-        auth,
-        session,
-      })
-      .then((result) => {
-        if (result.uia && result.uia.length > 0) askStages(app, result.uia, result.uiaSession ?? "", baseUrl, username, password, notice);
-      })
-      .catch((error: unknown) => {
-        notice.textContent = error instanceof Error ? error.message : t("error.unknown");
-      });
-  });
+function head(title: string, text: string): HTMLElement {
+  return el("div", { class: "auth-head" }, [
+    el("p", { class: "brand", text: config.app.name }),
+    el("h1", { text: title }),
+    el("p", { text }),
+  ]);
 }
 
-function field(label: string, attrs: Record<string, string>, value = ""): { wrap: HTMLElement; input: HTMLInputElement } {
-  const input = el("input", { class: "field", attrs: { value, ...attrs } });
-  const wrap = el("label", { class: "form-row" }, [el("span", { class: "form-label", text: label }), input]);
-  return { wrap, input };
+function choice(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
+  return el("button", {
+    class: primary ? "button button-primary" : "button",
+    attrs: { type: "button" },
+    on: { click: onClick },
+  }, [el("span", { text: label })]);
 }
 
 function languageSwitch(): HTMLElement {
@@ -75,7 +42,6 @@ function languageSwitch(): HTMLElement {
         click: () => {
           setLocale(locale.id);
           setState({ locale: locale.id });
-          void state.settings;
           location.href = `${locale.path}${location.hash}`;
         },
       },
@@ -84,187 +50,302 @@ function languageSwitch(): HTMLElement {
 }
 
 export function authScreen(app: App): HTMLElement {
-  let mode: "login" | "register" = "login";
-  const notice = el("p", { class: "form-notice", attrs: { role: "alert" }, text: state.notice });
-  const form = el("form", { class: "auth-form" });
-  const title = el("h1", { class: "auth-title", text: t("auth.signIn") });
-  const tagline = el("p", { class: "auth-text", text: t("app.tagline") });
-  const submit = el("button", { class: "button button-primary", attrs: { type: "submit" } }, [el("span", { text: t("auth.signInAction") })]);
+  let step: Step = "landing";
+  let server: string = config.homeserver.defaultBaseUrl;
+  let discovery: Discovery | null = null;
+  let error = "";
+  let busy = false;
+  let uia: { stages: UiaStage[]; session: string; username: string; password: string } | null = null;
 
-  const render = (): void => {
-    const kept = new Map([...form.querySelectorAll("input")].map((input) => [input.name, input.value]));
-    const server = field(t("auth.homeserver"), { name: "server", autocomplete: "url", value: kept.get("server") || config.homeserver.defaultBaseUrl });
-    const user = field(t("auth.username"), { name: "username", autocomplete: "username", value: kept.get("username") ?? "", required: "true" });
-    const password = field(t("auth.password"), { name: "password", type: "password", autocomplete: mode === "login" ? "current-password" : "new-password", value: kept.get("password") ?? "", required: "true" });
-    const confirm = mode === "register" ? field(t("auth.confirm"), { name: "confirm", type: "password", autocomplete: "new-password", required: "true" }) : null;
-    title.textContent = mode === "login" ? t("auth.signIn") : t("auth.signUp");
-    submit.replaceChildren(el("span", { text: mode === "login" ? t("auth.signInAction") : t("auth.signUpAction") }));
-    form.replaceChildren(
-      server.wrap,
-      user.wrap,
-      password.wrap,
-      ...(confirm ? [confirm.wrap] : []),
-      submit,
-      notice,
-      el("button", {
-        class: "link-button",
-        attrs: { type: "button" },
-        on: {
-          click: () => {
-            mode = mode === "login" ? "register" : "login";
-            render();
-          },
-        },
-      }, [el("span", { text: mode === "login" ? t("auth.switchToSignUp") : t("auth.switchToSignIn") })]),
-    );
-    form.onsubmit = (event) => {
+  const card = el("div", { class: "auth-card" });
+  const paint = (): void => {
+    const nodes: (Node | null)[] = [];
+    if (step === "landing") {
+      nodes.push(
+        head(t("auth.title"), t("app.tagline")),
+        el("div", { class: "auth-choices" }, [
+          choice(t("auth.signIn"), true, () => { step = "server"; paint(); }),
+          choice(t("auth.signUp"), false, () => { step = "register"; paint(); }),
+        ]),
+      );
+    } else if (step === "server") {
+      const field = el("input", { class: "field", attrs: { value: server, autocomplete: "url", spellcheck: "false" } });
+      field.addEventListener("input", () => { server = field.value; });
+      nodes.push(
+        head(t("auth.title"), t("auth.chooseServer")),
+        el("form", { class: "auth-form" }, [
+          labelled(t("auth.homeserver"), field),
+          note(t("auth.chooseServerHint")),
+          el("div", { class: "auth-actions" }, [
+            choice(busy ? t("auth.discovering") : t("auth.continue"), true, () => void discover()),
+          ]),
+        ]),
+      );
+    } else if (step === "methods") {
+      nodes.push(
+        head(t("auth.title"), discovery?.baseUrl ?? server),
+        el("div", { class: "auth-back" }, [el("button", {
+          class: "link-button",
+          attrs: { type: "button" },
+          on: { click: () => { step = "server"; paint(); } },
+        }, [el("span", { text: t("auth.changeServer") })])]),
+      );
+      if (discovery?.password) nodes.push(passwordForm());
+      else nodes.push(note(discovery?.sso ? t("auth.ssoUnsupported") : t("auth.noPassword")));
+      if (discovery?.registration) {
+        nodes.push(el("div", { class: "auth-back" }, [
+          choice(t("auth.createAccountAction"), false, () => { step = "register"; paint(); }),
+        ]));
+      }
+    } else {
+      nodes.push(...registerStep());
+    }
+    if (error) nodes.push(el("p", { class: "error-text", attrs: { role: "alert" }, text: error }));
+    nodes.push(el("div", { class: "auth-foot" }, [languageSwitch()]));
+    card.replaceChildren(...(nodes.filter((node): node is Node => node !== null)));
+  };
+
+  const discover = async (): Promise<void> => {
+    if (busy) return;
+    busy = true;
+    error = "";
+    paint();
+    try {
+      discovery = await app.worker.send<Discovery>({ type: "discover", baseUrl: server });
+      server = discovery.baseUrl;
+      step = "methods";
+    } catch {
+      error = t("error.network");
+    } finally {
+      busy = false;
+      paint();
+    }
+  };
+
+  const signIn = (user: HTMLInputElement, password: HTMLInputElement): void => {
+    if (busy) return;
+    busy = true;
+    error = "";
+    paint();
+    app.worker
+      .send<Session>({ type: "login", baseUrl: server, user: user.value, password: password.value })
+      .then(() => { busy = false; })
+      .catch((cause: unknown) => {
+        busy = false;
+        const message = cause instanceof Error ? cause.message : "";
+        error = /M_FORBIDDEN|Invalid password|Invalid username/.test(message) ? t("error.credentials") : message || t("error.network");
+        paint();
+      });
+  };
+
+  const passwordForm = (): HTMLElement => {
+    const user = el("input", { class: "field", attrs: { name: "username", autocomplete: "username", required: "true" } });
+    const password = el("input", { class: "field", attrs: { name: "password", type: "password", autocomplete: "current-password", required: "true" } });
+    const form = el("form", { class: "auth-form" }, [
+      labelled(t("auth.username"), user),
+      labelled(t("auth.password"), password),
+      el("div", { class: "auth-actions" }, [el("button", {
+        class: "button button-primary",
+        attrs: { type: "submit", disabled: busy },
+      }, [el("span", { text: t("auth.signInAction") })])]),
+    ]);
+    form.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (mode === "register" && confirm && confirm.input.value !== password.input.value) {
-        notice.textContent = t("auth.mismatch");
+      signIn(user, password);
+    });
+    return form;
+  };
+
+  const registerStep = (): (Node | null)[] => {
+    const user = el("input", { class: "field", attrs: { name: "username", autocomplete: "username", required: "true" } });
+    const password = el("input", { class: "field", attrs: { name: "password", type: "password", autocomplete: "new-password", required: "true" } });
+    const confirm = el("input", { class: "field", attrs: { name: "confirm", type: "password", autocomplete: "new-password", required: "true" } });
+    const serverField = el("input", { class: "field", attrs: { name: "server", autocomplete: "url", spellcheck: "false", value: server } });
+    const token = el("input", { class: "field", attrs: { name: "token" } });
+    const agree = el("input", { class: "checkbox", attrs: { type: "checkbox" } });
+    const needs = (stage: UiaStage["stage"]): boolean => Boolean(uia?.stages.some((entry) => entry.stage === stage));
+
+    const submit = (): void => {
+      if (busy) return;
+      if (password.value !== confirm.value) {
+        error = t("auth.mismatch");
+        paint();
         return;
       }
-      notice.textContent = t("auth.working");
-      submit.disabled = true;
-      const done = (): void => {
-        submit.disabled = false;
-      };
-      if (mode === "login") {
-        app.worker
-          .send<Session>({ type: "login", baseUrl: server.input.value, user: user.input.value, password: password.input.value })
-          .then(done)
-          .catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : "";
-            notice.textContent = /M_FORBIDDEN|Invalid password|Invalid username/.test(message) ? t("error.credentials") : message || t("error.network");
-            done();
-          });
-        return;
+      busy = true;
+      error = "";
+      paint();
+      const auth: Record<string, unknown> = {};
+      if (uia) auth["session"] = uia.session;
+      if (needs("dummy")) auth["type"] = "m.login.dummy";
+      if (needs("terms")) {
+        auth["type"] = "m.login.terms";
+        if (!agree.checked) {
+          busy = false;
+          error = t("auth.terms");
+          paint();
+          return;
+        }
+      }
+      if (needs("token") || token.value.trim()) {
+        auth["type"] = "m.login.registration_token";
+        auth["token"] = token.value.trim();
+      }
+      if (needs("password")) {
+        auth["type"] = "m.login.password";
+        auth["identifier"] = { type: "m.id.user", user: user.value };
+        auth["password"] = password.value;
       }
       app.worker
         .send<{ session: Session | null; uia: UiaStage[] | null; uiaSession: string | null }>({
           type: "register",
-          baseUrl: server.input.value,
-          username: user.input.value,
-          password: password.input.value,
-          auth: null,
-          session: null,
+          baseUrl: serverField.value,
+          username: user.value,
+          password: password.value,
+          auth: Object.keys(auth).length > 0 ? auth : null,
+          session: uia?.session ?? null,
         })
         .then((result) => {
-          done();
-          if (result.uia && result.uia.length > 0) askStages(app, result.uia, result.uiaSession ?? "", server.input.value, user.input.value, password.input.value, notice);
+          busy = false;
+          if (result.uia && result.uia.length > 0) {
+            uia = { stages: result.uia, session: result.uiaSession ?? "", username: user.value, password: password.value };
+          }
+          paint();
         })
-        .catch((error: unknown) => {
-          notice.textContent = error instanceof Error ? error.message : t("error.unknown");
-          done();
+        .catch((cause: unknown) => {
+          busy = false;
+          error = cause instanceof Error ? cause.message : t("error.unknown");
+          paint();
         });
     };
+
+    if (uia && uia.stages.length > 0) {
+      return [
+        head(t("auth.signUp"), t("auth.registerStep")),
+        el("div", { class: "auth-form" }, [
+          needs("terms") ? el("label", { class: "form-field" }, [
+            el("span", { class: "field-label", text: t("auth.terms") }),
+            agree,
+          ]) : null,
+          needs("token") ? labelled(t("auth.token"), token) : null,
+          needs("password") ? note(t("auth.stagePassword")) : null,
+          el("div", { class: "auth-actions" }, [choice(t("auth.continue"), true, submit)]),
+        ]),
+      ];
+    }
+
+    const form = el("form", { class: "auth-form" }, [
+      labelled(t("auth.homeserver"), serverField),
+      labelled(t("auth.username"), user),
+      labelled(t("auth.password"), password),
+      labelled(t("auth.confirm"), confirm),
+      el("div", { class: "auth-actions" }, [el("button", {
+        class: "button button-primary",
+        attrs: { type: "submit", disabled: busy, ...(discovery && !discovery.registration ? { disabled: true } : {}) },
+      }, [el("span", { text: t("auth.signUpAction") })])]),
+      el("div", { class: "auth-back" }, [el("button", {
+        class: "link-button",
+        attrs: { type: "button" },
+        on: { click: () => { step = "landing"; paint(); } },
+      }, [el("span", { text: t("auth.switchToSignIn") })])]),
+    ]);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submit();
+    });
+    return [head(t("auth.signUp"), t("auth.registerIntro")), form];
   };
 
-  render();
-
-  return el("div", { class: "screen-auth" }, [
-    el("div", { class: "auth-card" }, [
-      el("div", { class: "auth-brand" }, [icon(ICON.hash, 22), el("span", { text: config.app.name })]),
-      el("div", { class: "auth-intro" }, [title, tagline]),
-      form,
-      languageSwitch(),
-    ]),
-  ]);
+  paint();
+  return el("div", { class: "auth" }, [card]);
 }
 
 export function gateScreen(app: App): HTMLElement {
-  const notice = el("p", { class: "form-notice", attrs: { role: "alert" } });
-  const key = field(t("gate.keyLabel"), { name: "key", autocomplete: "off" });
-  const password = field(t("gate.password"), { name: "password", type: "password", autocomplete: "current-password" });
-  const newKey = el("div", { class: "gate-key", attrs: { hidden: true } });
-  const actions = el("div", { class: "gate-actions" });
+  const card = el("div", { class: "keygate-card" });
+  const notice = el("p", { class: "error-text", attrs: { role: "alert" } });
+  let busy = false;
+  let newKey: string | null = null;
 
   const finish = (status: KeyStatus): void => {
     setState({ keys: status });
     void app.enter();
   };
 
-  const unlock = el("button", {
-    class: "button button-primary",
-    attrs: { type: "button" },
-    on: {
-      click: () => {
-        notice.textContent = t("gate.unlocking");
-        app.worker
-          .send<KeyStatus>({ type: "unlock", recoveryKey: key.input.value })
-          .then((status) => finish(status))
-          .catch((error: unknown) => {
-            notice.textContent = gateMessage(error);
-          });
-      },
-    },
-  }, [el("span", { text: t("gate.unlock") })]);
-
-  const reset = el("button", {
-    class: "button",
-    attrs: { type: "button" },
-    on: {
-      click: () => {
-        password.wrap.hidden = false;
-        newKey.hidden = false;
-        notice.textContent = t("gate.resetIntro");
-        actions.replaceChildren(
-          el("button", {
-            class: "button button-primary",
-            attrs: { type: "button" },
-            on: {
-              click: () => {
-                app.worker
-                  .send<{ key: string; status: KeyStatus }>({ type: "resetKey", password: password.input.value })
-                  .then((result) => {
-                    newKey.replaceChildren(
-                      el("h2", { text: t("gate.newKey") }),
-                      el("code", { class: "recovery-key", text: result.key }),
-                      el("button", {
-                        class: "button",
-                        attrs: { type: "button" },
-                        on: { click: () => void copyText(result.key, t("toast.recoveryCopied")) },
-                      }, [el("span", { text: t("common.copy") })]),
-                      el("p", { text: t("gate.newKeyHint") }),
-                    );
-                    actions.replaceChildren(
-                      el("button", {
-                        class: "button button-primary",
-                        attrs: { type: "button" },
-                        on: { click: () => finish(result.status) },
-                      }, [el("span", { text: t("gate.saved") })]),
-                    );
-                  })
-                  .catch((error: unknown) => {
-                    notice.textContent = error instanceof Error ? error.message : t("error.unknown");
-                  });
-              },
-            },
-          }, [el("span", { text: t("gate.resetAction") })]),
-        );
-      },
-    },
-  }, [el("span", { text: t("gate.reset") })]);
-
-  const signOut = el("button", {
-    class: "link-button",
-    attrs: { type: "button" },
-    on: { click: () => void app.worker.send({ type: "logout" }) },
-  }, [el("span", { text: t("gate.signOut") })]);
-
-  actions.append(unlock, reset);
-  password.wrap.hidden = true;
-
-  return el("div", { class: "screen-auth" }, [
-    el("div", { class: "auth-card" }, [
-      el("div", { class: "auth-brand" }, [icon(ICON.hash, 22), el("span", { text: config.app.name })]),
-      el("h1", { class: "auth-title", text: t("gate.title") }),
-      el("p", { class: "auth-text", text: t("gate.intro") }),
-      key.wrap,
-      password.wrap,
-      newKey,
-      actions,
+  const paint = (): void => {
+    const key = textField(t("gate.keyLabel"), "");
+    const password = textField(t("gate.password"), "", "password");
+    card.replaceChildren(
+      el("div", { class: "auth-head" }, [
+        el("p", { class: "brand", text: config.app.name }),
+        el("h1", { text: t("gate.title") }),
+        el("p", { text: t("gate.intro") }),
+      ]),
+      newKey
+        ? el("div", { class: "keygate-key" }, [
+            el("h2", { text: t("gate.newKey") }),
+            el("code", { class: "recovery-key", text: newKey }),
+            el("div", { class: "auth-actions" }, [
+              choice(t("common.copy"), false, () => void copyText(newKey ?? "", t("toast.recoveryCopied"))),
+              choice(t("gate.saved"), true, () => finish({ ready: true, backup: true })),
+            ]),
+            note(t("gate.newKeyHint")),
+          ])
+        : el("div", { class: "auth-form" }, [
+            labelled(t("gate.keyLabel"), key),
+            el("div", { class: "auth-actions" }, [
+              choice(busy ? t("gate.unlocking") : t("gate.unlock"), true, () => void unlock(key.value)),
+            ]),
+            el("h2", { class: "auth-subhead", text: t("gate.resetTitle") }),
+            note(t("gate.resetIntro")),
+            labelled(t("gate.password"), password),
+            el("div", { class: "auth-actions" }, [
+              choice(t("gate.resetAction"), false, () => void reset(password.value)),
+            ]),
+          ]),
       notice,
-      signOut,
-    ]),
-  ]);
+      el("div", { class: "auth-foot" }, [
+        el("button", {
+          class: "link-button",
+          attrs: { type: "button" },
+          on: { click: () => void app.worker.send({ type: "logout" }) },
+        }, [el("span", { text: t("gate.signOut") })]),
+      ]),
+    );
+  };
+
+  const unlock = async (value: string): Promise<void> => {
+    if (busy) return;
+    busy = true;
+    notice.textContent = t("gate.unlocking");
+    paint();
+    try {
+      finish(await app.worker.send<KeyStatus>({ type: "unlock", recoveryKey: value }));
+    } catch (cause: unknown) {
+      const code = cause instanceof Error ? cause.message : "";
+      notice.textContent = code === "no-keys" ? t("gate.noKeys") : code === "restore" ? t("gate.restore") : t("gate.invalid");
+    } finally {
+      busy = false;
+      paint();
+    }
+  };
+
+  const reset = async (password: string): Promise<void> => {
+    if (busy) return;
+    busy = true;
+    notice.textContent = t("gate.resetting");
+    paint();
+    try {
+      const result = await app.worker.send<{ key: string; status: KeyStatus }>({ type: "resetKey", password });
+      newKey = result.key;
+      setState({ keys: result.status });
+    } catch (cause: unknown) {
+      notice.textContent = cause instanceof Error && cause.message === "uia" ? t("gate.uia") : t("gate.restore");
+    } finally {
+      busy = false;
+      paint();
+    }
+  };
+
+  paint();
+  return el("div", { class: "keygate" }, [card]);
 }

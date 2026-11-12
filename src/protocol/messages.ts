@@ -7,6 +7,7 @@ export interface UiaStage {
 
 export type Command =
   | { type: "start"; accountHash: string | null }
+  | { type: "discover"; baseUrl: string }
   | { type: "login"; baseUrl: string; user: string; password: string }
   | {
       type: "register";
@@ -77,6 +78,13 @@ export interface RoomWindow {
   room: RoomSummary | null;
   messages: Message[];
   hasOlder: boolean;
+}
+
+export interface Discovery {
+  baseUrl: string;
+  password: boolean;
+  sso: boolean;
+  registration: boolean;
 }
 
 export interface SearchResult {

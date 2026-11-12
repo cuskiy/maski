@@ -104,4 +104,5 @@ export const ICON = {
   copy: "M9 9h10v10H9zM5 15V5h10",
   chevron: "M9 6l6 6-6 6",
   arrowDown: "M12 4v16m0 0 6-6m-6 6-6-6",
+  sticker: "M5 4h14v11l-4 5H5V4Zm10 16v-5h4M9 9h.01M15 9h.01M9 13a3 3 0 0 0 6 0",
 } as const;
