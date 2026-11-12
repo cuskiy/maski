@@ -61,6 +61,7 @@ export const zhCN: Catalog = {
   "room.emoji": "表情和贴纸",
   "room.typingOne": "{name} 正在输入",
   "room.typingMany": "{n} 人正在输入",
+  "room.loadOlder": "加载更早的消息",
   "room.loading": "正在加载消息",
   "room.empty": "未选择房间",
   "room.emptyHint": "选择一个房间，或者开始新的会话。",

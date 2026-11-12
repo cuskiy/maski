@@ -139,6 +139,11 @@ header and the timeline on every character.
 **The gate has codes, not one message.** `no-keys`, `invalid`, `restore`, `uia`. A vague
 "the key does not work" hides a missing secret storage from the user and from us.
 
+**A local echo is not a message.** The SDK writes the message you just sent into the
+timeline with an id of `~room:txn` before the server answers. That row is the queued one
+the main thread already wrote, so the projection skips an id starting with `~`; the remote
+echo arrives with a real id and replaces the queued row by its transaction id.
+
 **Copy is checked.** `scripts/audit.ts` fails on a key the interface does not use, a `t()`
 call whose key does not exist, an interface file that imports the SDK or the worker, and a
 worker file that imports the interface. Dead copy and a broken boundary are build failures,

@@ -57,6 +57,10 @@ export class LocalDb {
   closeAccount(): void {
     this.account?.close();
     this.account = null;
+  }
+
+  forgetAccount(): void {
+    this.closeAccount();
     this.hash = null;
   }
 

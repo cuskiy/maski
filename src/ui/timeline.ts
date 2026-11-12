@@ -161,7 +161,9 @@ export class TimelineView {
   constructor(ctx: UiContext) {
     this.ctx = ctx;
     this.list = el("ol", { class: "timeline", attrs: { "aria-label": t("room.timeline") } });
-    this.older = el("button", { class: "load-older", attrs: { type: "button" }, on: { click: () => void this.loadOlder() } }, [el("span", { text: t("room.loading") })]);
+    this.older = el("button", { class: "load-older", attrs: { type: "button" }, on: { click: () => void this.loadOlder() } }, [
+      el("span", { text: t("room.loadOlder") }),
+    ]);
     this.root = el("div", { class: "timeline-scroll" }, [this.older, this.list]);
     this.root.addEventListener("scroll", () => {
       const nearBottom = this.root.scrollHeight - this.root.scrollTop - this.root.clientHeight < 80;
@@ -180,6 +182,7 @@ export class TimelineView {
     if (!room || this.loading) return;
     this.loading = true;
     this.older.hidden = false;
+    this.older.firstElementChild?.replaceChildren(document.createTextNode(t("room.loading")));
     this.older.classList.add("is-loading");
     this.anchor = { height: this.root.scrollHeight, top: this.root.scrollTop, count: this.list.childElementCount };
     try {
@@ -187,6 +190,7 @@ export class TimelineView {
     } finally {
       this.loading = false;
       this.older.classList.remove("is-loading");
+      this.older.firstElementChild?.replaceChildren(document.createTextNode(t("room.loadOlder")));
     }
   }
 

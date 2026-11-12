@@ -65,6 +65,8 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
   for (const event of fresh) {
     const id = event.getId();
     if (!id) continue;
+    // A local echo (`~room:txn`) is the queued row the main thread already wrote.
+    if (id.startsWith("~")) continue;
     if (event.isRedacted()) {
       await db.del(STORE.events, id);
       changed = true;
@@ -102,8 +104,9 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
   }
 
   if (membersChanged || !(await db.hasMembers(room.roomId))) await projectMembers(db, room);
-  const window = await db.roomWindow(room.roomId, 1);
-  const summary = summarize({ room, direct, last: (window[0] as StoredMessage | undefined) ?? null, selfId: self });
+  const window = await db.roomWindow(room.roomId, 8);
+  const latest = window.findLast((message) => (message as StoredMessage).kind !== "state") as StoredMessage | undefined;
+  const summary = summarize({ room, direct, last: latest ?? null, selfId: self });
   const previous = await db.getRoom(room.roomId);
   const same = previous ? sameSummary(previous, summary) : false;
   if (!same) await db.putRoom(summary);

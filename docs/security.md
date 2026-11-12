@@ -54,6 +54,14 @@ main thread as a blob. A URL never carries a token. Encryption uses
 `Attachment.encrypt` / `Attachment.decrypt` from the SDK's own wasm module, so an encrypted
 room never receives a plaintext upload.
 
+## Keys and other devices
+
+A Megolm key is shared with the devices that are in the room when a message is sent, and
+with a device that asks for it. A client that has just joined a room receives keys only from
+senders that share with unverified devices, which is why history encrypted before the join
+stays unreadable until this device is verified. Device verification by SAS is the first item
+in `roadmap.md`.
+
 ## Privacy
 
 No analytics, no third-party request, no font or icon package. Notifications are local to

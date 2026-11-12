@@ -59,6 +59,7 @@ export const en = {
   "room.emoji": "Emoji and stickers",
   "room.typingOne": "{name} is typing",
   "room.typingMany": "{n} people are typing",
+  "room.loadOlder": "Load older messages",
   "room.loading": "Loading messages",
   "room.empty": "No room selected",
   "room.emptyHint": "Pick a room, or start a new conversation.",

@@ -106,7 +106,8 @@ export async function normalize(event: MatrixEvent, room: Room): Promise<StoredM
   if (event.isDecryptionFailure()) kindFinal = "error";
 
   const eventId = event.getId() ?? "";
-  let body = kindFinal === "error" ? "" : asString(content["body"]);
+  // A membership event carries no body, so the membership is what the timeline reads.
+  let body = kindFinal === "error" ? "" : (membership ?? asString(content["body"]));
   let formatted = asString(content["formatted_body"]);
   let edited = false;
   if (kindFinal === "text" || kindFinal === "emote" || kindFinal === "notice") {

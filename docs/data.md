@@ -49,6 +49,9 @@ row moves to its final place once and only once.
 4. resolve replies against the stored target;
 5. write members, recompute the room summary, store the cursor.
 
+A local echo (`~room:txn`) is skipped: it is the queued row the main thread wrote, and the
+remote echo replaces that row by transaction id.
+
 Writes are idempotent, so a pass that runs twice writes the same bytes. A rebuild never
 clears the store: a room disappears only when the user leaves it.
 

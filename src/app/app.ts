@@ -27,6 +27,7 @@ export class App implements UiContext {
   private typingSent = false;
   private lastRead = "";
   private dialogPushed = false;
+  private activating: Promise<void> | null = null;
   private draftTimer = 0;
   private loadingRoom: string | null = null;
   private seen = new Map<string, number>();
@@ -89,6 +90,14 @@ export class App implements UiContext {
   }
 
   private async applySession(session: Session, keysReady: boolean): Promise<void> {
+    if (this.activating) return this.activating;
+    this.activating = this.activate(session, keysReady).finally(() => {
+      this.activating = null;
+    });
+    return this.activating;
+  }
+
+  private async activate(session: Session, keysReady: boolean): Promise<void> {
     if (state.session?.accountHash === session.accountHash && state.phase === "ready") return;
     await this.local.openAccount(session.accountHash);
     const rooms = await this.local.rooms();
@@ -166,7 +175,7 @@ export class App implements UiContext {
         return;
       case "session":
         if (!event.session) {
-          this.local.closeAccount();
+          this.local.forgetAccount();
           setState({ phase: "auth", session: null, rooms: new Map() });
           this.mount();
         } else {

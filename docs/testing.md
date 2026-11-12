@@ -24,7 +24,13 @@ the horizontal overflow of every element. It is a flow check, not a replacement 
 looking at the screen.
 
 Run it when a boundary changed, not after every edit: a login costs a round trip and a
-rate-limit budget.
+rate-limit budget. The account used for the runs lives on `unredacted.org`; the flow takes
+the server, the user and the password from `MASKI_SERVER`, `MASKI_USER` and
+`MASKI_PASSWORD`.
+
+A room whose history was encrypted before this device joined shows "This message cannot be
+decrypted" until the device is verified: the sender's client does not share a Megolm key
+with an unverified device. That is the expected state, not a projection bug.
 
 ## What the checks do not cover
 
