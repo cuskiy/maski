@@ -137,7 +137,7 @@ function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: Ui
   }
 
   const avatarSlot = el("div", { class: "row-avatar" });
-  if (groupStart && !own) avatarSlot.appendChild(avatar(message.avatar, message.name, 36));
+  if (groupStart) avatarSlot.appendChild(avatar(message.avatar, message.name, 32));
   const body = el("div", { class: "row-body" });
   if (groupStart && !own) body.appendChild(el("div", { class: "row-name" }, [el("button", { class: "link-button", attrs: { type: "button" }, on: { click: () => ctx.profile(message.sender) } }, [el("span", { text: message.name })])]));
   const bubble = bubbleContent(message, ctx);

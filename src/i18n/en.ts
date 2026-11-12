@@ -177,6 +177,7 @@ export const en = {
   "profile.devices": "Sessions",
   "profile.thisDevice": "This device",
   "profile.message": "Send message",
+  "profile.unverified": "Not verified",
   "profile.verified": "Verified",
   "profile.copyId": "Copy Matrix ID",
   "profile.admin": "Admin",

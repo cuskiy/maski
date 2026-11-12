@@ -179,6 +179,7 @@ export const zhCN: Catalog = {
   "profile.devices": "会话",
   "profile.thisDevice": "这台设备",
   "profile.message": "发送消息",
+  "profile.unverified": "未验证",
   "profile.verified": "已验证",
   "profile.copyId": "复制 Matrix ID",
   "profile.admin": "管理员",

@@ -288,6 +288,7 @@ export class Shell {
     const typing = state.typing.length > 0;
     this.header.replaceChildren(
       el("button", { class: "icon-button back-button", attrs: { type: "button", "aria-label": t("common.back") }, on: { click: () => this.ctx.openRoom("") } }, [icon(ICON.back, 20)]),
+      avatar(room.avatar, room.name, 32),
       el("div", { class: "room-head-text" }, [
         el("h1", { class: "room-title", text: room.name }),
         el("p", {

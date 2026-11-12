@@ -61,7 +61,25 @@ main thread reads a projection and renders plain DOM.
 | U11 | A dialog fades in and out in under a fifth of a second and never re-fades when replaced; reduced motion removes it. |
 | U12 | One dialog at a time, opened from the URL (`?d=`), closed by Escape, its own control, or Back. |
 
-### 0.5 Engineering decisions
+### 0.5 References, and how they are used
+
+The Matrix specification is the basis for every protocol decision. Where the code and the
+specification disagree, the code is wrong. `git/matrix-js-sdk` is the reference for API
+shape and for the traps the prose does not mention; Element Web and Cinny are read for
+behaviour, never for structure; `backup/` is the previous version of this project and holds
+decisions this rewrite keeps.
+
+`blog/` and `backup/` are the references for *design*: the token table, the surface ladder,
+the spacing and type roles, the way grouping is done with tone and space rather than with
+boxes and shadows. They are references, not templates.
+
+A reference is read to understand a decision, then the decision is written in our own terms.
+Nothing is copied: not a rule, not a component, not a file layout. When Element and this
+project disagree about the interface, this project is right by construction, and the
+difference is written down in `docs/decisions.md`. Cite the source and the date when a
+discussion turns on a specific API.
+
+### 0.6 Engineering decisions
 
 | ID | Decision |
 | --- | --- |
@@ -76,7 +94,87 @@ main thread reads a projection and renders plain DOM.
 | E9 | The one visual source is the token table in `:root`, copied from `blog/`; rules take their values from it and never invent a literal. |
 | E10 | Two static HTML entries, one per language, both real Vite entries; no post-processing step. |
 
-## 1. Shape
+## 1. The design
+
+### 1.1 What it is
+
+One visual language, taken from `blog/` and extended here: two inks and paper, surfaces made
+by mixing ink into the page, hierarchy from tone and space, grouping from distance and
+similarity. No elevation, no shadow, no accent colour, no gradients, no glass, no rounded
+pill buttons, no card around every group. A rule is a hairline, used to separate regions that
+otherwise would merge.
+
+### 1.2 Token ladder
+
+Every colour, size, space, radius and duration is a token in `:root`; a rule takes its values
+from there and invents nothing. The tokens are the blog's, plus the ones a client needs:
+
+- `--page`, `--ink`, and the surface ladder `--surface`, `--surface-hover`, `--surface-active`.
+- Text tones per surface: `--page-text`, `--page-text-muted`, and the matching
+  `--surface-text*`, `--surface-hover-text*`.
+- Roles: `--bubble-other`, `--bubble-own`, `--field`, `--popover`, `--action`,
+  `--media-chip`, `--scrim`, `--mark`, `--code`.
+- Type: `--text-sm` to `--text-2xl`, each a `clamp()`; leading `--leading`,
+  `--leading-tight`, `--leading-display`.
+- Space: `--space-1` to `--space-7`; radius `--radius`, `--radius-lg`; `--rule`;
+  `--ease`.
+
+### 1.3 Surface map
+
+| Region | Surface | Text |
+| --- | --- | --- |
+| Navigation | `--surface` | `--surface-text` |
+| Room row, current | `--surface-active` | on-surface tone |
+| Content header, timeline | `--page` | `--page-text` |
+| Other bubble | `--bubble-other` | `--page-text` |
+| Own bubble | `--bubble-own` | `--page-text` |
+| Composer field | `--field` | `--page-text` |
+| Dialog | `--surface` over `--scrim` | `--surface-text` |
+| Menu, picker | `--popover` with `--rule` | `--page-text` |
+| Sign in, gate | `--page` | `--page-text` |
+
+Two bubbles differ by one shallow step, never by hue. Dark takes a slightly different step
+from light, because the same jump reads weaker on a dark ground.
+
+### 1.4 Spacing and type roles
+
+- A surface (bubble, dialog) pads with `--space-3` to `--space-4`; a control with
+  `--space-2` to `--space-3`; a compact row with `--space-1` to `--space-2`.
+- One gap per role: `--space-1` inside a group, `--space-4` between groups,
+  `--space-5` between sections.
+- Room name in the navigation `--text-md`; preview and time `--text-sm` muted; header title
+  `--text-lg`; dialog title `--text-lg`; message body `--text-md`; meta `--text-sm`.
+- Headings balance their lines, paragraphs are set pretty, and a line is never widened by
+  shrinking the type.
+
+### 1.5 Layout
+
+The shell is `100dvh`: navigation on the left, content on the right. One container query on
+`body` at `44rem` turns the navigation into the home screen and a room into the next screen
+with a back control. There is no second layout and no width media query.
+
+The navigation carries the quick actions, then sections that remember whether they are open,
+then the account row. The content carries the room header, the timeline, the composer. The
+timeline and composer are centred at `--content-max`; a bubble is capped at `--bubble-max`.
+
+### 1.6 Behaviour that the design fixes
+
+- A message groups by sender, day and a five-minute gap; only the first row of a group
+  carries the name and the avatar, and the avatar sits on the sender's side.
+- Media and stickers carry no bubble; the time is a chip on the picture.
+- Pending and failed rows carry a quiet line under the bubble; a failed row is the control
+  that fixes it.
+- Dialogs are URL state, one at a time, native `<dialog>`, closed by Escape, by their own
+  control or by Back. A destructive action confirms inside the same dialog.
+- Menus open at the pointer for a right-click and for a long press; there is no hover-only
+  control.
+- The composer is three parts: attach, the field with the emoji control inside it, send.
+  Enter inserts a newline. A themed draft is shown as it will be sent when the field is not
+  focused.
+- Motion is colour and opacity, never layout; `--ease` is under a fifth of a second and
+  becomes zero under reduced motion.
+
+## 2. Shape
 
 ```
 src/
@@ -96,7 +194,7 @@ test/          unit tests and the browser flow
 Dependencies flow one way: `app -> ui -> store -> core`, and `worker -> core`, `protocol`.
 The interface never imports the SDK; the worker never touches the DOM or the UI store.
 
-## 2. Ownership
+## 3. Ownership
 
 | Fact | Owner | Readers |
 | --- | --- | --- |
@@ -113,13 +211,13 @@ One writer per store. The one shared store is `events`: the main thread writes a
 under its transaction id and the worker deletes that key when the echo arrives. The queue is
 written before the command is sent, so the delete cannot arrive first.
 
-## 3. Known gaps
+## 4. Known gaps
 
 Absent on purpose, so the interface has no dead control: threads, spaces, calls, a push
 gateway, SSO, password reset, multi-account, notification for a closed page, pack authoring.
 `docs/roadmap.md` orders what comes next.
 
-## 4. Verifying
+## 5. Verifying
 
 ```
 npm run code     # tsc --noEmit
@@ -132,7 +230,7 @@ npm run check    # all of the above
 
 `test/browser/flow.mjs` drives a real server; read `docs/testing.md` before running it.
 
-## 5. Working notes
+## 6. Working notes
 
 **One activation path.** Login, a restored session and the end of the key gate all end in
 `App.applySession`. It opens the account database, reads the rooms, decides the phase from
@@ -155,7 +253,7 @@ putting the text in the store would repaint the whole shell per character.
 **Copy and boundaries are checked.** `scripts/audit.ts` makes dead copy and a crossed
 boundary a build failure rather than a review note.
 
-## 6. Where the work stands
+## 7. Where the work stands
 
 Verified against a real homeserver: sign in, the key gate (unlock, reset, taking the key
 again on a signed-in device), SAS device verification, session listing and signing the

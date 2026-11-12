@@ -3,16 +3,21 @@ import { config } from "../../app/config.ts";
 import { setLocale, t } from "../../i18n/index.ts";
 import { setState, state, subscribe } from "../../store/state.ts";
 import { el } from "../dom.ts";
-import { button, openDialogFrame, row, textField, uploadButton } from "../dialog-kit.ts";
+import { button, openDialogFrame, row, textField, toggle, uploadButton } from "../dialog-kit.ts";
 import { avatar } from "../media.ts";
 import { copyText, toast } from "../overlay.ts";
 
-export function restoreKeys(app: App): HTMLElement {
+export function thisDeviceVerified(): boolean {
+  return state.devices.some((device) => device.current && device.verified);
+}
+
+function restoreKeys(app: App): HTMLElement {
   const input = textField(t("gate.keyLabel"), "");
   const notice = el("p", { class: "dialog-note" });
-  return el("div", { class: "setting-value restore" }, [
-    input,
-    button(t("gate.unlock"), () => {
+  const block = el("div", { class: "restore" }, [
+    el("div", { class: "inline-form" }, [
+      input,
+      button(t("gate.unlock"), () => {
       notice.textContent = t("gate.unlocking");
       void app.worker
         .send<{ ready: boolean; backup: boolean }>({ type: "unlock", recoveryKey: input.value })
@@ -24,10 +29,12 @@ export function restoreKeys(app: App): HTMLElement {
         .catch((error: unknown) => {
           notice.textContent = error instanceof Error && error.message === "invalid" ? t("gate.invalid") : t("gate.restore");
         });
-    }, true),
+      }, true),
+    ]),
     notice,
     el("p", { class: "dialog-note", text: t("settings.restoreHint") }),
   ]);
+  return block;
 }
 
 export function securitySection(app: App): HTMLElement {
@@ -239,22 +246,16 @@ export function settingsDialog(app: App): void {
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("settings.notifications") }),
       row(t("settings.desktop"), desktop),
-      row(t("settings.preview"), el("input", {
-        attrs: { type: "checkbox", ...(state.settings.preview ? { checked: true } : {}) },
-        on: {
-          change: (event) => {
-            const preview = (event.target as HTMLInputElement).checked;
-            void app.local.saveSettings({ preview }).then((settings) => setState({ settings }));
-          },
-        },
+      row(t("settings.preview"), toggle(t("settings.preview"), state.settings.preview, (preview) => {
+        void app.local.saveSettings({ preview }).then((settings) => setState({ settings }));
       })),
       el("p", { class: "dialog-note", text: t("settings.previewHint") }),
     ]),
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("settings.security") }),
-      row(t("settings.securityDevice"), el("span", { class: "status-text", text: state.keys?.ready ? t("settings.securityReady") : t("settings.securityMissing") })),
+      row(t("settings.securityDevice"), el("span", { class: "status-text", text: thisDeviceVerified() ? t("profile.verified") : t("profile.unverified") })),
       row(t("settings.securityBackup"), el("span", { class: "status-text", text: state.keys?.backup ? t("settings.securityReady") : t("settings.securityMissing") })),
-      state.keys?.ready ? null : restoreKeys(app),
+      thisDeviceVerified() && state.keys?.backup ? null : restoreKeys(app),
       el("h3", { class: "section-subtitle", text: t("profile.devices") }),
       securitySection(app),
     ]),
