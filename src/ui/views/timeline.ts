@@ -166,6 +166,11 @@ export class TimelineView {
     if (item.type === "new") {
       return el("li", { class: "new-divider", text: t("room.newMessages") });
     }
+    if (item.type === "read") {
+      return el("li", { class: "read-marker", attrs: { role: "separator" } }, [
+        el("span", { text: t("room.readMarker") }),
+      ]);
+    }
     if (item.type === "pending") {
       return this.pendingItem(item.outbox);
     }
@@ -535,6 +540,7 @@ function itemSignature(item: TimelineItem): string {
   if (item.type !== "event") {
     if (item.type === "pending") return `pending:${item.outbox.txnId}:${item.outbox.status}:${item.outbox.error ?? ""}`;
     if (item.type === "day") return `day:${item.key}`;
+    if (item.type === "read") return item.key;
     return item.key;
   }
   const event = item.event;

@@ -43,12 +43,18 @@ export interface TimelineNewItem {
   key: string;
 }
 
+export interface TimelineReadItem {
+  type: "read";
+  key: string;
+}
+
 export type TimelineItem =
   | TimelineEventItem
   | TimelineDayItem
   | TimelinePendingItem
   | TimelineOlderItem
-  | TimelineNewItem;
+  | TimelineNewItem
+  | TimelineReadItem;
 
 export function roomSections(snapshot: AppSnapshot): RoomSection[] {
   const sections: RoomSection[] = [
@@ -186,10 +192,16 @@ export function timelineItems(snapshot: AppSnapshot, roomId: string, windowSize:
   if (events.length > sliced.length || room?.hasOlder) {
     items.push({ type: "older", key: "older" });
   }
+  const readUpTo = room?.readUpToEventId ?? null;
+  let readPlaced = !readUpTo;
   let previousDay = "";
   for (let index = 0; index < sliced.length; index += 1) {
     const event = sliced[index];
     if (!event) continue;
+    if (!readPlaced && event.eventId === readUpTo && index > 0) {
+      items.push({ type: "read", key: `read:${event.eventId}` });
+      readPlaced = true;
+    }
     const day = dayKey(event.ts);
     if (day !== previousDay) {
       items.push({ type: "day", key: `day:${day}`, ts: event.ts });
