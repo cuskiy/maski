@@ -585,7 +585,7 @@ export class TimelineView {
 
   private loadAvatar(node: HTMLElement, member: MemberRecord | null): void {
     if (!member?.avatarMxc) return;
-    void this.media.get({ mediaKey: "", mxc: member.avatarMxc, width: 48, height: 48, method: "crop" }).then((url) => {
+    void this.media.get({ mediaKey: "", mxc: member.avatarMxc, width: 48, height: 48, method: "scale" }).then((url) => {
       if (!url) return;
       node.replaceChildren(el("img", { attrs: { src: url, alt: "" } }));
     });

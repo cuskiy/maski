@@ -1847,7 +1847,7 @@ export class App {
       node.classList.add("avatar-pending");
       node.replaceChildren();
     }
-    void this.media.get({ mediaKey: "", mxc, width: size, height: size, method: "crop" }).then((url) => {
+    void this.media.get({ mediaKey: "", mxc, width: size, height: size, method: "scale" }).then((url) => {
       node.classList.remove("avatar-pending");
       if (url) node.replaceChildren(el("img", { attrs: { src: url, alt: "" } }));
       else node.textContent = "";

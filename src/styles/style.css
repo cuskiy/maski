@@ -60,6 +60,7 @@
   --leading-display: 1.1;
   --text-sm: clamp(0.74rem, 0.7rem + 0.15vw, 0.78rem);
   --text-md: clamp(0.84rem, 0.79rem + 0.22vw, 0.95rem);
+  --text-composer: clamp(0.8rem, 0.77rem + 0.12vw, 0.88rem);
   --text-lg: clamp(0.98rem, 0.88rem + 0.45vw, 1.22rem);
   --text-xl: clamp(1.22rem, 1.08rem + 0.8vw, 1.65rem);
   --text-2xl: clamp(1.76rem, 1.24rem + 2.2vw, 2.84rem);
@@ -442,6 +443,8 @@ h3 {
 
 .nav-user-name,
 .nav-user-sub {
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -460,6 +463,8 @@ h3 {
 }
 
 .nav-user-name {
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -572,6 +577,10 @@ h3 {
 .channel-row .room-avatar,
 .nav-user .avatar {
   grid-area: avatar;
+  inline-size: var(--avatar-lg);
+  block-size: var(--avatar-lg);
+  min-inline-size: var(--avatar-lg);
+  font-size: var(--text-md);
 }
 
 .room-row .room-meta,
@@ -631,7 +640,7 @@ h3 {
 .avatar img {
   inline-size: 100%;
   block-size: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .room-meta {
@@ -644,6 +653,8 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
   font-weight: 600;
 }
 
@@ -653,6 +664,7 @@ h3 {
   white-space: nowrap;
   color: var(--page-text-muted);
   font-size: var(--text-sm);
+  line-height: var(--leading-tight);
 }
 
 .room-badges {
@@ -1347,6 +1359,8 @@ h3 {
 }
 
 .composer-bar .field-emoji {
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
   color: var(--surface-text-muted);
 }
 
@@ -1427,6 +1441,7 @@ h3 {
   inline-size: 100%;
   min-block-size: 2.4rem;
   max-block-size: var(--composer-max);
+  font-size: var(--text-composer);
   padding: 0.45rem var(--space-2);
   border: 0;
   background: transparent;
