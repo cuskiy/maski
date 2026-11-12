@@ -225,6 +225,7 @@ export function summarize({ room, direct, last, selfId }: SummaryInput): RoomSum
     favorite: Boolean(room.tags["m.favourite"]),
     lowPriority: Boolean(room.tags["m.lowpriority"]),
     inviter,
+    readUpTo: room.getEventReadUpTo(selfId),
     joined: room.getJoinedMemberCount(),
     myPower: room.getMember(selfId)?.powerLevel ?? 0,
     hasOlder: room.getLiveTimeline().getPaginationToken("b" as never) !== null,

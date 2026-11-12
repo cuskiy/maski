@@ -85,6 +85,7 @@ export interface RoomSummary {
   favorite: boolean;
   lowPriority: boolean;
   inviter: string | null;
+  readUpTo: string | null;
   joined: number;
   myPower: number;
   hasOlder: boolean;

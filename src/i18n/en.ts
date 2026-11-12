@@ -76,6 +76,7 @@ export const en = {
   "room.noPermission": "You cannot write in this room",
   "room.discard": "Discard",
   "room.beginning": "This is the beginning of the room",
+  "room.jumpToBottom": "Jump to the newest message",
   "room.timeline": "Messages",
   "room.emptyPreview": "No messages yet",
   "room.today": "Today",

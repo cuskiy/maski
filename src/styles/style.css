@@ -163,6 +163,20 @@ p {
   margin: 0;
 }
 
+h1,
+h2,
+h3 {
+  line-height: var(--leading-tight);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+svg {
+  inline-size: var(--icon);
+  block-size: var(--icon);
+  flex: none;
+}
+
 button,
 input,
 textarea {
@@ -1056,6 +1070,30 @@ a {
   & .reaction-count {
     color: var(--page-text-muted);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+.row-read {
+  display: block;
+  margin-block: var(--space-2);
+  border-block-start: var(--rule);
+}
+
+.jump-bottom {
+  position: sticky;
+  inset-block-end: var(--space-3);
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  margin-inline: auto;
+  border: var(--rule);
+  border-radius: 50%;
+  background: var(--popover);
+  color: var(--page-text-muted);
+
+  &:hover {
+    color: var(--page-text);
   }
 }
 

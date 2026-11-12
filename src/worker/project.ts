@@ -146,6 +146,7 @@ function sameSummary(a: RoomSummary, b: RoomSummary): boolean {
     a.last?.body === b.last?.body &&
     a.last?.kind === b.last?.kind &&
     a.joined === b.joined &&
+    a.readUpTo === b.readUpTo &&
     a.isDirect === b.isDirect &&
     a.encrypted === b.encrypted &&
     a.hasOlder === b.hasOlder &&

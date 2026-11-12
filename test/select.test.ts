@@ -20,6 +20,7 @@ const room = (overrides: Partial<RoomSummary>): RoomSummary => ({
   favorite: false,
   lowPriority: false,
   inviter: null,
+  readUpTo: null,
   joined: 2,
   myPower: 0,
   hasOlder: false,

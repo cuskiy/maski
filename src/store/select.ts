@@ -17,9 +17,14 @@ export interface MessageItem {
   own: boolean;
 }
 
-export type TimelineItem = DayItem | MessageItem;
+export interface ReadItem {
+  kind: "read";
+  key: string;
+}
 
-export function timelineItems(messages: Message[]): TimelineItem[] {
+export type TimelineItem = DayItem | MessageItem | ReadItem;
+
+export function timelineItems(messages: Message[], readUpTo: string | null = null): TimelineItem[] {
   const items: TimelineItem[] = [];
   let previous: Message | null = null;
   let lastDay = "";
@@ -36,6 +41,7 @@ export function timelineItems(messages: Message[]): TimelineItem[] {
       previousDay !== day ||
       message.ts - previous.ts > 5 * 60 * 1000;
     items.push({ kind: "message", key: `m:${message.id}`, message, groupStart, own: message.sender === state.session?.userId });
+    if (readUpTo && message.id === readUpTo) items.push({ kind: "read", key: `read:${message.id}` });
     // A membership line is not part of a sender's group, so the next message starts one.
     previous = isState ? null : message;
   }

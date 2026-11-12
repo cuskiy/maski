@@ -3,7 +3,7 @@ import { t, timeOfDay } from "../i18n/index.ts";
 import { timelineItems, type TimelineItem } from "../store/select.ts";
 import { state } from "../store/state.ts";
 import type { UiContext } from "./context.ts";
-import { el, keyed } from "./dom.ts";
+import { el, icon, ICON, keyed } from "./dom.ts";
 import { avatar, fileCard, picture } from "./media.ts";
 import { openMenu } from "./overlay.ts";
 import { safeMessageHtml } from "./sanitize.ts";
@@ -153,6 +153,7 @@ function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: Ui
 
 function signature(item: TimelineItem): string {
   if (item.kind === "day") return item.label;
+  if (item.kind === "read") return "read";
   const message = item.message;
   const progress = state.progress[message.id] ?? -1;
   const reactions = message.reactions.map((reaction) => `${reaction.key}${reaction.count}${reaction.me ? "+" : ""}`).join(",");
@@ -163,6 +164,7 @@ export class TimelineView {
   readonly root: HTMLElement;
   private list: HTMLOListElement;
   private older: HTMLButtonElement;
+  private jump: HTMLButtonElement;
   private pinned = true;
   private ctx: UiContext;
 
@@ -172,11 +174,16 @@ export class TimelineView {
     this.older = el("button", { class: "load-older", attrs: { type: "button" }, on: { click: () => void this.loadOlder() } }, [
       el("span", { text: t("room.loadOlder") }),
     ]);
-    this.root = el("div", { class: "timeline-scroll" }, [this.older, this.list]);
+    this.jump = el("button", {
+      class: "jump-bottom",
+      attrs: { type: "button", "aria-label": t("room.jumpToBottom"), hidden: true },
+      on: { click: () => this.scrollToBottom() },
+    }, [icon(ICON.arrowDown, 18)]);
+    this.root = el("div", { class: "timeline-scroll" }, [this.older, this.list, this.jump]);
     this.root.addEventListener("scroll", () => {
       const nearBottom = this.root.scrollHeight - this.root.scrollTop - this.root.clientHeight < 80;
       this.pinned = nearBottom;
-      if (this.pinned) this.root.classList.remove("has-new");
+      this.jump.hidden = nearBottom;
       if (this.root.scrollTop < 120 && state.hasOlder && !this.loading) void this.loadOlder();
       this.older.hidden = !state.hasOlder || this.loading;
     });
@@ -204,6 +211,7 @@ export class TimelineView {
 
   scrollToBottom(): void {
     this.root.scrollTop = this.root.scrollHeight;
+    this.jump.hidden = true;
   }
 
   reveal(eventId: string): void {
@@ -220,11 +228,12 @@ export class TimelineView {
       this.list.replaceChildren();
       return;
     }
-    const items = timelineItems(messages);
-    const build = (item: TimelineItem): HTMLElement =>
-      item.kind === "day"
-        ? el("li", { class: "row-day" }, [el("span", { class: "day-label", text: item.label })])
-        : messageRow(item.message, item.groupStart, item.own, this.ctx);
+    const items = timelineItems(messages, room.readUpTo);
+    const build = (item: TimelineItem): HTMLElement => {
+      if (item.kind === "day") return el("li", { class: "row-day" }, [el("span", { class: "day-label", text: item.label })]);
+      if (item.kind === "read") return el("li", { class: "row-read", attrs: { "aria-hidden": "true" } });
+      return messageRow(item.message, item.groupStart, item.own, this.ctx);
+    };
     keyed(
       this.list,
       items.map((item) => ({ key: item.key, value: item })),
