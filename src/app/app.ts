@@ -362,6 +362,7 @@ export class App {
     await this.db.openAccount(this.hash);
     const projection = await this.db.readProjection(this.router.roomId());
     this.store.setProjection(projection);
+    this.prefetchAvatars();
     if (this.readOnly) this.store.setConnection("readonly");
     // A deep link is never rewritten from here: the first sync may still be adding
     // rooms, and an unknown room simply shows the empty panel.
@@ -1839,19 +1840,27 @@ export class App {
     }
   }
 
-  // A media row must not change height, so the box is reserved before the image
-  // exists and the letter is only drawn when the room has no avatar at all.
+  // The letter is the resting state: it stays until the picture is decoded, so a
+  // slow or missing avatar never leaves an empty box.
   private loadAvatar(node: HTMLElement, mxc: string | null, size: number): void {
     if (!mxc) return;
-    if (!node.querySelector("img")) {
-      node.classList.add("avatar-pending");
-      node.replaceChildren();
-    }
     void this.media.get({ mediaKey: "", mxc, width: size, height: size, method: "scale" }).then((url) => {
-      node.classList.remove("avatar-pending");
       if (url) node.replaceChildren(el("img", { attrs: { src: url, alt: "" } }));
-      else node.textContent = "";
     });
+  }
+
+  // Warm the pictures the first screen needs in one go, instead of one request per
+  // row as it renders.
+  private prefetchAvatars(): void {
+    const snapshot = this.store.getSnapshot();
+    const requests = snapshot.rooms
+      .map((room) => room.avatarMxc)
+      .filter((mxc): mxc is string => Boolean(mxc))
+      .slice(0, 40)
+      .map((mxc) => this.media.get({ mediaKey: "", mxc, width: 48, height: 48, method: "scale" }));
+    const own = snapshot.session?.avatarMxc;
+    if (own) requests.push(this.media.get({ mediaKey: "", mxc: own, width: 48, height: 48, method: "scale" }));
+    void Promise.all(requests).catch(() => undefined);
   }
 
   private replyTo(event: EventRecord): void {

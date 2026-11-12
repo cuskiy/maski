@@ -76,6 +76,7 @@
   --radius-full: 999px;
   --icon: 1rem;
   --avatar: 2rem;
+  --avatar-nav: 2.5rem;
   --avatar-lg: 2.75rem;
   --panel-max: 32rem;
   --meta-max: 42ch;
@@ -577,9 +578,9 @@ h3 {
 .channel-row .room-avatar,
 .nav-user .avatar {
   grid-area: avatar;
-  inline-size: var(--avatar-lg);
-  block-size: var(--avatar-lg);
-  min-inline-size: var(--avatar-lg);
+  inline-size: var(--avatar-nav);
+  block-size: var(--avatar-nav);
+  min-inline-size: var(--avatar-nav);
   font-size: var(--text-md);
 }
 
@@ -620,10 +621,16 @@ h3 {
   min-inline-size: var(--avatar);
   aspect-ratio: 1;
   border-radius: var(--radius-full);
-  color: var(--page-text-muted);
+  background: var(--control);
+  color: var(--surface-text-muted);
   font-size: var(--text-sm);
   font-weight: 700;
   overflow: hidden;
+}
+
+.room-avatar:has(img),
+.avatar:has(img) {
+  background: transparent;
 }
 
 .room-avatar {
@@ -1023,11 +1030,6 @@ h3 {
 
 .older-row.loading .spinner {
   visibility: visible;
-}
-
-.avatar-pending {
-  background: var(--hover-tint);
-  border-radius: var(--radius-full);
 }
 
 .pending-sticker {
