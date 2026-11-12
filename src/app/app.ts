@@ -262,12 +262,6 @@ export class App {
         void this.reloadProjection();
         break;
       case "delta": {
-        const revision = this.store.getSnapshot().revision;
-        if (event.delta.revision > revision + 1) {
-          // A delta went missing, so the projection is re-read instead of guessing.
-          void this.reloadProjection();
-          break;
-        }
         // The known ids have to be read before the delta lands, or every arriving
         // event already looks known and nothing is announced.
         const prior = new Set(this.store.getSnapshot().events.map((row) => row.eventId));

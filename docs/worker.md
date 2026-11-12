@@ -175,7 +175,11 @@ A thumbnail is requested only when a width and height are known and the media is
 
 ### Relations and decryption
 
-A replacement or an annotation may arrive before its payload is readable. When the event is decrypted the worker runs it through the same relation handler the live timeline uses, so an edit in an encrypted room reaches the event it changes instead of being dropped.
+The SDK does not put a relation on the timeline: it aggregates the event into its parent, and an encrypted relation is readable only after decryption. The worker therefore reads every event the sync emits, decrypts it when needed, and applies it through one relation handler. An annotation is stored in `relations` so a later redaction finds it again, and a repeated delivery is dropped by checking the stored relation id. A reaction chip is a toggle: pressing your own reaction redacts its annotation, or cancels the queued send while it is still in the outbox.
+
+### Projection reads
+
+The main thread reads the open room only, newest 2000 rows through the `roomTs` index. Every other room is a summary in `rooms`. A delta is applied when its revision is the next one; a gap re-reads the projection, and a delta for another room contributes its room summary but not its events.
 
 ### Read state
 

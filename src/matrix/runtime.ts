@@ -304,6 +304,14 @@ export class Runtime {
       if (!room || this.initializing || !this.ready || removed || toStartOfTimeline) return;
       void this.onTimeline(event, room).catch((error: unknown) => this.logError(error));
     });
+    client.on(RoomEvent.LocalEchoUpdated, (event, room) => {
+      if (!room || this.initializing || !this.ready) return;
+      // The remote echo replaces the local one in place, so the timeline never
+      // announces our own message. Until the real id is in place there is nothing
+      // the projection can key on.
+      if ((event.getId() ?? "").startsWith("~")) return;
+      void this.onTimeline(event, room).catch((error: unknown) => this.logError(error));
+    });
     client.on(RoomEvent.TimelineReset, () => {
       if (!this.initializing && this.ready) void this.projectAll().catch((error: unknown) => this.logError(error));
     });

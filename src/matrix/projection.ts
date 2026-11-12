@@ -98,7 +98,10 @@ export class Projection {
       [STORE.rooms, STORE.events, STORE.members, STORE.relations, STORE.packs, STORE.meta],
       "readwrite",
     );
-    for (const store of [STORE.rooms, STORE.events, STORE.members, STORE.relations, STORE.packs]) {
+    // Room summaries, members and packs are replaced; events and relations are only
+    // written. A rebuild must never drop a message that the SDK window no longer
+    // holds, and an unchanged row is simply overwritten.
+    for (const store of [STORE.rooms, STORE.members, STORE.packs]) {
       tx.objectStore(store).clear();
     }
     for (const room of rooms) tx.objectStore(STORE.rooms).put(room);

@@ -236,6 +236,16 @@ A UIA prompt can arrive before the shell exists, so the dialog host lives on `bo
 | `about.ts` | version/source/credits/privacy |
 | `media.ts` | image/video/audio/file rows and viewers |
 
+## Navigation surfaces
+
+Three surfaces, each with one owner and one close path:
+
+- The account card unfolds under the account row inside the navigation. It holds the client actions as a two-column grid and sign out at the end. Escape, an outside press, or any action closes it.
+- The emoji and sticker panel is a single instance mounted on the document, positioned above the composer bar. A second press on the same trigger closes it; a press anywhere else, including the composer field, closes it; Escape closes it and returns focus. Switching tab cross-fades the body.
+- The action menu opens at the pointer beside its trigger, below when there is no room above. Arrow keys, Home and End traverse menu items and checkboxes alike.
+
+A room section is a `<details>` whose rows live in a `.room-section-body` box. The box is `display: none` when the section is closed, because a row with an explicit display would otherwise keep its layout and intercept clicks.
+
 ## Mentions, names and time
 
 - A row whose `m.mentions` names the current user gets the mark tone; the room list badge stays strong.
