@@ -14,6 +14,7 @@ import type {
   DeviceRecord,
   EventRecord,
   MediaDescriptor,
+  MemberRecord,
   OutboxRecord,
   RoomRecord,
   ScrollRecord,
@@ -137,7 +138,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root;
     this.adapter = new WorkerClient();
-    this.media = new MediaCache(this.adapter);
+    this.media = new MediaCache(this.adapter, (key) => this.db.readMediaBlob(key));
     document.body.appendChild(this.toaster.element);
   }
 
@@ -191,11 +192,13 @@ export class App {
     this.hash = hash;
     this.store.setConnection(this.readOnly ? "readonly" : "connecting");
     if (cached && gateDone && cached.accountHash === hash) {
-      this.store.setSession(cached);
-      this.store.setKeyGate("complete");
       try {
+        // Rooms and the open timeline are read first: the loading screen stays up
+        // until the shell can be painted complete instead of filling in later.
         await this.db.openAccount(hash);
         await this.reloadProjection();
+        this.store.setSession(cached);
+        this.store.setKeyGate("complete");
         await this.openInitialRoom();
       } catch (error) {
         this.authError = messageOf(error);
@@ -582,17 +585,16 @@ export class App {
     document.title = `${config.app.name} — ${t("app.description")}`;
   }
 
+  // Same markup as the static shell, so the handover draws nothing twice
   private renderBoot(): void {
     if (this.view === "boot") return;
     this.view = "boot";
     this.root.classList.add("boot");
     this.root.replaceChildren(
-      el("div", { class: "boot" }, [
-        el("main", { class: "boot-main" }, [
-          el("p", { class: "brand", text: config.app.name }),
-          el("p", { class: "boot-text", text: t("boot.connecting") }),
-          el("div", { class: "spinner" }),
-        ]),
+      el("div", { class: "boot-screen", attrs: { "aria-busy": "true" } }, [
+        el("p", { class: "brand", text: config.app.name }),
+        el("p", { class: "boot-text", text: t("boot.connecting") }),
+        el("span", { class: "spinner" }),
       ]),
     );
   }
@@ -1397,7 +1399,7 @@ export class App {
     body.appendChild(this.timeline.element);
     this.composer = new Composer({
       onSend: (message) => void this.send(message),
-      onOpenPicker: (anchor, tab) => this.openPicker(anchor, { tab }),
+      onOpenPicker: (anchor) => this.openPicker(anchor),
       onTyping: (active) => void this.sendTyping(active),
       onFormatMenu: (position) => this.openFormatMenu(position),
       onChange: () => this.scheduleDraftSave(),
@@ -1659,6 +1661,20 @@ export class App {
     ]);
   }
 
+  private memberRows(snapshot: AppSnapshot, members: readonly MemberRecord[]): HTMLElement[] {
+    return members.map((member) => {
+      const name = displayName(snapshot, member.roomId, member.userId);
+      return el("button", {
+        class: "member-row",
+        attrs: { type: "button" },
+        on: { click: () => this.openProfile(member.userId) },
+      }, [
+        el("span", { class: "member-name", text: name }),
+        el("span", { class: "badge", text: member.membership }),
+      ]);
+    });
+  }
+
   private async openChild(roomId: string, known: boolean): Promise<void> {
     if (!known) {
       try {
@@ -1823,10 +1839,18 @@ export class App {
     }
   }
 
+  // A media row must not change height, so the box is reserved before the image
+  // exists and the letter is only drawn when the room has no avatar at all.
   private loadAvatar(node: HTMLElement, mxc: string | null, size: number): void {
     if (!mxc) return;
+    if (!node.querySelector("img")) {
+      node.classList.add("avatar-pending");
+      node.replaceChildren();
+    }
     void this.media.get({ mediaKey: "", mxc, width: size, height: size, method: "crop" }).then((url) => {
+      node.classList.remove("avatar-pending");
       if (url) node.replaceChildren(el("img", { attrs: { src: url, alt: "" } }));
+      else node.textContent = "";
     });
   }
 
@@ -1901,11 +1925,27 @@ export class App {
     if (event.media) {
       items.push({ label: t("room.open"), icon: event.kind === "video" ? "video" : "image", action: () => this.openMedia(event) });
     }
+    items.push({ label: t("room.source"), icon: "copy", action: () => void this.openSource(event) });
     if (own && !event.redacted) {
       items.push({ label: t("room.edit"), icon: "edit", action: () => this.editEvent(event) });
       items.push({ label: t("room.delete"), icon: "trash", danger: true, action: () => void this.redact(event) });
     }
     this.actionMenu.open(position, items);
+  }
+
+  private async openSource(event: EventRecord): Promise<void> {
+    try {
+      const result = await this.adapter.request<{ json: string }>("eventSource", {
+        roomId: event.roomId,
+        eventId: event.eventId,
+      });
+      this.dialogs.open({
+        title: t("room.source"),
+        body: el("pre", { class: "source", text: result.json }),
+      });
+    } catch (error) {
+      this.notify(messageOf(error));
+    }
   }
 
   private openReactPicker(event: EventRecord): void {
@@ -2776,7 +2816,21 @@ export class App {
       void this.adapter.request("setRoomState", { roomId: room.roomId, eventType: "m.room.topic", content: { topic: topic.value } });
       this.router.closeDialog();
     };
-    const members = snapshot.members.filter((member) => member.roomId === room.roomId);
+    const members = snapshot.members
+      .filter((member) => member.roomId === room.roomId)
+      .toSorted((left, right) => (left.displayName || left.userId).localeCompare(right.displayName || right.userId));
+    // lazyLoadMembers only knows the members it has seen, so the full list is asked
+    // for once the dialog is open and replaced in place when it arrives.
+    const memberList = el("div", { class: "member-list" }, this.memberRows(snapshot, members));
+    void this.adapter
+      .request<{ members: MemberRecord[] }>("members", { roomId: room.roomId })
+      .then((result) => {
+        const sorted = [...result.members].toSorted((left, right) =>
+          (left.displayName || left.userId).localeCompare(right.displayName || right.userId),
+        );
+        memberList.replaceChildren(...this.memberRows(this.store.getSnapshot(), sorted));
+      })
+      .catch(() => undefined);
     const invite = el("input", { class: "input", attrs: { placeholder: "@user:server" } });
     const body = el("div", { class: "settings-section" }, [
       el("div", { class: "room-settings-tabs" }, [
@@ -2811,21 +2865,7 @@ export class App {
         on: { click: save },
       }),
       el("h3", { text: `${t("roomSettings.members")} (${formatNumber(snapshot.ui.locale, room.memberCount)})` }),
-      el("div", { class: "member-list" }, members.slice(0, 100).map((member) =>
-        el("button", {
-          class: "member-row",
-          attrs: { type: "button" },
-          on: { click: () => this.openProfile(member.userId) },
-        }, [
-          el("div", { class: "member-main" }, [
-            el("span", { class: "member-name", text: member.displayName || member.userId }),
-            member.displayName && member.displayName !== member.userId
-              ? el("span", { class: "member-id", text: member.userId })
-              : null,
-          ]),
-          el("span", { class: "badge", text: member.membership }),
-        ]),
-      )),
+      memberList,
       this.field(t("roomSettings.invite"), invite),
       el("button", {
         class: "button",
@@ -2988,11 +3028,9 @@ export class App {
     });
   }
 
-  private openPicker(
-    trigger: HTMLElement,
-    options: { reactTo?: EventRecord; tab?: "emoji" | "sticker" } = {},
-  ): void {
-    // A second press on the same trigger closes the panel instead of stacking one more.
+  // One panel, no tabs: emoticons first, stickers below, exactly the order the
+  // reader scrolls. It is anchored above the button that opened it.
+  private openPicker(trigger: HTMLElement, options: { reactTo?: EventRecord } = {}): void {
     const previous = this.picker;
     if (previous) {
       const sameTrigger = previous.trigger === trigger;
@@ -3001,29 +3039,28 @@ export class App {
     }
     const snapshot = this.store.getSnapshot();
     const reactTo = options.reactTo ?? null;
-    const picker = el("div", { class: "picker", attrs: { role: "dialog" } });
-    let tab: "emoji" | "sticker" = options.tab ?? "emoji";
-    const search = el("input", { class: "input", attrs: { placeholder: t("picker.search"), "aria-label": t("picker.search") } });
-    const clearSearch = iconButton(t("composer.clear"), "close", () => {
-      search.value = "";
-      clearSearch.hidden = true;
-      renderList("");
-      search.focus();
-    }, "icon-button search-clear");
-    clearSearch.hidden = true;
-    const searchField = el("div", { class: "picker-search" }, [search, clearSearch]);
-    const title = el("span", {
-      class: "picker-title",
-      text: reactTo ? t("room.react") : tab === "sticker" ? t("picker.stickers") : t("picker.emoticons"),
+    const picker = el("div", { class: "picker", attrs: { role: "dialog", "aria-label": t("picker.title") } });
+    const search = el("input", {
+      class: "input",
+      attrs: { placeholder: t("picker.search"), "aria-label": t("picker.search") },
     });
+    const body = el("div", { class: "picker-body" });
+    const clearSearch = iconButton(
+      t("composer.clear"),
+      "close",
+      () => {
+        search.value = "";
+        clearSearch.hidden = true;
+        renderList("");
+        search.focus();
+      },
+      "icon-button search-clear",
+    );
+    clearSearch.hidden = true;
     const head = el("div", { class: "picker-head" }, [
-      title,
+      el("span", { class: "picker-title", text: reactTo ? t("room.react") : t("picker.title") }),
       iconButton(t("common.close"), "close", () => close(), "icon-button picker-close"),
     ]);
-    const body = el("div", { class: "picker-body" });
-    const tabs = el("div", { class: "picker-tabs" });
-    const emojiTab = el("button", { class: "picker-tab", text: t("picker.emoticons"), attrs: { type: "button" } });
-    const stickerTab = el("button", { class: "picker-tab", text: t("picker.stickers"), attrs: { type: "button" } });
     const close = (): void => {
       if (this.picker?.element !== picker) return;
       this.picker = null;
@@ -3044,36 +3081,60 @@ export class App {
       close();
       trigger.focus();
     };
-    // The panel floats above the composer bar so a growing draft cannot move it.
     const place = (): void => {
-      const bar = this.composer?.element.querySelector(".composer-bar") ?? trigger;
-      const rect = bar.getBoundingClientRect();
-      const width = Math.min(
-        picker.offsetWidth,
-        window.innerWidth - 2 * Number.parseFloat(getComputedStyle(picker).getPropertyValue("--space-3") || "8"),
-      );
+      const rect = trigger.getBoundingClientRect();
+      const width = picker.offsetWidth;
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
       picker.style.left = `${left}px`;
       picker.style.bottom = `${window.innerHeight - rect.top + 8}px`;
     };
-    const setTab = (next: "emoji" | "sticker"): void => {
-      tab = next;
-      emojiTab.setAttribute("aria-selected", String(tab === "emoji"));
-      stickerTab.setAttribute("aria-selected", String(tab === "sticker"));
-      if (!reactTo) title.textContent = tab === "sticker" ? t("picker.stickers") : t("picker.emoticons");
-      renderList(search.value.trim());
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "ease-out" });
-    };
+    type PackImage = { shortcode: string; url: string; body: string; info: Record<string, unknown> };
+    const grid = (images: PackImage[], usage: "emoticon" | "sticker"): HTMLElement =>
+      el(
+        "div",
+        { class: "emoji-grid pack-grid" },
+        images.map((image) =>
+          el(
+            "button",
+            {
+              class: "emoji-cell pack-cell",
+              attrs: { type: "button", title: image.shortcode },
+              on: {
+                click: () => {
+                  if (reactTo) {
+                    void this.react(reactTo, image.shortcode);
+                    close();
+                    return;
+                  }
+                  if (usage === "sticker") {
+                    void this.sendSticker(image);
+                    close();
+                    return;
+                  }
+                  void this.media
+                    .get({ mediaKey: "", mxc: image.url, width: 32, height: 32, method: "scale" })
+                    .then((url) => {
+                      if (url) this.composer?.insertEmoji(image.shortcode, image.url, image.body, image.info);
+                    });
+                },
+              },
+            },
+            [this.packImage(image.url, image.shortcode)],
+          ),
+        ),
+      );
     const renderList = (query: string): void => {
       body.replaceChildren();
-      if (tab === "emoji") {
-        const builtins = EMOJI.filter((emoji) => emoji.includes(query));
-        if (builtins.length > 0) {
-          body.appendChild(
-            el("div", { class: "picker-section" }, [
-              el("h3", { text: t("picker.emoticons") }),
-              el("div", { class: "emoji-grid" }, builtins.map((emoji) =>
+      const matches = (value: string): boolean => value.includes(query);
+      const unicode = EMOJI.filter(matches);
+      if (unicode.length > 0) {
+        body.appendChild(
+          el("div", { class: "picker-section" }, [
+            el("h3", { text: t("picker.emoticons") }),
+            el(
+              "div",
+              { class: "emoji-grid" },
+              unicode.map((emoji) =>
                 el("button", {
                   class: "emoji-cell",
                   text: emoji,
@@ -3089,38 +3150,28 @@ export class App {
                     },
                   },
                 }),
-              )),
+              ),
+            ),
+          ]),
+        );
+      }
+      for (const pack of snapshot.packs) {
+        if (pack.usage !== "emoticon") continue;
+        const images = Object.values(pack.images).filter((image) => matches(image.shortcode));
+        if (images.length === 0) continue;
+        body.appendChild(el("div", { class: "picker-section" }, [el("h3", { text: pack.displayName }), grid(images, "emoticon")]));
+      }
+      if (!reactTo) {
+        const stickerPacks = snapshot.packs.filter((pack) => pack.usage === "sticker");
+        const stickers = stickerPacks.flatMap((pack) => Object.values(pack.images).filter((image) => matches(image.shortcode)));
+        if (stickers.length > 0) {
+          body.appendChild(
+            el("div", { class: "picker-section" }, [
+              el("h3", { text: t("picker.stickers") }),
+              grid(stickers, "sticker"),
             ]),
           );
         }
-      }
-      for (const pack of snapshot.packs) {
-        if (pack.usage !== (tab === "sticker" ? "sticker" : "emoticon")) continue;
-        const images = Object.values(pack.images).filter((image) => image.shortcode.includes(query));
-        if (images.length === 0) continue;
-        body.appendChild(
-          el("div", { class: "picker-section" }, [
-            el("h3", { text: pack.displayName }),
-            el("div", { class: "emoji-grid pack-grid" }, images.map((image) =>
-              el("button", {
-                class: "emoji-cell pack-cell",
-                attrs: { type: "button", title: image.shortcode },
-                on: {
-                  click: () => {
-                    if (tab === "sticker") {
-                      void this.sendSticker(image);
-                      close();
-                      return;
-                    }
-                    void this.media.get({ mediaKey: "", mxc: image.url, width: 32, height: 32, method: "scale" }).then((url) => {
-                      if (url) this.composer?.insertEmoji(image.shortcode, image.url, image.body, image.info);
-                    });
-                  },
-                },
-              }, [this.packImage(image.url, image.shortcode)]),
-            )),
-          ]),
-        );
       }
       if (!body.hasChildNodes()) body.appendChild(el("div", { class: "empty", text: t("picker.empty") }));
     };
@@ -3128,15 +3179,13 @@ export class App {
       clearSearch.hidden = search.value.length === 0;
       renderList(search.value.trim());
     });
-    emojiTab.addEventListener("click", () => setTab("emoji"));
-    stickerTab.addEventListener("click", () => setTab("sticker"));
-    // A reaction is a single Unicode emoji, so a pack has nothing to offer.
-    if (reactTo) stickerTab.hidden = true;
-    tabs.append(emojiTab, stickerTab);
-    picker.append(head, searchField, tabs, body);
+    picker.append(
+      head,
+      el("div", { class: "picker-search" }, [search, clearSearch]),
+      body,
+    );
     document.body.appendChild(picker);
-    setTab(options.tab ?? "emoji");
-    if (reactTo) search.focus();
+    renderList("");
     this.picker = { element: picker, trigger, close };
     trigger.setAttribute("aria-expanded", "true");
     place();

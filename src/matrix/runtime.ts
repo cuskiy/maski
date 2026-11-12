@@ -25,6 +25,7 @@ import {
   getAll,
   getOne,
   openDb,
+  type MemberRecord,
   type OutboxRecord,
 } from "../data";
 import type {
@@ -204,6 +205,10 @@ export class Runtime {
         return this.createBackup();
       case "media":
         return this.media(command.payload);
+      case "members":
+        return this.loadMembers(command.payload);
+      case "eventSource":
+        return this.eventSource(command.payload);
       default:
         throw new Error(`Unsupported command: ${command.type}`);
     }
@@ -377,10 +382,22 @@ export class Runtime {
     });
   }
 
+  // m.direct can be missing right after a start; the projection keeps the last set
+  // so a restart never reclassifies a direct message as an ordinary room.
+  private async directSet(): Promise<Set<string>> {
+    const client = this.requireClient();
+    const projection = this.requireProjection();
+    const event = client.getAccountData("m.direct" as never);
+    if (!event) return projection.getDirectRooms();
+    const ids = directRoomIds(client);
+    await projection.putDirectRooms([...ids]);
+    return ids;
+  }
+
   private async projectAll(): Promise<void> {
     const client = this.requireClient();
     const projection = this.requireProjection();
-    const direct = directRoomIds(client);
+    const direct = await this.directSet();
     const rooms = client.getRooms();
     const chatRooms = rooms.filter((room) => !room.isSpaceRoom());
     const roomRecords = rooms.map((room) => normalizeRoom(room, client.getSafeUserId(), direct, client));
@@ -401,7 +418,8 @@ export class Runtime {
     const normalized = normalizeEvent(event, room);
     if (!normalized) return;
     await projection.putEvents([normalized]);
-    const roomRecord = normalizeRoom(room, client.getSafeUserId(), directRoomIds(client), client);
+    const direct = await this.directSet();
+    const roomRecord = normalizeRoom(room, client.getSafeUserId(), direct, client);
     await projection.putRooms([roomRecord]);
     const packs = collectPacks(client, client.getRooms());
     await projection.putPacks(packs);
@@ -412,11 +430,45 @@ export class Runtime {
     });
   }
 
+  // lazyLoadMembers means the SDK only tracks the members it saw, so the room
+  // settings list asks the server for the whole set once.
+  private async loadMembers(payloadValue: unknown): Promise<{ members: MemberRecord[] }> {
+    const roomId = readStringField(readRecord(payloadValue, "payload"), "roomId");
+    const room = this.requireClient().getRoom(roomId);
+    if (!room) throw new Error("Unknown room");
+    await room.loadMembersIfNeeded();
+    const projection = this.requireProjection();
+    const records = room.currentState.getMembers().map((member) => normalizeMember(member, roomId));
+    await projection.putMembers(records);
+    await projection.bumpRevision();
+    this.post({
+      type: "delta",
+      delta: await projection.delta([], [], records, [], [], [], "SYNCING"),
+    });
+    return { members: records };
+  }
+
+  private async eventSource(payloadValue: unknown): Promise<{ json: string }> {
+    const fields = readRecord(payloadValue, "payload");
+    const roomId = readStringField(fields, "roomId");
+    const eventId = readStringField(fields, "eventId");
+    const room = this.requireClient().getRoom(roomId);
+    const event = room?.findEventById(eventId);
+    if (!event) throw new Error("Unknown event");
+    const raw = event.toJSON() as Record<string, unknown>;
+    const source =
+      event.getType() === EventType.RoomMessageEncrypted
+        ? { ...raw, "m.decrypted": event.getContent() }
+        : raw;
+    return { json: JSON.stringify(source, null, 2) };
+  }
+
   private async refreshRoom(room: Room): Promise<void> {
     if (!this.ready) return;
     const client = this.requireClient();
     const projection = this.requireProjection();
-    const record = normalizeRoom(room, client.getSafeUserId(), directRoomIds(client), client);
+    const direct = await this.directSet();
+    const record = normalizeRoom(room, client.getSafeUserId(), direct, client);
     await projection.putRooms([record]);
     await projection.bumpRevision();
     this.post({
@@ -429,7 +481,7 @@ export class Runtime {
     if (!this.ready) return;
     const client = this.requireClient();
     const projection = this.requireProjection();
-    const direct = directRoomIds(client);
+    const direct = await this.directSet();
     const records = client.getRooms().map((room) => normalizeRoom(room, client.getSafeUserId(), direct, client));
     await projection.putRooms(records);
     await projection.bumpRevision();
@@ -442,8 +494,18 @@ export class Runtime {
   private async onMember(room: Room, member: RoomMember): Promise<void> {
     const client = this.requireClient();
     const projection = this.requireProjection();
+    // A rebuild never clears rooms, so leaving one has to remove it explicitly.
+    if (member.userId === client.getSafeUserId() && (member.membership === "leave" || member.membership === "ban")) {
+      await projection.removeRoom(room.roomId);
+      await projection.bumpRevision();
+      this.post({
+        type: "delta",
+        delta: await projection.delta([], [], [], [], [room.roomId], [], "SYNCING"),
+      });
+      return;
+    }
     const memberRecord = normalizeMember(member, room.roomId);
-    const roomRecord = normalizeRoom(room, client.getSafeUserId(), directRoomIds(client), client);
+    const roomRecord = normalizeRoom(room, client.getSafeUserId(), await this.directSet(), client);
     await projection.putMembers([memberRecord]);
     await projection.putRooms([roomRecord]);
     await projection.bumpRevision();
@@ -463,7 +525,7 @@ export class Runtime {
     const target = await projection.getEvent(relation.targetEventId);
     const updated = await projection.applyRelation(relation, target ?? null);
     if (!updated) return true;
-    const roomRecord = normalizeRoom(room, client.getSafeUserId(), directRoomIds(client), client);
+    const roomRecord = normalizeRoom(room, client.getSafeUserId(), await this.directSet(), client);
     await projection.putRooms([roomRecord]);
     await projection.bumpRevision();
     this.post({

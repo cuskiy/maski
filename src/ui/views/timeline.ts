@@ -76,6 +76,9 @@ export class TimelineView {
 
   render(snapshot: AppSnapshot, room: RoomRecord, items: readonly TimelineItem[]): void {
     const atBottom = this.isAtBottom();
+    // Anything that changes a row's height — a page of history, a decoded image, a
+    // row that stops decrypting — keeps the row the reader is looking at in place.
+    const anchor = atBottom ? null : this.anchor();
     this.snapshot = snapshot;
     this.room = room;
     this.empty.hidden = items.length > 0;
@@ -83,15 +86,38 @@ export class TimelineView {
     this.keyed.render(items);
     if (this.pendingScroll) this.applyPendingScroll();
     else if (atBottom) this.scrollToBottom();
+    else if (anchor) this.restoreAnchor(anchor);
     this.watchOlder(items);
+  }
+
+  // A message row is the anchor: the sentinel and a day separator can disappear
+  // when a page lands, and an anchor that disappears cannot hold the position.
+  private anchor(): { key: string; offset: number } | null {
+    const scroller = this.scroller();
+    const top = scroller.getBoundingClientRect().top;
+    for (const row of this.list.querySelectorAll<HTMLElement>("[data-item-key]")) {
+      if (!row.dataset["eventId"]) continue;
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom > top) return { key: row.dataset["itemKey"] ?? "", offset: rect.top - top };
+    }
+    return null;
+  }
+
+  private restoreAnchor(anchor: { key: string; offset: number }): void {
+    const row = this.list.querySelector<HTMLElement>(`[data-item-key="${CSS.escape(anchor.key)}"]`);
+    if (!row) return;
+    const scroller = this.scroller();
+    scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.offset;
   }
 
   // The sentinel is the first row; scrolling it into view asks for the previous page.
   private watchOlder(items: readonly TimelineItem[]): void {
     this.observer.disconnect();
     if (!items.some((item) => item.type === "older")) return;
-    const first = this.list.firstElementChild;
-    if (first) this.observer.observe(first);
+    const sentinel = this.list.querySelector<HTMLElement>('[data-item-key="older"]');
+    if (!sentinel) return;
+    sentinel.classList.toggle("loading", this.olderPending);
+    this.observer.observe(sentinel);
   }
 
   scrollState(): TimelineScrollState {
@@ -157,18 +183,23 @@ export class TimelineView {
 
   private createItem(item: TimelineItem): HTMLElement {
     if (item.type === "day") {
-      return el("li", { class: "day-separator", text: dayText(this.snapshot?.ui.locale ?? config.app.defaultLocale, item.ts) });
+      return el("li", {
+        class: "day-separator",
+        attrs: { "data-item-key": item.key },
+        text: dayText(this.snapshot?.ui.locale ?? config.app.defaultLocale, item.ts),
+      });
     }
     if (item.type === "older") {
-      return el("li", { class: "day-separator" }, [
-        el("button", { class: "button ghost", text: t("room.loadOlder"), attrs: { type: "button" }, on: { click: () => this.callbacks.onOlder() } }),
+      // A fixed height row: reaching the top starts the page and nothing moves.
+      return el("li", { class: "older-row", attrs: { "data-item-key": "older" } }, [
+        el("span", { class: "spinner", attrs: { "aria-label": t("room.loadOlder") } }),
       ]);
     }
     if (item.type === "new") {
-      return el("li", { class: "new-divider", text: t("room.newMessages") });
+      return el("li", { class: "new-divider", attrs: { "data-item-key": item.key }, text: t("room.newMessages") });
     }
     if (item.type === "read") {
-      return el("li", { class: "read-marker", attrs: { role: "separator" } }, [
+      return el("li", { class: "read-marker", attrs: { "data-item-key": item.key, role: "separator" } }, [
         el("span", { text: t("room.readMarker") }),
       ]);
     }
@@ -221,7 +252,7 @@ export class TimelineView {
       [el("span", { text: initial(sender) })],
     );
     if (item.showAvatar) this.loadAvatar(avatar, member);
-    const bubble = el("div", { class: "event-bubble" }, [
+    const bubble = el("div", { class: `event-bubble${event.media ? " media" : ""}` }, [
       event.replyTo ? this.replyNode(event) : null,
       this.bodyNode(event),
       this.mediaNode(event),
@@ -243,7 +274,12 @@ export class TimelineView {
       ]
         .filter(Boolean)
         .join(" "),
-      attrs: { "data-event-id": event.eventId, tabindex: "0", "aria-label": `${sender}: ${event.body}` },
+      attrs: {
+        "data-event-id": event.eventId,
+        "data-item-key": item.key,
+        tabindex: "0",
+        "aria-label": `${sender}: ${event.body}`,
+      },
     }, [
       avatar,
       el("div", { class: "event-content" }, [
@@ -287,9 +323,18 @@ export class TimelineView {
     const body = typeof content["body"] === "string" ? content["body"] : "";
     const formatted = typeof content["formatted_body"] === "string" ? content["formatted_body"] : null;
     const failed = outbox.status === "failed";
-    const pendingBubble = el("div", { class: "event-bubble" }, [
-      formatted ? this.richNode(formatted) : body ? el("div", { class: "event-text", text: body }) : null,
-      outbox.blob ? this.pendingAttachment(outbox) : null,
+    // A local file is the message: the filename never stands in for it while the
+    // upload runs.
+    const attachment = outbox.blob ? this.pendingAttachment(outbox) : null;
+    const pendingBubble = el("div", { class: `event-bubble${attachment ? " media" : ""}` }, [
+      attachment,
+      attachment
+        ? null
+        : formatted
+          ? this.richNode(formatted)
+          : body
+            ? el("div", { class: "event-text", text: body })
+            : null,
       this.pendingTime(outbox),
       failed
         ? el("div", { class: "event-error", text: outbox.error ?? t("errors.generic") })
@@ -316,13 +361,23 @@ export class TimelineView {
     ]);
   }
 
-  // A local file previews from its blob until the event lands.
+  // A local file previews from its blob until the event lands, at the size the final
+  // row will have, so the swap cannot move anything.
   private pendingAttachment(outbox: OutboxRecord): HTMLElement {
     const name = outbox.media?.filename ?? t("room.attachment");
     const type = outbox.media?.mimetype ?? "";
     if (outbox.blob && type.startsWith("image/")) {
       const url = URL.createObjectURL(outbox.blob);
-      const image = el("img", { class: "pending-image", attrs: { src: url, alt: name } });
+      const sticker = outbox.eventType === "m.sticker";
+      const image = el("img", {
+        class: sticker ? "pending-sticker" : "pending-image",
+        attrs: { src: url, alt: name },
+      });
+      const width = outbox.media?.width;
+      const height = outbox.media?.height;
+      if (!sticker && width && height) {
+        image.style.setProperty("aspect-ratio", `${width} / ${height}`);
+      }
       image.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
       return el("div", { class: "event-media" }, [image]);
     }
@@ -362,15 +417,15 @@ export class TimelineView {
           decoding: "async",
         },
       });
-      this.loadMedia(image, media, "src", event);
-      image.classList.add("sticker-image");
-      holder.appendChild(
-        el("button", {
-          class: "sticker-button",
-          attrs: { type: "button", "aria-label": t("media.open") },
-          on: { click: () => this.callbacks.onOpenMedia(event) },
-        }, [image]),
-      );
+      const button = el("button", {
+        class: "sticker-button",
+        attrs: { type: "button", "aria-label": t("media.open") },
+        on: { click: () => this.callbacks.onOpenMedia(event) },
+      }, [image]);
+      this.loadMedia(image, media, "src", event, () => {
+        button.replaceWith(el("span", { class: "sticker-fallback", text: event.body || media.filename }));
+      });
+      holder.appendChild(button);
     } else if (event.kind === "audio") {
       const audio = el("audio", { attrs: { controls: true, preload: "metadata" } });
       this.loadMedia(audio, media, "src", event);
@@ -398,22 +453,29 @@ export class TimelineView {
     });
     if (media.width && media.height) frame.style.setProperty("aspect-ratio", `${media.width} / ${media.height}`);
     holder.appendChild(frame);
-    const load = (): void => {
+    const request = {
+      mediaKey: "",
+      mxc: media.mxc,
+      width: media.width,
+      height: media.height,
+      method: "scale",
+      ...(media.encrypted ? { file: media.encrypted } : {}),
+    };
+    const load = (attempt = 0): void => {
       void this.media
-        .get({
-          mediaKey: "",
-          mxc: media.mxc,
-          width: media.width,
-          height: media.height,
-          method: "scale",
-          ...(media.encrypted ? { file: media.encrypted } : {}),
-        })
+        .get(request)
         .then((url) => {
-          frame.removeAttribute("aria-busy");
           if (!url) {
+            // Two quiet retries: the box keeps its size, so nothing moves either way
+            if (attempt < 2) {
+              window.setTimeout(() => load(attempt + 1), 700);
+              return;
+            }
+            frame.removeAttribute("aria-busy");
             frame.replaceChildren(el("div", { class: "media-placeholder", text: t("media.error") }));
             return;
           }
+          frame.removeAttribute("aria-busy");
           if (event.kind === "video") {
             frame.replaceChildren(
               el("video", { attrs: { src: url, controls: true, preload: "metadata" } }),
@@ -429,10 +491,15 @@ export class TimelineView {
           );
         })
         .catch(() => {
+          if (attempt < 2) {
+            window.setTimeout(() => load(attempt + 1), 700);
+            return;
+          }
+          frame.removeAttribute("aria-busy");
           frame.replaceChildren(el("div", { class: "media-placeholder", text: t("media.error") }));
         });
     };
-    this.observeOnce(holder, load);
+    this.observeOnce(holder, () => load());
     return holder;
   }
 
@@ -510,6 +577,7 @@ export class TimelineView {
     media: NonNullable<EventRecord["media"]>,
     attr: "src",
     event: EventRecord,
+    onError?: () => void,
   ): void {
     void this.media
       .get({
@@ -522,13 +590,16 @@ export class TimelineView {
       })
       .then((url) => {
         if (!url) {
-          node.replaceWith(el("div", { class: "media-placeholder", text: t("media.error") }));
+          if (onError) onError();
+          else node.replaceWith(el("div", { class: "media-placeholder", text: t("media.error") }));
           return;
         }
         node.setAttribute(attr, url);
       })
       .catch(() => {
-        if (node.isConnected) node.replaceWith(el("div", { class: "media-placeholder", text: t("media.error") }));
+        if (!node.isConnected) return;
+        if (onError) onError();
+        else node.replaceWith(el("div", { class: "media-placeholder", text: t("media.error") }));
       });
     if (event.kind === "sticker") node.classList.add("sticker-image");
   }

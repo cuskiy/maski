@@ -42,7 +42,7 @@ function checkShell(locale: "en" | "zh-CN", file: string): string {
   if (!html.includes("<noscript>")) fail(`${file}: noscript`);
   if (!html.includes("nojs-card")) fail(`${file}: nojs card`);
   if (!html.includes("<h1>")) fail(`${file}: noscript h1`);
-  if (!html.includes("app-frame")) fail(`${file}: boot frame`);
+  if (!html.includes("boot-screen")) fail(`${file}: boot screen`);
   if (/<style[\s>]/i.test(html)) fail(`${file}: inline style`);
   if (/\sstyle\s*=\s*["']/i.test(html)) fail(`${file}: style attribute`);
   if (/\son[a-z]+\s*=\s*["']/i.test(html)) fail(`${file}: inline event handler`);

@@ -53,20 +53,10 @@ function shell(locale: Locale): string {
 </head>
 <body>
     <div id="app" data-locale="${escapeHtml(lang)}">
-        <div class="app-frame" aria-busy="true" aria-label="${escapeHtml(boot)}">
-            <nav class="app-frame-nav">
-                <p class="brand">${escapeHtml(config.app.name)}</p>
-                <div class="app-frame-rows">
-                    <span class="app-frame-avatar"></span>
-                    <span class="app-frame-avatar"></span>
-                    <span class="app-frame-avatar"></span>
-                </div>
-            </nav>
-            <div class="app-frame-content">
-                <div class="app-frame-head"><span class="app-frame-line short"></span></div>
-                <div class="app-frame-body"></div>
-                <div class="app-frame-composer"></div>
-            </div>
+        <div class="boot-screen" aria-busy="true" aria-label="${escapeHtml(boot)}">
+            <p class="brand">${escapeHtml(config.app.name)}</p>
+            <p class="boot-text">${escapeHtml(boot)}</p>
+            <span class="spinner" aria-hidden="true"></span>
         </div>
     </div>
     <noscript>

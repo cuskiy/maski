@@ -20,7 +20,7 @@ export interface ComposerMessage {
 
 export interface ComposerCallbacks {
   onSend: (message: ComposerMessage) => void;
-  onOpenPicker: (anchor: HTMLElement, tab: "emoji" | "sticker") => void;
+  onOpenPicker: (anchor: HTMLElement) => void;
   onTyping: (typing: boolean) => void;
   onFormatMenu: (position: ActionPosition) => void;
   onChange: () => void;
@@ -62,7 +62,7 @@ export class Composer {
     this.emojiButton = iconButton(
       t("composer.emoji"),
       "smile",
-      () => this.callbacks.onOpenPicker(this.emojiButton, "emoji"),
+      () => this.callbacks.onOpenPicker(this.emojiButton),
       "icon-button field-emoji",
     );
     this.emojiButton.setAttribute("aria-expanded", "false");
@@ -352,7 +352,7 @@ export class Composer {
 
   private primaryAction(): void {
     if (this.hasContent()) this.send();
-    else this.callbacks.onOpenPicker(this.sendButton, "sticker");
+    else this.callbacks.onOpenPicker(this.emojiButton);
   }
 
   private send(): void {

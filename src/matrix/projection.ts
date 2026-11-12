@@ -98,10 +98,10 @@ export class Projection {
       [STORE.rooms, STORE.events, STORE.members, STORE.relations, STORE.packs, STORE.meta],
       "readwrite",
     );
-    // Room summaries, members and packs are replaced; events and relations are only
-    // written. A rebuild must never drop a message that the SDK window no longer
-    // holds, and an unchanged row is simply overwritten.
-    for (const store of [STORE.rooms, STORE.members, STORE.packs]) {
+    // Nothing is cleared. The SDK view during a first sync is partial, so clearing
+    // would erase rooms and messages the projection already has; a row that is gone
+    // from the server is removed explicitly instead.
+    for (const store of [STORE.members, STORE.packs]) {
       tx.objectStore(store).clear();
     }
     for (const room of rooms) tx.objectStore(STORE.rooms).put(room);
@@ -112,6 +112,24 @@ export class Projection {
     tx.objectStore(STORE.meta).put({ key: "projectionRevision", value: this.revision } satisfies MetaRecord);
     await transactionDone(tx);
     return this.revision;
+  }
+
+  async removeRoom(roomId: string): Promise<void> {
+    const db = this.requireDb();
+    await deleteOne(db, STORE.rooms, roomId);
+  }
+
+  // The projection keeps its own copy of m.direct, so a restart cannot reclassify a
+  // direct message as a room before the account data arrives.
+  async putDirectRooms(roomIds: readonly string[]): Promise<void> {
+    const db = this.requireDb();
+    await putOne(db, STORE.meta, { key: "directRooms", value: [...roomIds] } satisfies MetaRecord);
+  }
+
+  async getDirectRooms(): Promise<Set<string>> {
+    const record = await getOne<MetaRecord>(this.requireDb(), STORE.meta, "directRooms");
+    if (!Array.isArray(record?.value)) return new Set();
+    return new Set(record.value.filter((value): value is string => typeof value === "string"));
   }
 
   async putRooms(rooms: readonly RoomRecord[]): Promise<void> {

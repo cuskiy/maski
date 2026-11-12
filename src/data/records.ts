@@ -201,7 +201,7 @@ export interface SessionRecord {
 
 export interface MetaRecord {
   key: string;
-  value: string | number | boolean | null;
+  value: string | number | boolean | null | string[];
 }
 
 export interface DraftRecord {

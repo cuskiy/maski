@@ -16,6 +16,7 @@ import {
 } from "../data";
 import type {
   DraftRecord,
+  MediaRecord,
   EventRecord,
   MemberRecord,
   MetaRecord,
@@ -136,6 +137,12 @@ export class MainDb {
 
   async deleteOutbox(txnId: string): Promise<void> {
     await deleteOne(this.requireAccount(), STORE.outbox, txnId);
+  }
+
+  async readMediaBlob(key: string): Promise<Blob | null> {
+    if (!this.account) return null;
+    const record = await getOne<MediaRecord>(this.account, STORE.media, key);
+    return record?.blob ?? null;
   }
 
   async readOutbox(): Promise<OutboxRecord[]> {

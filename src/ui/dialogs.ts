@@ -10,6 +10,10 @@ export interface DialogOptions {
   wide?: boolean;
 }
 
+function reducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export class DialogHost {
   private readonly dialog: HTMLDialogElement;
   private current: DialogOptions | null = null;
@@ -37,7 +41,7 @@ export class DialogHost {
   }
 
   open(options: DialogOptions): void {
-    this.close();
+    this.close(true);
     this.current = options;
     const titleId = `dialog-title-${crypto.randomUUID()}`;
     const card = el("div", { class: "dialog-card" }, [
@@ -51,13 +55,29 @@ export class DialogHost {
     this.dialog.replaceChildren(card);
     this.dialog.setAttribute("aria-labelledby", titleId);
     this.dialog.showModal();
+    if (!reducedMotion()) card.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "ease-out" });
   }
 
-  close(): void {
+  close(immediate = false): void {
     const options = this.current;
     if (!options) return;
     this.current = null;
-    if (this.dialog.open) this.dialog.close();
     options.onClose?.();
+    if (immediate || !this.dialog.open) {
+      if (this.dialog.open) this.dialog.close();
+      return;
+    }
+    const card = this.dialog.firstElementChild;
+    if (!(card instanceof HTMLElement) || reducedMotion()) {
+      this.dialog.close();
+      return;
+    }
+    const animation = card.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: "ease-in" });
+    const finish = (): void => {
+      // A dialog opened while this one fades out owns the element now.
+      if (this.dialog.firstElementChild === card && this.dialog.open) this.dialog.close();
+    };
+    animation.addEventListener("finish", finish, { once: true });
+    animation.addEventListener("cancel", finish, { once: true });
   }
 }
