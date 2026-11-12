@@ -706,8 +706,7 @@ a {
 
 .room-header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-auto-flow: column;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   gap: var(--space-2);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -1208,10 +1207,11 @@ a {
   padding: var(--space-1);
   border-radius: var(--radius-lg);
   background: var(--field);
+  transition: background-color var(--ease);
 
+  /* the caret is shown by the field itself, so the whole bar reads as one control */
   &:focus-within {
-    outline: 2px solid var(--focus);
-    outline-offset: 1px;
+    background: color-mix(in oklab, var(--ink) 1.5%, var(--field));
   }
 }
 
@@ -1227,12 +1227,9 @@ a {
   padding: var(--space-2);
   border: 0;
   background: none;
+  outline-offset: -3px;
   resize: none;
   overflow-y: auto;
-
-  &:focus {
-    outline: none;
-  }
 }
 
 .composer-rendered {

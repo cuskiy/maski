@@ -113,8 +113,9 @@ function menuFor(message: Message, x: number, y: number, ctx: UiContext): void {
 }
 
 function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: UiContext): HTMLElement {
+  const isState = message.kind === "state";
   const row = el("li", {
-    class: `row ${own ? "row-own" : "row-other"}${groupStart ? " row-start" : ""}`,
+    class: `row ${own ? "row-own" : "row-other"}${groupStart && !isState ? " row-start" : ""}${isState ? " row-state" : ""}`,
     dataset: { id: message.id },
   });
   row.tabIndex = 0;
@@ -129,9 +130,8 @@ function messageRow(message: Message, groupStart: boolean, own: boolean, ctx: Ui
     menuFor(message, box.left + 24, box.top + 12, ctx);
   });
 
-  if (message.kind === "state") {
+  if (isState) {
     const action = message.body === "leave" ? t("room.memberLeft") : message.body === "invite" ? t("room.memberInvited") : t("room.memberJoined");
-    row.classList.add("row-state");
     row.append(el("div", { class: "state-line", text: t("room.membership", { name: message.name, action }) }));
     return row;
   }

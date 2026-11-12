@@ -55,6 +55,8 @@ if (css.length === 0) problems.push("dist: no stylesheet");
 for (const file of css) {
   const text = await read(file);
   if (/!important/u.test(text)) problems.push(`${file}: !important`);
+  if (/outline:\s*none/u.test(text)) problems.push(`${file}: outline none`);
+  if (/-webkit-|-moz-|-ms-/u.test(text)) problems.push(`${file}: vendor prefix`);
 }
 
 const distSize = await stat("dist").then(() => true).catch(() => false);

@@ -22,14 +22,22 @@ export type TimelineItem = DayItem | MessageItem;
 export function timelineItems(messages: Message[]): TimelineItem[] {
   const items: TimelineItem[] = [];
   let previous: Message | null = null;
+  let lastDay = "";
   for (const message of messages) {
     const day = new Date(message.ts).toDateString();
-    const previousDay = previous ? new Date(previous.ts).toDateString() : "";
-    if (day !== previousDay) items.push({ kind: "day", key: `day:${day}`, label: dayLabel(message.ts) });
+    const previousDay = previous ? new Date(previous.ts).toDateString() : lastDay;
+    if (day !== lastDay) items.push({ kind: "day", key: `day:${day}`, label: dayLabel(message.ts) });
+    lastDay = day;
+    const isState = message.kind === "state";
     const groupStart =
-      !previous || previous.sender !== message.sender || previousDay !== day || message.ts - previous.ts > 5 * 60 * 1000;
+      isState ||
+      !previous ||
+      previous.sender !== message.sender ||
+      previousDay !== day ||
+      message.ts - previous.ts > 5 * 60 * 1000;
     items.push({ kind: "message", key: `m:${message.id}`, message, groupStart, own: message.sender === state.session?.userId });
-    previous = message;
+    // A membership line is not part of a sender's group, so the next message starts one.
+    previous = isState ? null : message;
   }
   return items;
 }
