@@ -68,16 +68,24 @@ interface KeyDescription {
   passphrase?: PassphraseInfo;
 }
 
+/** Keys arrive from a chat window, a password manager or a scan, so all spacing and
+ * formatting characters are dropped before decoding. A passphrase keeps its spaces. */
+export function normalizeRecoveryKey(input: string): string {
+  return input.replace(/[\s\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/gu, "");
+}
+
 async function keyFromInput(input: string, info: KeyDescription): Promise<Uint8Array<ArrayBuffer>> {
-  const trimmed = input.trim();
-  if (!trimmed) throw new GateError("invalid");
-  try {
-    return decodeRecoveryKey(trimmed);
-  } catch {
-    const passphrase = info.passphrase;
-    if (!passphrase?.salt) throw new GateError("invalid");
-    return deriveRecoveryKeyFromPassphrase(trimmed, passphrase.salt, passphrase.iterations ?? 500000, passphrase.bits);
+  const compact = normalizeRecoveryKey(input);
+  if (compact) {
+    try {
+      return decodeRecoveryKey(compact);
+    } catch {
+      // A passphrase is not base58, so it falls through to the derivation below.
+    }
   }
+  const passphrase = info.passphrase;
+  if (!passphrase?.salt || input.trim().length === 0) throw new GateError("invalid");
+  return deriveRecoveryKeyFromPassphrase(input.trim(), passphrase.salt, passphrase.iterations ?? 500000, passphrase.bits);
 }
 
 interface QuietLogger {
@@ -600,6 +608,7 @@ export class WorkerApi {
     if (!stored) throw new GateError("no-keys");
     const [keyId, info] = stored;
     const key = await keyFromInput(input, info);
+    if (!(await client.secretStorage.checkKey(key, info))) throw new GateError("invalid");
     this.secretKey = { id: keyId, key };
     try {
       // Importing the cross-signing keys also signs this device, which is what

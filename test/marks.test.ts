@@ -68,3 +68,11 @@ describe("serialize", () => {
     expect(serialize("a\nb", [{ type: "italic", start: 0, end: 3 }], new Map())).toBe("<em>a<br>b</em>");
   });
 });
+
+describe("recovery key input", () => {
+  it("drops spacing and formatting characters", async () => {
+    const { normalizeRecoveryKey } = await import("../src/worker/api.ts");
+    expect(normalizeRecoveryKey("EsTq 9mdU\nPW1w\tF6px")).toBe("EsTq9mdUPW1wF6px");
+    expect(normalizeRecoveryKey("EsTq\u00a09mdU\u200bPW1w\ufeffF6px")).toBe("EsTq9mdUPW1wF6px");
+  });
+});
