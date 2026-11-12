@@ -74,13 +74,14 @@ A feature reuses these; it does not grow its own.
 | Derived view data | `store/select.ts` |
 | DOM construction and keyed lists | `ui/dom.ts` |
 | Message rows | `ui/timeline.ts` |
-| Draft model and serialization | `ui/composer.ts` |
+| Mark model and serialization | `ui/marks.ts` |
+| Draft lifecycle | `ui/composer.ts` |
 | Media fetch, cache and elements | `ui/media.ts`, `worker/api.ts` |
 | Dialog lifecycle | `ui/dialogs.ts` |
 | HTML sanitizing | `ui/sanitize.ts` |
 | Catalogs and formatters | `i18n/index.ts` |
 | Design values | `styles/style.css` `:root` |
-| Build audit | `scripts/verify.ts` |
+| Build audit | `scripts/verify.ts`, `scripts/audit.ts` |
 
 ## Shape rules
 

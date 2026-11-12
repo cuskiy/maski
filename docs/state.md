@@ -45,6 +45,14 @@ The hash carries the route and the dialog:
 URL. `openRoom` and `openDialog` write it. A deep link is applied on mount; a room that is
 not in the projection yet is kept in the URL and loaded when the sync brings it.
 
+## Activation
+
+One function, `App.applySession`, opens the account database, reads the rooms, decides the
+phase from the stored key flag and mounts. It paints before the crypto stack is up; then
+`settleKeys` asks the worker for the authoritative status and moves to the gate only when
+the keys are actually missing. Login, a restored session and the end of the gate all take
+this path.
+
 ## Actions
 
 `app.ts` is the composition root and the only caller of `worker.send`. It validates

@@ -57,6 +57,12 @@ prompt. The encoded key is returned once for display and never stored.
 Failures carry a code — `no-keys`, `invalid`, `restore`, `uia` — and the gate shows a
 sentence per code instead of one vague error.
 
+## Members
+
+The client starts with `lazyLoadMembers`, so a large room does not download its member list
+before the timeline. Opening a room asks for the list in the background and projects the
+room again when it arrives, which fills in the names of senders already on screen.
+
 ## Sending
 
 The main thread writes the queued row, then sends `text`, `sticker` or `sendFile` with its
@@ -77,6 +83,9 @@ transaction id. The worker:
 decrypts with `Attachment.decrypt` when the record carries a `file` object, caches the
 blob under `mxc@size/method` and returns it. An encrypted original has no usable thumbnail,
 so the media element asks for the original when `file` is present.
+
+Every send goes through `deliver`, which posts the `outbox` status and rethrows, so the
+three send paths share one failure behaviour.
 
 ## Errors
 
