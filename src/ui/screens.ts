@@ -61,7 +61,7 @@ function askStages(app: App, stages: UiaStage[], session: string, baseUrl: strin
 }
 
 function field(label: string, attrs: Record<string, string>, value = ""): { wrap: HTMLElement; input: HTMLInputElement } {
-  const input = el("input", { class: "field", attrs: { ...attrs, value } });
+  const input = el("input", { class: "field", attrs: { value, ...attrs } });
   const wrap = el("label", { class: "form-row" }, [el("span", { class: "form-label", text: label }), input]);
   return { wrap, input };
 }

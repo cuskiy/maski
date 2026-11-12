@@ -34,17 +34,24 @@ function restoreKeys(app: App): HTMLElement {
     notice,
     el("p", { class: "dialog-note", text: t("settings.restoreHint") }),
   ]);
-  return block;
+  return row(t("gate.keyLabel"), block);
 }
 
 export function securitySection(app: App): HTMLElement {
   const body = el("div", { class: "security" });
   const render = (): void => {
     const card = verifyCard(app);
-    body.replaceChildren(...(card ? [card, deviceList(app), signOutOthers(app)] : [deviceList(app), signOutOthers(app)]));
+    const children: (Node | null)[] = [
+      card,
+      row(t("settings.securityDevice"), el("span", { class: "status-text", text: thisDeviceVerified() ? t("profile.verified") : t("profile.unverified") })),
+      row(t("settings.securityBackup"), el("span", { class: "status-text", text: state.keys?.backup ? t("settings.securityReady") : t("settings.securityMissing") })),
+      thisDeviceVerified() && state.keys?.backup ? null : restoreKeys(app),
+      el("h3", { class: "section-subtitle", text: t("profile.devices") }),
+      deviceList(app),
+      signOutOthers(app),
+    ];
+    body.replaceChildren(...children.filter((node): node is Node => node !== null));
   };
-  render();
-  void app.loadDevices();
   const stop = subscribe(() => {
     if (!body.isConnected) {
       stop();
@@ -52,6 +59,8 @@ export function securitySection(app: App): HTMLElement {
     }
     render();
   });
+  render();
+  void app.loadDevices();
   return body;
 }
 
@@ -253,10 +262,6 @@ export function settingsDialog(app: App): void {
     ]),
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("settings.security") }),
-      row(t("settings.securityDevice"), el("span", { class: "status-text", text: thisDeviceVerified() ? t("profile.verified") : t("profile.unverified") })),
-      row(t("settings.securityBackup"), el("span", { class: "status-text", text: state.keys?.backup ? t("settings.securityReady") : t("settings.securityMissing") })),
-      thisDeviceVerified() && state.keys?.backup ? null : restoreKeys(app),
-      el("h3", { class: "section-subtitle", text: t("profile.devices") }),
       securitySection(app),
     ]),
     el("section", { class: "section" }, [

@@ -253,14 +253,18 @@ a {
 .field {
   inline-size: 100%;
   padding: var(--space-3);
-  border: var(--rule);
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--surface-text);
+  background: var(--field);
+  color: var(--page-text);
   font-size: var(--text-sm);
 
   &::placeholder {
-    color: var(--surface-text-muted);
+    color: var(--page-text-muted);
+  }
+
+  &:focus {
+    border-color: var(--focus);
   }
 }
 
