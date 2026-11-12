@@ -130,6 +130,9 @@ When a decision changes, update 0.6, the matching AGENTS section, the matching d
 | E24 | A keyed row that cannot be updated in place returns the node that replaced it, so the list never re-inserts a detached row. | 22, `ui` |
 | E25 | Every projection read is scoped to the open room, newest 2000 rows; a delta for another room is dropped. | 20, `state` |
 | E26 | A closed `<details>` section wraps its rows in a box that is `display: none`, because a row with an explicit display keeps layout and swallows clicks otherwise. Sections are open until the user closes them. | 10, `ui` |
+| E28 | An own message is projected from its remote echo: the SDK replaces the local echo in place, so the timeline never announces it again and only a real id is written. | `worker` |
+| E29 | A rebuild writes events and relations instead of clearing them, because the SDK window only holds the last pages and a rebuild can race an echo. | `worker`, `data` |
+| E30 | A deep link is never rewritten from a projection read; an unknown room shows the empty panel, a partial first sync cannot drop the route. | 12 |
 | E27 | The account card, the emoji and sticker panel, and the action menu are three separate surfaces: the card unfolds in the navigation, the panel floats over the composer with one instance at a time, the menu opens at the pointer. | 10, 11, 25 |
 | E22 | Read state is one call: `setRoomReadMarkers` moves the receipt and the fully read marker together, and the timeline draws the marker where it sits. | 20, `worker`, `ui` |
 | E23 | Display names are disambiguated with the MXID when two members of a room share one. The count comes from the room summary, not the locally loaded members. | `data`, `ui` |

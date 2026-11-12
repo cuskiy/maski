@@ -177,6 +177,12 @@ A thumbnail is requested only when a width and height are known and the media is
 
 The SDK does not put a relation on the timeline: it aggregates the event into its parent, and an encrypted relation is readable only after decryption. The worker therefore reads every event the sync emits, decrypts it when needed, and applies it through one relation handler. An annotation is stored in `relations` so a later redaction finds it again, and a repeated delivery is dropped by checking the stored relation id. A reaction chip is a toggle: pressing your own reaction redacts its annotation, or cancels the queued send while it is still in the outbox.
 
+### Own messages and rebuilds
+
+The SDK replaces the local echo in place instead of adding the event to the timeline again, so an own message is projected from `RoomEvent.LocalEchoUpdated` once it carries a real id. A local echo keeps its `~` id and is never written.
+
+A rebuild writes events and relations; it does not clear them. The SDK timeline holds only the last pages, so clearing dropped history the projection already had, and a rebuild that raced an echo could drop the message itself.
+
 ### Projection reads
 
 The main thread reads the open room only, newest 2000 rows through the `roomTs` index. Every other room is a summary in `rooms`. A delta is applied when its revision is the next one; a gap re-reads the projection, and a delta for another room contributes its room summary but not its events.
