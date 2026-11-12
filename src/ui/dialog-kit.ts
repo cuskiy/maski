@@ -57,23 +57,6 @@ export function uploadButton(label: string, onFile: (file: File) => Promise<void
   ]);
 }
 
-/** A switch drawn from the tokens, because a native checkbox carries the system accent. */
-export function toggle(label: string, pressed: boolean, onChange: (next: boolean) => void): HTMLButtonElement {
-  const thumb = el("span", { class: "switch-thumb" });
-  const control = el("button", {
-    class: "switch",
-    attrs: { type: "button", role: "switch", "aria-checked": String(pressed), "aria-label": label },
-    on: {
-      click: () => {
-        const next = control.getAttribute("aria-checked") !== "true";
-        control.setAttribute("aria-checked", String(next));
-        onChange(next);
-      },
-    },
-  }, [el("span", { class: "switch-track" }, [thumb])]);
-  return control;
-}
-
 export function note(text = ""): HTMLElement {
   return el("p", { class: "dialog-note", text });
 }

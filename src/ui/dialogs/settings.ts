@@ -3,7 +3,7 @@ import { config } from "../../app/config.ts";
 import { setLocale, t } from "../../i18n/index.ts";
 import { setState, state, subscribe } from "../../store/state.ts";
 import { el } from "../dom.ts";
-import { button, openDialogFrame, row, textField, toggle, uploadButton } from "../dialog-kit.ts";
+import { button, openDialogFrame, row, textField, uploadButton } from "../dialog-kit.ts";
 import { avatar } from "../media.ts";
 import { copyText, toast } from "../overlay.ts";
 
@@ -255,8 +255,15 @@ export function settingsDialog(app: App): void {
     el("section", { class: "section" }, [
       el("h2", { class: "section-title", text: t("settings.notifications") }),
       row(t("settings.desktop"), desktop),
-      row(t("settings.preview"), toggle(t("settings.preview"), state.settings.preview, (preview) => {
-        void app.local.saveSettings({ preview }).then((settings) => setState({ settings }));
+      row(t("settings.preview"), el("input", {
+        class: "checkbox",
+        attrs: { type: "checkbox", "aria-label": t("settings.preview"), ...(state.settings.preview ? { checked: true } : {}) },
+        on: {
+          change: (event) => {
+            const preview = (event.target as HTMLInputElement).checked;
+            void app.local.saveSettings({ preview }).then((settings) => setState({ settings }));
+          },
+        },
       })),
       el("p", { class: "dialog-note", text: t("settings.previewHint") }),
     ]),
