@@ -110,6 +110,18 @@ so the media element asks for the original when `file` is present.
 Every send goes through `deliver`, which posts the `outbox` status and rethrows, so the
 three send paths share one failure behaviour.
 
+## Uploads
+
+An attachment is encrypted first when the room is, uploaded with a progress handler and an
+abort signal, and the queued row is rewritten with the resulting media before the event is
+sent. Discarding the row aborts the upload, so a cancelled file never lands on the server.
+
+## A dead session
+
+`/sync` answering `M_UNKNOWN_TOKEN` means the device was signed out elsewhere. The worker
+stops the client and posts an empty session; the interface returns to the sign-in page
+instead of showing a shell that can never sync again.
+
 ## Errors
 
 `dispatch` rejects with an `Error`; `worker.ts` maps it to `{ ok: false, error }`. A gate
