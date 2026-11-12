@@ -285,24 +285,21 @@ export class Shell {
     this.timeline.root.hidden = pending;
     this.composer.root.hidden = pending;
     this.composer.setReadOnly(pending || !room.canSend ? t("room.noPermission") : null);
-    const typing = state.typing.length > 0;
+    const typing =
+      state.typing.length === 0
+        ? null
+        : state.typing.length === 1
+          ? t("room.typingOne", { name: state.typing[0]?.name ?? "" })
+          : t("room.typingMany", { n: state.typing.length });
     this.header.replaceChildren(
-      el("button", { class: "icon-button back-button", attrs: { type: "button", "aria-label": t("common.back") }, on: { click: () => this.ctx.openRoom("") } }, [icon(ICON.back, 20)]),
-      avatar(room.avatar, room.name, 32),
+      el("button", {
+        class: "icon-button back-button",
+        attrs: { type: "button", "aria-label": t("common.back") },
+        on: { click: () => this.ctx.openRoom("") },
+      }, [icon(ICON.back, 20)]),
       el("div", { class: "room-head-text" }, [
         el("h1", { class: "room-title", text: room.name }),
-        el("p", {
-          class: "room-subtitle",
-          text: typing
-            ? state.typing.length === 1
-              ? t("room.typingOne", { name: state.typing[0]?.name ?? "" })
-              : t("room.typingMany", { n: state.typing.length })
-            : room.membership === "join"
-              ? room.joined === 1
-                ? t("room.joinedOne")
-                : t("room.joined", { n: room.joined })
-              : "", 
-        }),
+        ...(typing ? [el("p", { class: "room-subtitle", text: typing })] : []),
       ]),
       iconButton(ICON.more, t("roomSettings.title"), () => this.ctx.openDialog("room-settings", room.roomId)),
     );

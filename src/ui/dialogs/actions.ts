@@ -33,7 +33,6 @@ export function searchDialog(app: App): void {
           attrs: { type: "button" },
           on: {
             click: () => {
-              app.closeDialog();
               app.openRoom(hit.roomId, hit.message.id);
             },
           },
@@ -56,7 +55,6 @@ export function joinDialog(app: App): void {
     el("div", { class: "dialog-actions" }, [
       button(t("join.action"), () => {
         void app.worker.send<{ roomId: string }>({ type: "join", target: target.value.trim() }).then((result) => {
-          app.closeDialog();
           app.openRoom(result.roomId);
           toast(t("toast.joined"));
         }).catch(() => toast(t("error.notFound")));
@@ -89,7 +87,6 @@ export function createDialog(app: App): void {
           encrypted: encrypted.checked,
           invites: invites.value.split(",").map((entry) => entry.trim()).filter(Boolean),
         }).then((result) => {
-          app.closeDialog();
           app.openRoom(result.roomId);
           toast(t("toast.created"));
         }).catch(() => toast(t("error.forbidden")));
@@ -106,7 +103,6 @@ export function newMessageDialog(app: App): void {
     el("div", { class: "dialog-actions" }, [
       button(t("newMessage.action"), () => {
         void app.worker.send<{ roomId: string }>({ type: "direct", userId: userId.value.trim() }).then((result) => {
-          app.closeDialog();
           app.openRoom(result.roomId);
         }).catch(() => toast(t("error.unknown")));
       }, true),

@@ -26,7 +26,7 @@ rebuilt by it.
 | Quick actions | `shell.ts` | five rows in two columns, always visible |
 | Sections | `shell.ts` | one `<details>`-like pair of a header and a body; the open state is stored |
 | Room row | `shell.ts` | avatar, name, time, preview, badge; a menu on right-click and long press |
-| Room header | `shell.ts` | back control, avatar, name, subtitle, room settings |
+| Room header | `shell.ts` | back control, the room name centred, typing when it happens, room settings |
 | Invite panel | `shell.ts` | replaces the timeline until the invitation is answered |
 | Intro panel | `shell.ts` | shown for a joined room with no messages |
 | Timeline | `timeline.ts` | keyed `<ol>` of day separators and rows |

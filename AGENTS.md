@@ -159,6 +159,8 @@ timeline and composer are centred at `--content-max`; a bubble is capped at `--b
 
 ### 1.6 Behaviour that the design fixes
 
+- The room header is the room name, centred; the back control appears on a narrow window
+  and the room settings control sits at the end. A membership line is not permanent chrome.
 - A message groups by sender, day and a five-minute gap; only the first row of a group
   carries the name and the avatar, and the avatar sits on the sender's side.
 - Media and stickers carry no bubble; the time is a chip on the picture.

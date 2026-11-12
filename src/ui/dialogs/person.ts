@@ -27,7 +27,6 @@ export function profileDialog(app: App, userId: string): void {
         ? el("div", { class: "dialog-actions" }, [
             button(t("profile.message"), () => {
               void app.worker.send<{ roomId: string }>({ type: "direct", userId }).then((result) => {
-                app.closeDialog();
                 app.openRoom(result.roomId);
               });
             }, true),
