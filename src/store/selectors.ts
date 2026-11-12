@@ -38,11 +38,6 @@ export interface TimelineOlderItem {
   key: string;
 }
 
-export interface TimelineNewItem {
-  type: "new";
-  key: string;
-}
-
 export interface TimelineReadItem {
   type: "read";
   key: string;
@@ -53,7 +48,6 @@ export type TimelineItem =
   | TimelineDayItem
   | TimelinePendingItem
   | TimelineOlderItem
-  | TimelineNewItem
   | TimelineReadItem;
 
 export function roomSections(snapshot: AppSnapshot): RoomSection[] {
@@ -293,10 +287,18 @@ export function dayLabel(ts: number, now = Date.now()): string {
   return key;
 }
 
+export function isEmoticonPack(pack: PackRecord): boolean {
+  return pack.usage === "emoticon" || pack.usage === "both";
+}
+
+export function isStickerPack(pack: PackRecord): boolean {
+  return pack.usage === "sticker" || pack.usage === "both";
+}
+
 export function visiblePacks(snapshot: AppSnapshot): { emoticons: PackRecord[]; stickers: PackRecord[] } {
   return {
-    emoticons: snapshot.packs.filter((pack) => pack.usage === "emoticon"),
-    stickers: snapshot.packs.filter((pack) => pack.usage === "sticker"),
+    emoticons: snapshot.packs.filter(isEmoticonPack),
+    stickers: snapshot.packs.filter(isStickerPack),
   };
 }
 

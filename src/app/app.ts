@@ -4,6 +4,9 @@ import { AppStore, type AppSnapshot } from "../store/app-store";
 import {
   activeRoom,
   displayName,
+  isEmoticonPack,
+  isStickerPack,
+  memberFor,
   roomById,
   roomSections,
   roomTitle,
@@ -40,12 +43,13 @@ import { MediaCache } from "../ui/media-cache";
 import { Notifier } from "../ui/notifications";
 import { Toaster } from "../ui/toast";
 import { confirmAction } from "../ui/confirm";
-import { Composer, type ComposerMessage } from "../ui/views/composer";
+import { Composer, type ComposerMessage, type PendingFile } from "../ui/views/composer";
 import type { MarkType } from "../ui/composer-model";
 import { TimelineView } from "../ui/views/timeline";
 import { ActionMenu, bindActionTrigger, type ActionMenuItem, type ActionPosition } from "../ui/action-menu";
 import { el, initial, type Child } from "../ui/dom";
 import { icon, iconButton } from "../ui/icons";
+import { escapeHtml } from "../ui/sanitize";
 import { formatNumber, setLocale, t } from "../i18n";
 
 type View = "boot" | "auth" | "gate" | "shell" | "fatal";
@@ -66,14 +70,10 @@ interface ShellRefs {
   rooms: HTMLElement;
   content: HTMLElement;
   headerTitle: HTMLElement;
-  headerSubtitle: HTMLElement;
-  headerAvatar: HTMLElement;
   headerActions: HTMLElement;
   body: HTMLElement;
   typing: HTMLElement;
   composerHost: HTMLElement;
-  accountButton: HTMLElement;
-  accountCard: HTMLElement;
 }
 
 export class App {
@@ -442,6 +442,7 @@ export class App {
       if (latest) void this.adapter.request("markRead", { roomId, eventId: latest.eventId }).catch(() => undefined);
       if (navigate && this.router.roomId() !== roomId) this.router.navigate(this.router.roomPath(roomId));
       await this.restoreDraft(roomId);
+      this.composer?.focus();
       if (scroll) this.timeline?.restoreScroll(scroll);
       this.requestRender();
     } finally {
@@ -1363,20 +1364,12 @@ export class App {
     }
     const nav = el("nav", { class: "nav", attrs: { "aria-label": t("nav.rooms") } });
     const rooms = el("div", { class: "rooms" });
-    const menu = this.menuBlock();
-    nav.append(menu.element, rooms);
+    nav.append(this.menuBlock().element, rooms);
 
-    const headerAvatar = el("div", { class: "avatar" });
-    const headerTitle = el("h1", { text: "" });
-    const headerSubtitle = el("div", { class: "content-subtitle", text: "" });
+    const headerTitle = el("h1", { class: "content-title", text: "" });
     const headerActions = el("div", { class: "row" });
     const back = iconButton(t("common.back"), "arrowLeft", () => this.backToHome(), "icon-button back-button");
-    const header = el("header", { class: "content-head" }, [
-      back,
-      headerAvatar,
-      el("div", { class: "grow content-title" }, [headerTitle, headerSubtitle]),
-      headerActions,
-    ]);
+    const header = el("header", { class: "content-head" }, [back, headerTitle, headerActions]);
     const body = el("div", { class: "content-body" });
     const typing = el("div", { class: "typing-indicator" });
     const composerHost = el("div", { class: "composer" });
@@ -1402,6 +1395,7 @@ export class App {
       onOpenPicker: (anchor, mode) => this.openPicker(anchor, { mode }),
       onTyping: (active) => void this.sendTyping(active),
       onFormatMenu: (position) => this.openFormatMenu(position),
+      onPreviewFile: (file) => this.previewLocalFile(file),
       onChange: () => this.scheduleDraftSave(),
       loadEmoji: (url) =>
         this.media.get({ mediaKey: "", mxc: url, width: 32, height: 32, method: "scale" }),
@@ -1413,12 +1407,8 @@ export class App {
       app,
       nav,
       rooms,
-      accountButton: menu.button,
-      accountCard: menu.card,
       content,
       headerTitle,
-      headerSubtitle,
-      headerAvatar,
       headerActions,
       body,
       typing,
@@ -1429,25 +1419,8 @@ export class App {
     this.updateShell();
   }
 
-  // The navigation opens with actions, not with an identity: the account lives in
-  // settings, and what is left is one button that unfolds a panel of controls.
-  private menuBlock(): {
-    element: HTMLElement;
-    button: HTMLButtonElement;
-    card: HTMLElement;
-  } {
-    const button = el("button", {
-      class: "nav-menu-button",
-      attrs: {
-        type: "button",
-        "aria-expanded": "false",
-        "aria-controls": "menu-card",
-      },
-    }, [
-      el("span", { text: t("nav.menu") }),
-      el("span", { class: "nav-menu-chevron" }, [icon("chevron")]),
-    ]);
-
+  // Quick actions sit at the top of the column for good: no disclosure, no card
+  private menuBlock(): { element: HTMLElement } {
     const actions: { label: string; icon: string; run: () => void }[] = [
       { label: t("nav.search"), icon: "search", run: () => this.router.openDialog("search") },
       { label: t("nav.newMessage"), icon: "userPlus", run: () => this.router.openDialog("new-message") },
@@ -1463,58 +1436,19 @@ export class App {
         },
       },
     ];
-    const card = el("div", { class: "nav-card", attrs: { id: "menu-card", hidden: true } }, [
-      el(
+    return {
+      element: el(
         "div",
-        { class: "nav-card-grid" },
+        { class: "nav-actions" },
         actions.map((action) =>
           el("button", {
             class: "nav-action",
             attrs: { type: "button" },
-            on: {
-              click: () => {
-                close();
-                action.run();
-              },
-            },
+            on: { click: action.run },
           }, [icon(action.icon), el("span", { text: action.label })]),
         ),
       ),
-    ]);
-
-    const outside = (event: Event): void => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (card.contains(target) || button.contains(target)) return;
-      close();
     };
-    const escape = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
-      close();
-      button.focus();
-    };
-    const close = (): void => {
-      if (card.hidden) return;
-      card.hidden = true;
-      button.setAttribute("aria-expanded", "false");
-      document.removeEventListener("pointerdown", outside, true);
-      document.removeEventListener("keydown", escape);
-    };
-    const open = (): void => {
-      card.hidden = false;
-      button.setAttribute("aria-expanded", "true");
-      document.addEventListener("pointerdown", outside, true);
-      document.addEventListener("keydown", escape);
-      card.querySelector<HTMLElement>("button")?.focus();
-    };
-    button.addEventListener("click", () => {
-      if (card.hidden) {
-        this.closePicker();
-        open();
-      } else close();
-    });
-
-    return { element: el("div", { class: "nav-menu" }, [button, card]), button, card };
   }
 
   private updateShell(): void {
@@ -1526,22 +1460,16 @@ export class App {
     const room = snapshot.activeRoomId ? activeRoom(snapshot) : null;
     if (!room) {
       shell.headerTitle.textContent = t("rooms.title");
-      shell.headerSubtitle.textContent = "";
-      shell.headerAvatar.replaceChildren(icon("message"));
       shell.headerActions.replaceChildren();
       shell.body.replaceChildren(el("div", { class: "empty", text: t("rooms.empty") }));
       shell.composerHost.hidden = true;
       shell.typing.hidden = true;
       return;
     }
-    // Replacing the header would recreate its avatar image on every delta.
-    const headerKey = `${room.roomId}|${room.kind}|${roomTitle(room)}|${room.topic}|${room.avatarMxc ?? ""}`;
+    const headerKey = `${room.roomId}|${room.kind}|${roomTitle(room)}`;
     if (headerKey !== this.headerKey) {
       this.headerKey = headerKey;
       shell.headerTitle.textContent = roomTitle(room);
-      shell.headerSubtitle.textContent = room.kind === "space" ? room.topic : room.topic || room.roomId;
-      shell.headerAvatar.replaceChildren(el("span", { text: initial(roomTitle(room)) }));
-      this.loadAvatar(shell.headerAvatar, room.avatarMxc, 48);
       shell.headerActions.replaceChildren(
         iconButton(
           t(room.kind === "space" ? "channel.settings" : "room.settings"),
@@ -1898,6 +1826,15 @@ export class App {
     this.actionMenu.open(position, items);
   }
 
+  private previewLocalFile(file: PendingFile): void {
+    const body = el("div", { class: "media-viewer" }, [
+      file.file.type.startsWith("image/")
+        ? el("img", { attrs: { src: file.url, alt: file.file.name } })
+        : el("div", { class: "media-placeholder", text: file.file.name }),
+    ]);
+    this.dialogs.open({ title: file.file.name, body, onClose: () => { this.dialogName = null; } });
+  }
+
   private async openSource(event: EventRecord): Promise<void> {
     try {
       const result = await this.adapter.request<{ json: string }>("eventSource", {
@@ -2194,6 +2131,7 @@ export class App {
   }
 
   // A profile is a card about a person: picture, name, id, then what can be done
+  // with them here. A room that is not a direct message also shows their standing.
   private openProfile(userId: string): void {
     void this.adapter
       .request<{ profile: { userId: string; displayName: string; avatarMxc: string | null; verified: boolean; identityChanged: boolean } }>(
@@ -2202,44 +2140,67 @@ export class App {
       )
       .then((result) => {
         const profile = result.profile;
+        const snapshot = this.store.getSnapshot();
+        const room = snapshot.activeRoomId ? activeRoom(snapshot) : null;
+        const member = room ? memberFor(snapshot, room.roomId, profile.userId) : null;
         const copy = iconButton(t("profile.copyId"), "copy", () => {
           void navigator.clipboard.writeText(profile.userId).then(() => {
             this.notify(t("common.copied"));
             this.copyFeedback(copy);
           });
         }, "icon-button profile-copy");
-        copy.title = t("profile.copyId");
+        const status = profile.identityChanged
+          ? t("profile.identityChanged")
+          : profile.verified
+            ? t("profile.verified")
+            : t("profile.notVerified");
         const body = el("div", { class: "profile" }, [
           this.profileAvatar(profile.avatarMxc, profile.displayName),
           el("h3", { class: "profile-name", text: profile.displayName }),
-          el("div", { class: "profile-id" }, [
-            el("span", { text: profile.userId }),
-            copy,
-          ]),
-          profile.identityChanged ? el("p", { class: "error-text", text: t("profile.identityChanged") }) : null,
-          el("div", { class: "profile-actions" }, [
-            el("button", {
-              class: "button primary",
-              text: t("profile.message"),
-              attrs: { type: "button" },
-              on: {
-                click: () => {
-                  this.dialogs.close();
-                  this.dialogName = null;
-                  void this.startDirectMessage(profile.userId);
-                },
+          el("div", { class: "profile-id" }, [el("span", { text: profile.userId }), copy]),
+          el("button", {
+            class: "button profile-primary",
+            text: t("profile.directChat"),
+            attrs: { type: "button" },
+            on: {
+              click: () => {
+                this.dialogs.close();
+                this.dialogName = null;
+                void this.startDirectMessage(profile.userId);
               },
-            }),
-            el("button", {
-              class: "button",
-              text: profile.verified ? t("profile.verified") : t("profile.verify"),
-              attrs: { type: "button" },
-              on: { click: () => void this.verifyUser(profile.userId) },
-            }),
+            },
+          }),
+          room && !room.isDirect
+            ? el("section", { class: "profile-section" }, [
+                el("h4", { text: t("profile.inRoom", { room: roomTitle(room) }) }),
+                this.profileRow(
+                  t("profile.powerLevel"),
+                  el("span", { class: "profile-power" }, [
+                    el("span", { text: formatNumber(snapshot.ui.locale, member?.powerLevel ?? 0) }),
+                    el("span", { class: "badge", text: roleLabel(member?.powerLevel ?? 0) }),
+                  ]),
+                ),
+              ])
+            : null,
+          el("section", { class: "profile-section" }, [
+            el("h4", { text: t("settings.security") }),
+            this.profileRow(
+              status,
+              el("button", {
+                class: "button",
+                text: profile.verified ? t("profile.verified") : t("profile.verify"),
+                attrs: { type: "button" },
+                on: { click: () => void this.verifyUser(profile.userId) },
+              }),
+            ),
           ]),
         ]);
         this.dialogs.open({ title: t("nav.profile"), body, onClose: () => { this.dialogName = null; } });
       });
+  }
+
+  private profileRow(label: string, control: HTMLElement): HTMLElement {
+    return el("div", { class: "profile-row" }, [el("span", { class: "profile-row-label", text: label }), control]);
   }
 
   private copyFeedback(node: HTMLElement): void {
@@ -3023,6 +2984,19 @@ export class App {
     return image;
   }
 
+  private async sendEmote(entry: RecentEntry): Promise<void> {
+    const body = entry.body || entry.shortcode;
+    const roomId = this.store.getSnapshot().activeRoomId;
+    if (!roomId) return;
+    await this.queueOutbox(roomId, "m.emote", {
+      body,
+      format: "org.matrix.custom.html",
+      formatted_body: `<img data-mx-emoticon src="${entry.url}" alt="${escapeHtml(body)}" title="${escapeHtml(entry.shortcode)}" height="32">`,
+      msgtype: "m.emote",
+    }).catch(() => undefined);
+    this.rememberEmoji(entry);
+  }
+
   private async sendSticker(image: { url: string; body: string; shortcode: string; info: Record<string, unknown> }): Promise<void> {
     const roomId = this.store.getSnapshot().activeRoomId;
     if (!roomId) return;
@@ -3044,7 +3018,7 @@ export class App {
     }
     const snapshot = this.store.getSnapshot();
     const reactTo = options.reactTo ?? null;
-    let mode: "emoji" | "sticker" = options.mode ?? "emoji";
+    const mode = options.mode ?? "emoji";
     let packId: string | null = null;
     const picker = el("div", {
       class: `picker${mode === "sticker" ? " picker-sticker" : ""}`,
@@ -3105,6 +3079,7 @@ export class App {
                     close();
                     return;
                   }
+                  this.rememberEmoji({ shortcode: image.shortcode, url: image.url, body: image.body, info: image.info, sticker: false });
                   void this.media
                     .get({ mediaKey: "", mxc: image.url, width: 32, height: 32, method: "scale" })
                     .then((url) => {
@@ -3152,6 +3127,7 @@ export class App {
                 attrs: { type: "button", title: image.shortcode },
                 on: {
                   click: () => {
+                    this.rememberEmoji({ shortcode: image.shortcode, url: image.url, body: image.body, info: image.info, sticker: true });
                     void this.sendSticker(image);
                     close();
                   },
@@ -3167,6 +3143,39 @@ export class App {
       tabs.hidden = true;
       body.replaceChildren();
       const matches = (value: string): boolean => value.includes(query);
+      const recent = query ? [] : this.recentEntries();
+      if (recent.length > 0) {
+        body.appendChild(
+          el("div", { class: "picker-section" }, [
+            el("h3", { text: t("picker.recent") }),
+            el("div", { class: "emoji-grid pack-grid" }, recent.map((entry) =>
+              el("button", {
+                class: "emoji-cell pack-cell",
+                attrs: { type: "button", title: entry.shortcode },
+                on: {
+                  click: () => {
+                    if (reactTo) {
+                      void this.react(reactTo, entry.shortcode);
+                      close();
+                      return;
+                    }
+                    if (entry.sticker) {
+                      void this.sendSticker(entry);
+                      close();
+                      return;
+                    }
+                    void this.media
+                      .get({ mediaKey: "", mxc: entry.url, width: 32, height: 32, method: "scale" })
+                      .then((url) => {
+                        if (url) this.composer?.insertEmoji(entry.shortcode, entry.url, entry.body, entry.info);
+                      });
+                  },
+                },
+              }, [this.packImage(entry.url, entry.shortcode)]),
+            )),
+          ]),
+        );
+      }
       const unicode = EMOJI.filter(matches);
       if (unicode.length > 0) {
         body.appendChild(
@@ -3174,12 +3183,12 @@ export class App {
         );
       }
       for (const pack of snapshot.packs) {
-        if (pack.usage !== "emoticon") continue;
+        if (!isEmoticonPack(pack)) continue;
         const images = Object.values(pack.images).filter((image) => matches(image.shortcode));
         if (images.length === 0) continue;
         body.appendChild(el("div", { class: "picker-section" }, [el("h3", { text: pack.displayName }), packGrid(images)]));
       }
-      const stickers = snapshot.packs.filter((pack) => pack.usage === "sticker");
+      const stickers = snapshot.packs.filter(isStickerPack);
       if (!reactTo && stickers.length > 0) {
         const any = stickers.some((pack) => Object.values(pack.images).some((image) => matches(image.shortcode)));
         if (any) {
@@ -3191,62 +3200,56 @@ export class App {
       if (!body.hasChildNodes()) body.appendChild(el("div", { class: "empty", text: t("picker.empty") }));
     };
 
+    // A sticker surface picks a pack first; its emoji tab sends the emoticon as a
+    // message, which is what an emoji sent as a sticker is.
     const renderStickers = (query: string): void => {
-      const packs = snapshot.packs.filter((pack) => pack.usage === "sticker");
+      const packs = snapshot.packs.filter(isStickerPack);
+      const emoticonPacks = snapshot.packs.filter(isEmoticonPack);
       tabs.hidden = false;
+      const tabsFor = [EMOJI_TAB, ...packs.map((pack) => pack.packId)];
+      if (!packId || !tabsFor.includes(packId)) {
+        // open on something that exists: emoticons if there are any, else a pack
+        packId = emoticonPacks.length > 0 ? EMOJI_TAB : (packs[0]?.packId ?? null);
+      }
       tabs.replaceChildren(
-        el("button", {
-          class: "picker-pack",
-          text: t("picker.emoticons"),
-          attrs: { type: "button" },
-          on: {
-            click: () => {
-              mode = "emoji";
-              renderMode(query);
-            },
-          },
-        }),
-        ...packs.map((pack) =>
-          el("button", {
+        ...tabsFor.map((id) => {
+          const pack = packs.find((entry) => entry.packId === id) ?? null;
+          return el("button", {
             class: "picker-pack",
-            attrs: { type: "button", "aria-pressed": String(pack.packId === packId) },
+            attrs: { type: "button", "aria-pressed": String(id === packId) },
             on: {
               click: () => {
-                packId = pack.packId;
+                packId = id;
                 renderStickers(query);
               },
             },
-          }, [pack.displayName]),
-        ),
+          }, [el("span", { text: id === EMOJI_TAB ? t("picker.emoticons") : (pack?.displayName ?? "") })]);
+        }),
       );
-      const active = packs.find((pack) => pack.packId === packId) ?? packs[0] ?? null;
-      packId = active?.packId ?? null;
-      if (!active) {
-        body.replaceChildren(el("div", { class: "empty", text: t("picker.empty") }));
-        return;
-      }
-      for (const button of tabs.querySelectorAll<HTMLElement>(".picker-pack")) {
-        if (button.textContent === active.displayName) button.setAttribute("aria-pressed", "true");
-      }
-      const images = Object.values(active.images).filter((image) => image.shortcode.includes(query));
+      const images =
+        packId === EMOJI_TAB
+          ? emoticonPacks.flatMap((pack) => Object.values(pack.images)).filter((image) => image.shortcode.includes(query))
+          : (packs.find((pack) => pack.packId === packId) ?? null
+              ? Object.values(packs.find((pack) => pack.packId === packId)?.images ?? {}).filter((image) =>
+                  image.shortcode.includes(query),
+                )
+              : []);
       body.replaceChildren(
         images.length === 0
           ? el("div", { class: "empty", text: t("picker.empty") })
           : el("div", { class: "emoji-grid pack-grid" }, images.map((image) =>
-              el(
-                "button",
-                {
-                  class: "emoji-cell pack-cell",
-                  attrs: { type: "button", title: image.shortcode },
-                  on: {
-                    click: () => {
-                      void this.sendSticker(image);
-                      close();
-                    },
+              el("button", {
+                class: "emoji-cell pack-cell",
+                attrs: { type: "button", title: image.shortcode },
+                on: {
+                  click: () => {
+                    this.rememberEmoji({ shortcode: image.shortcode, url: image.url, body: image.body, info: image.info, sticker: true });
+                    if (packId === EMOJI_TAB) void this.sendEmote({ ...image, sticker: true });
+                    else void this.sendSticker(image);
+                    close();
                   },
                 },
-                [this.packImage(image.url, image.shortcode)],
-              ),
+              }, [this.packImage(image.url, image.shortcode)]),
             )),
       );
     };
@@ -3277,9 +3280,31 @@ export class App {
     window.addEventListener("resize", place);
   }
 
+  private recentEntries(): RecentEntry[] {
+    const value = this.settings["recentEmoji"];
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry): entry is RecentEntry => isRecord(entry) && typeof entry["shortcode"] === "string" && typeof entry["url"] === "string");
+  }
+
+  private rememberEmoji(entry: RecentEntry): void {
+    const next = [entry, ...this.recentEntries().filter((item) => item.shortcode !== entry.shortcode || item.url !== entry.url)].slice(0, 30);
+    this.settings["recentEmoji"] = next;
+    void this.db.writeSetting("recentEmoji", next);
+  }
+
   private closePicker(): void {
     this.picker?.close();
   }
+}
+
+const EMOJI_TAB = "emoticons";
+
+interface RecentEntry {
+  shortcode: string;
+  url: string;
+  body: string;
+  info: Record<string, unknown>;
+  sticker: boolean;
 }
 
 const EMOJI = [
@@ -3288,6 +3313,12 @@ const EMOJI = [
   "🙏", "💪", "👀", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💯", "✨", "🔥", "🎉", "🎂", "☕",
   "🍵", "🍕", "🍔", "🌙", "⭐", "☀️", "🌈", "🌊", "🌸", "🌻", "🐱", "🐶", "🦊", "🐼", "🚀", "💡",
 ];
+
+function roleLabel(powerLevel: number): string {
+  if (powerLevel >= 100) return t("profile.admin");
+  if (powerLevel >= 50) return t("profile.moderator");
+  return t("profile.defaultRole");
+}
 
 function channelSignature(room: RoomRecord, snapshot: AppSnapshot): string {
   return [

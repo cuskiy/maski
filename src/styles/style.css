@@ -78,8 +78,8 @@
   --icon: 1rem;
   --control-size: 2.1rem;
   --row-gap: 0.1rem;
-  --avatar: 2.25rem;
-  --avatar-nav: 1.9rem;
+  --avatar: 2rem;
+  --avatar-nav: var(--avatar);
   --avatar-lg: 2.75rem;
   --panel-max: 32rem;
   --meta-max: 42ch;
@@ -89,7 +89,7 @@
   --modal-max: 42rem;
   --composer-max: 12rem;
   --picker-max: 28rem;
-  --picker-max-block: 26rem;
+  --picker-max-block: 21rem;
   --picker-cell: 2.9rem;
   --sticker-max: 10rem;
   --emoji-size: 1.35em;
@@ -107,12 +107,12 @@
     color-mix(in oklab, var(--ink) 9%, transparent)
   );
   --field: light-dark(
-    color-mix(in oklab, var(--ink) 2%, var(--page)),
-    color-mix(in oklab, var(--ink) 5%, var(--page))
+    color-mix(in oklab, var(--ink) 4%, var(--page)),
+    color-mix(in oklab, var(--ink) 8%, var(--page))
   );
   --field-focus: light-dark(
-    color-mix(in oklab, var(--ink) 3.5%, var(--page)),
-    color-mix(in oklab, var(--ink) 7%, var(--page))
+    color-mix(in oklab, var(--ink) 5.5%, var(--page)),
+    color-mix(in oklab, var(--ink) 10%, var(--page))
   );
   --bubble-other: light-dark(
     var(--surface),
@@ -395,12 +395,20 @@ h3 {
   rotate: -90deg;
 }
 
+.nav-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2) var(--space-2);
+  margin-inline: var(--space-2);
+}
+
 .nav-action {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-block-size: 2.25rem;
-  padding: var(--space-2);
+  min-block-size: 2.1rem;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius);
   color: var(--page-text-muted);
   font-size: var(--text-sm);
@@ -616,8 +624,10 @@ h3 {
 
 .room-avatar img,
 .avatar img {
+  display: block;
   inline-size: 100%;
   block-size: 100%;
+  border-radius: inherit;
   object-fit: cover;
 }
 
@@ -839,7 +849,6 @@ h3 {
 }
 
 .day-separator,
-.new-divider,
 .read-marker {
   display: flex;
   align-items: center;
@@ -849,10 +858,6 @@ h3 {
   padding: var(--space-4) 0 var(--space-2);
   color: var(--page-text-muted);
   font-size: var(--text-sm);
-}
-
-.new-divider {
-  color: var(--page-text);
 }
 
 .read-marker {
@@ -882,10 +887,6 @@ h3 {
   50% {
     opacity: 0.35;
   }
-}
-
-.event.mentioned .event-bubble {
-  background: var(--mark);
 }
 
 .event.emoji-only .event-text {
@@ -927,9 +928,9 @@ h3 {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.1rem;
+  gap: var(--row-gap);
   min-inline-size: 0;
-  max-inline-size: min(var(--bubble-max), 88%);
+  max-inline-size: 100%;
 }
 
 .event-name {
@@ -959,8 +960,9 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0 var(--space-2);
-  max-inline-size: 100%;
+  gap: var(--row-gap) var(--space-2);
+  min-inline-size: 0;
+  max-inline-size: min(var(--bubble-max), 88%);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-lg);
   background: var(--bubble-other);
@@ -968,8 +970,9 @@ h3 {
 }
 
 .event-bubble > .event-text {
-  flex: 1 0 auto;
+  flex: 0 1 auto;
   min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .event.own .event-bubble {
@@ -1094,9 +1097,12 @@ h3 {
 
 .event-reply {
   display: grid;
+  flex: 1 0 100%;
   justify-items: start;
   text-align: start;
-  gap: 0.1rem;
+  gap: var(--row-gap);
+  min-inline-size: 0;
+  max-inline-size: 100%;
   margin-block-end: var(--space-2);
   padding-inline-start: var(--space-2);
   border-inline-start: 2px solid var(--page-border);
@@ -1425,7 +1431,8 @@ h3 {
   min-block-size: var(--control-size);
   max-block-size: var(--composer-max);
   font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-2);
+  padding-block: calc((var(--control-size) - 1lh) / 2);
+  padding-inline: var(--space-2);
   border: 0;
   background: transparent;
   color: inherit;
@@ -1463,6 +1470,7 @@ h3 {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   inline-size: min(calc(100vw - var(--space-6)), var(--picker-max));
+  block-size: var(--picker-max-block);
   max-block-size: var(--picker-max-block);
   border-radius: var(--radius-lg);
   background: var(--glass-popover);
@@ -1594,21 +1602,27 @@ h3 {
   position: relative;
   display: grid;
   gap: var(--space-1);
-  inline-size: 7rem;
+  inline-size: 6rem;
   padding: var(--space-1);
-  border: var(--rule);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--surface-text);
   font-size: var(--text-sm);
 }
 
+.attachment-preview {
+  display: block;
+  inline-size: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
 .attachment img,
 .attachment video {
+  display: block;
   inline-size: 100%;
   block-size: 4rem;
   object-fit: cover;
-  border-radius: calc(var(--radius) - 0.2rem);
 }
 
 .attachment-name {
@@ -2217,24 +2231,25 @@ input[type="file"]::file-selector-button {
 
 .profile {
   display: grid;
-  justify-items: start;
+  justify-items: center;
   gap: var(--space-2);
-  padding-block: var(--space-2) var(--space-3);
-  text-align: start;
+  padding-block: var(--space-3) var(--space-2);
+  text-align: center;
 }
 
 .profile .avatar {
-  place-self: start;
-  inline-size: 4.5rem;
-  block-size: 4.5rem;
+  place-self: center;
+  inline-size: 6rem;
+  block-size: 6rem;
   margin-block-end: var(--space-2);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
 }
 
 .profile-name {
   font-size: var(--text-lg);
   font-weight: 600;
   line-height: var(--leading-tight);
+  text-wrap: balance;
 }
 
 .profile-id {
@@ -2242,11 +2257,8 @@ input[type="file"]::file-selector-button {
   align-items: center;
   gap: var(--space-1);
   max-inline-size: 100%;
-  padding-inline-start: var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--control);
   color: var(--surface-text-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .profile-id span {
@@ -2256,24 +2268,63 @@ input[type="file"]::file-selector-button {
 }
 
 .profile-copy {
+  flex: none;
   inline-size: 1.6rem;
   block-size: 1.6rem;
   border-radius: var(--radius-full);
 }
 
 .profile-copy.copied {
+  background: var(--control);
   color: var(--surface-text);
-  translate: 0 -1px;
 }
 
-.profile-actions {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-start;
+.profile-primary {
   inline-size: 100%;
+  min-block-size: 2.4rem;
   margin-block-start: var(--space-2);
+  border-radius: var(--radius-lg);
 }
 
+.profile-section {
+  display: grid;
+  gap: var(--space-1);
+  inline-size: 100%;
+  margin-block-start: var(--space-4);
+  text-align: start;
+}
+
+.profile-section h4 {
+  margin-block-end: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-block-size: 2.6rem;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--control);
+  font-size: var(--text-sm);
+}
+
+.profile-row-label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-power {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--surface-text-muted);
+}
 
 /* media viewer */
 

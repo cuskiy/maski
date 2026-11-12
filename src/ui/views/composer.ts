@@ -23,6 +23,7 @@ export interface ComposerCallbacks {
   onOpenPicker: (anchor: HTMLElement, mode: "emoji" | "sticker") => void;
   onTyping: (typing: boolean) => void;
   onFormatMenu: (position: ActionPosition) => void;
+  onPreviewFile: (file: PendingFile) => void;
   onChange: () => void;
   loadEmoji: (url: string) => Promise<string | null>;
 }
@@ -229,7 +230,13 @@ export class Composer {
       this.callbacks.onFormatMenu({ x: event.clientX, y: event.clientY });
     });
     this.textarea.addEventListener("blur", () => this.showRich());
-    this.textarea.addEventListener("paste", () => {
+    this.textarea.addEventListener("paste", (event) => {
+      const files = event.clipboardData?.files;
+      if (files && files.length > 0) {
+        event.preventDefault();
+        this.addFiles(files);
+        return;
+      }
       window.setTimeout(() => {
         this.model.applyInput(this.textarea.value, this.textarea.selectionStart, this.textarea.selectionEnd);
         this.updateSendState();
@@ -251,6 +258,7 @@ export class Composer {
       event.preventDefault();
       if (event.dataTransfer?.files) this.addFiles(event.dataTransfer.files);
     });
+    this.textarea.addEventListener("dragover", (event) => event.preventDefault());
     this.updateSendState();
   }
 
@@ -313,13 +321,19 @@ export class Composer {
     this.textarea.style.height = `${Math.min(this.textarea.scrollHeight, Number.isNaN(limit) ? Infinity : limit)}px`;
   }
 
+  // A queued file shows its picture and can be looked at before it is sent
   private renderAttachments(): void {
     this.attachments.replaceChildren(
-      ...this.files.map((item, index) =>
-        el("div", { class: "attachment" }, [
-          item.file.type.startsWith("image/")
-            ? el("img", { attrs: { src: item.url, alt: item.file.name } })
-            : el("div", { class: "media-placeholder", text: item.file.name }),
+      ...this.files.map((item, index) => {
+        const preview = item.file.type.startsWith("image/")
+          ? el("img", { attrs: { src: item.url, alt: item.file.name } })
+          : el("div", { class: "media-placeholder", text: item.file.name });
+        return el("div", { class: "attachment" }, [
+          el("button", {
+            class: "attachment-preview",
+            attrs: { type: "button", "aria-label": t("media.open") },
+            on: { click: () => this.callbacks.onPreviewFile(item) },
+          }, [preview]),
           el("span", { class: "attachment-name", text: item.file.name }),
           iconButton(t("composer.remove"), "close", () => {
             URL.revokeObjectURL(item.url);
@@ -327,8 +341,8 @@ export class Composer {
             this.renderAttachments();
             this.updateSendState();
           }, "attachment-remove"),
-        ]),
-      ),
+        ]);
+      }),
     );
     this.attachments.hidden = this.files.length === 0;
   }

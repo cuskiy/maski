@@ -118,9 +118,16 @@ function packFromEvent(
   };
 }
 
+// A pack can offer both: excluding it from one list is why some packs looked missing
 function usageFor(value: unknown): PackRecord["usage"] {
-  if (Array.isArray(value) && value.includes("sticker") && !value.includes("emoticon")) return "sticker";
-  return "emoticon";
+  if (Array.isArray(value)) {
+    const emoticon = value.includes("emoticon");
+    const sticker = value.includes("sticker");
+    if (emoticon && sticker) return "both";
+    if (sticker) return "sticker";
+    return "emoticon";
+  }
+  return value === "both" ? "both" : value === "sticker" ? "sticker" : "emoticon";
 }
 
 export function globalContentForPack(

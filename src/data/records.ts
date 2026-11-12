@@ -15,7 +15,7 @@ export type EventKind =
   | "encrypted"
   | "unsupported";
 
-export type PackUsage = "emoticon" | "sticker";
+export type PackUsage = "emoticon" | "sticker" | "both";
 export type PackSource = "room" | "global" | "user" | "legacy";
 
 export interface LastEventPreview {

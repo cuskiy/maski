@@ -214,9 +214,6 @@ export class TimelineView {
         el("span", { class: "spinner", attrs: { "aria-label": t("room.loadOlder") } }),
       ]);
     }
-    if (item.type === "new") {
-      return el("li", { class: "new-divider", attrs: { "data-item-key": item.key }, text: t("room.newMessages") });
-    }
     if (item.type === "read") {
       return el("li", { class: "read-marker", attrs: { "data-item-key": item.key, role: "separator" } }, [
         el("span", { text: t("room.readMarker") }),
