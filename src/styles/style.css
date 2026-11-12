@@ -60,7 +60,7 @@
   --leading-display: 1.1;
   --text-sm: clamp(0.74rem, 0.7rem + 0.15vw, 0.78rem);
   --text-md: clamp(0.84rem, 0.79rem + 0.22vw, 0.95rem);
-  --text-composer: clamp(0.8rem, 0.77rem + 0.12vw, 0.88rem);
+  --text-control: clamp(0.8rem, 0.77rem + 0.12vw, 0.88rem);
   --text-lg: clamp(0.98rem, 0.88rem + 0.45vw, 1.22rem);
   --text-xl: clamp(1.22rem, 1.08rem + 0.8vw, 1.65rem);
   --text-2xl: clamp(1.76rem, 1.24rem + 2.2vw, 2.84rem);
@@ -76,7 +76,7 @@
   --radius-full: 999px;
   --icon: 1rem;
   --avatar: 2rem;
-  --avatar-nav: 2.5rem;
+  --avatar-nav: 2.25rem;
   --avatar-lg: 2.75rem;
   --panel-max: 32rem;
   --meta-max: 42ch;
@@ -464,7 +464,7 @@ h3 {
 }
 
 .nav-user-name {
-  font-size: var(--text-md);
+  font-size: var(--text-control);
   line-height: var(--leading-tight);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -581,7 +581,7 @@ h3 {
   inline-size: var(--avatar-nav);
   block-size: var(--avatar-nav);
   min-inline-size: var(--avatar-nav);
-  font-size: var(--text-md);
+  font-size: var(--text-control);
 }
 
 .room-row .room-meta,
@@ -660,7 +660,7 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-md);
+  font-size: var(--text-control);
   line-height: var(--leading-tight);
   font-weight: 600;
 }
@@ -1443,7 +1443,7 @@ h3 {
   inline-size: 100%;
   min-block-size: 2.4rem;
   max-block-size: var(--composer-max);
-  font-size: var(--text-composer);
+  font-size: var(--text-control);
   padding: 0.45rem var(--space-2);
   border: 0;
   background: transparent;
