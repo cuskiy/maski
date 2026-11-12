@@ -55,11 +55,18 @@ Two display items interrupt the rows: a day separator, and one hairline under th
 user's receipt points at, which is where reading stopped. A jump control floats at the bottom
 edge of the scroller as soon as the newest row is out of view.
 
+The scroller owns two pieces of reading state. `pinned` says whether the newest row is on
+screen, and a read receipt only moves while it is: a reader who scrolled up has not seen what
+arrived below. The anchor records height and offset before a backfill so the view can stay
+where it was, whether the list grew or the server had nothing older. Opening another room
+resets both: a room starts at its newest row.
+
 ## Composer
 
-Three parts in one row: attach, the field group (textarea plus emoji control), send. The field
-grows to `--composer-max` and then scrolls; the text is a plain textarea, and marks are kept
-beside it (`ui/marks.ts`).
+The row is attach, the field group (textarea plus emoji control), then two controls that
+share the last column: send while there is something to send, and a sticker control while the
+field is empty. The field grows to `--composer-max` and then scrolls; the text is a plain
+textarea, and marks are kept beside it (`ui/marks.ts`).
 
 When the field is not focused and the draft has a mark, the formatted draft is rendered in
 place; a pointer on that rendering maps back to a plain offset and returns to editing there.

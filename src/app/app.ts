@@ -318,6 +318,8 @@ export class App implements UiContext {
     const last = state.messages.findLast((message) => message.status === "sent" && message.id.startsWith("$"));
     if (!room || !last || this.lastRead === last.id) return;
     if (document.visibilityState !== "visible") return;
+    // A reader scrolled up has not seen what arrived below; the receipt waits for them.
+    if (this.started && !this.shell.timeline.atBottom()) return;
     this.lastRead = last.id;
     void this.worker.send({ type: "markRead", roomId: room.roomId, eventId: last.id });
   }
@@ -566,11 +568,13 @@ export class App implements UiContext {
   typing(on: boolean): void {
     const room = activeRoom();
     if (!room) return;
+    // A keystroke refreshes the timeout even when the indicator is already on, or a
+    // reader who keeps typing would see it blink off every twenty seconds.
+    window.clearTimeout(this.typingTimer);
+    if (on) this.typingTimer = window.setTimeout(() => this.typing(false), 20000);
     if (on === this.typingSent) return;
     this.typingSent = on;
     void this.worker.send({ type: "typing", roomId: room.roomId, on });
-    window.clearTimeout(this.typingTimer);
-    if (on) this.typingTimer = window.setTimeout(() => this.typing(false), 20000);
   }
 
   togglePicker(mode: "emoji" | "sticker"): void {

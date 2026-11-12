@@ -190,6 +190,7 @@ export class TimelineView {
   }
 
   private loading = false;
+  private roomId: string | null = null;
   private anchor: { height: number; top: number; count: number } | null = null;
 
   private async loadOlder(): Promise<void> {
@@ -210,6 +211,11 @@ export class TimelineView {
     }
   }
 
+  /** Whether the newest row is on screen, which is what a read receipt may claim. */
+  atBottom(): boolean {
+    return this.pinned;
+  }
+
   scrollToBottom(): void {
     this.root.scrollTop = this.root.scrollHeight;
     this.jump.hidden = true;
@@ -227,7 +233,14 @@ export class TimelineView {
     this.older.hidden = !state.hasOlder || this.loading;
     if (!room) {
       this.list.replaceChildren();
+      this.roomId = null;
       return;
+    }
+    if (room.roomId !== this.roomId) {
+      // Another room starts at its newest row, whatever the last one was scrolled to.
+      this.roomId = room.roomId;
+      this.pinned = true;
+      this.anchor = null;
     }
     const items = timelineItems(messages, room.readUpTo);
     const build = (item: TimelineItem): HTMLElement => {
