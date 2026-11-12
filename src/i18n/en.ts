@@ -137,6 +137,7 @@ export const en = {
   "settings.aboutText": "maski keeps your messages on your device. There is no analytics, no third-party request and no push service.",
   "settings.version": "Version {version}",
   "settings.source": "Source code",
+  "settings.restoreHint": "A recovery key from another session restores the keys here; a key from a reset replaces them.",
   "settings.securityDevice": "This device",
   "settings.securityBackup": "Key backup",
   "settings.securityReady": "Keys are ready",

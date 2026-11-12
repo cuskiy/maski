@@ -139,6 +139,7 @@ export const zhCN: Catalog = {
   "settings.aboutText": "maski 把消息留在你的设备上。没有统计、没有第三方请求，也没有推送服务。",
   "settings.version": "版本 {version}",
   "settings.source": "源代码",
+  "settings.restoreHint": "用其他会话的恢复密钥可以在这台设备上恢复密钥；重置产生的新密钥会替换它们。",
   "settings.securityDevice": "这台设备",
   "settings.securityBackup": "密钥备份",
   "settings.securityReady": "密钥已就绪",

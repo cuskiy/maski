@@ -40,6 +40,29 @@ function row(label: string, ...children: (Node | string)[]): HTMLElement {
   return el("div", { class: "setting-row" }, [el("span", { class: "setting-label", text: label }), el("div", { class: "setting-value" }, children)]);
 }
 
+function restoreKeys(app: App): HTMLElement {
+  const input = textField(t("gate.keyLabel"), "");
+  const notice = el("p", { class: "dialog-note" });
+  return el("div", { class: "setting-value restore" }, [
+    input,
+    button(t("gate.unlock"), () => {
+      notice.textContent = t("gate.unlocking");
+      void app.worker
+        .send<{ ready: boolean; backup: boolean }>({ type: "unlock", recoveryKey: input.value })
+        .then((status) => {
+          setState({ keys: status });
+          notice.textContent = t("settings.securityReady");
+          void app.loadDevices();
+        })
+        .catch((error: unknown) => {
+          notice.textContent = error instanceof Error && error.message === "invalid" ? t("gate.invalid") : t("gate.restore");
+        });
+    }, true),
+    notice,
+    el("p", { class: "dialog-note", text: t("settings.restoreHint") }),
+  ]);
+}
+
 function securitySection(app: App): HTMLElement {
   const body = el("div", { class: "security" });
   const render = (): void => {
@@ -309,6 +332,7 @@ function settingsDialog(app: App): void {
       el("h2", { class: "section-title", text: t("settings.security") }),
       row(t("settings.securityDevice"), el("span", { class: "status-text", text: state.keys?.ready ? t("settings.securityReady") : t("settings.securityMissing") })),
       row(t("settings.securityBackup"), el("span", { class: "status-text", text: state.keys?.backup ? t("settings.securityReady") : t("settings.securityMissing") })),
+      state.keys?.ready ? null : restoreKeys(app),
       el("h3", { class: "section-subtitle", text: t("profile.devices") }),
       securitySection(app),
     ]),
