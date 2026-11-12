@@ -1,31 +1,80 @@
 # maski
 
-A Matrix client that keeps the interface on local data: the worker owns the protocol,
-the main thread reads a projection and renders plain DOM.
+A Matrix client that keeps the interface on local data: the worker owns the protocol, the
+main thread reads a projection and renders plain DOM.
 
-## 0. Rules
+## 0. The brief and the rules
 
-These come from the user and outrank everything below.
+### 0.1 Working rules
 
-1. Discuss the approach before writing code. Read the current Matrix specification, the
-   `matrix-js-sdk` source and the reference checkouts in `git/` before choosing an API.
-   Do not present an unchecked API as settled.
-2. The stack is Vite and TypeScript. No UI framework, component library, CSS framework,
-   state library, router library, i18n library or date library. `matrix-js-sdk` owns the
-   protocol, sync and crypto. DOMPurify is the only other runtime dependency.
-3. Code, identifiers, comments and commit messages are English. A comment states one fact
-   the code cannot: a protocol quirk, a security boundary, a browser behaviour, an
-   invariant. No banner comments, no commented-out code, no JSDoc that repeats a signature.
-4. No non-ASCII in code. User-facing copy lives in `src/i18n/`, never in a view.
-5. The HTML files carry no CSS and no JavaScript beyond one external module script.
-6. All design values come from the token ladder in `:root`. No literal colour, size,
-   radius or duration in a rule. No `!important`, no vendor prefix, no `outline: none`.
-7. A feature is added by extending an existing boundary. A second implementation of a
-   concern that already has one is a defect, even when it works.
-8. Nothing is a placeholder: every control does what it says, and a missing feature is
-   absent from the interface rather than present and dead.
-9. A check that did not run is not a check that passed. Report what was verified and what
-   was not.
+1. Read the latest official material and the reference checkouts in `git/` before choosing
+   an API. Present nothing as settled that has not been checked.
+2. A design note here is not final; it changes. Do not trust it blindly.
+3. Discuss before writing code when the shape is unclear.
+4. Record what the user decided, under the user's rules, in the same change. Do not edit the
+   brief or these rules without being asked.
+
+### 0.2 The original brief, verbatim
+
+```text
+开发的主要技术框架只有 vite 和 typescript。样式和 HTML 设计你可以参考 blog/ 里面的。CSS 和 JS 都应该积极合理地采纳原生的现代功能，在 Chrome / Firefox / Safari 的较新版本中可以正常使用。我们不对老版本浏览器的兼容。代码要实现正确，保持最佳实践，但是不要照搬大厂或者主流代码，不要写样板代码。代码还需要以人类可读性为最重要的目标之一。配合严格的 TS / ESlint 等检查，确保网站在开发时产出高质量代码，不出错。
+代码只能是英文。内容可以是多语言。
+不必要时不要添加注释。注释如何添加应该规范处理。同时避免长废话注释，带有标点符号修饰的注释。
+代码和文档避免 LLM 痕迹。
+网站 HTML 文件里面不包含任何 CSS 和 JS 代码。CSS 和 JS 代码必须要外部引入。
+网站使用 # 路由或者动态路由，可以配置。
+网站可以独立的在 GitHub 搭建。
+关于设计，请你务必严格地按照我们的设计观念，而不要受主流或者通用观念影响。
+关于样式，你必须要研究我们的视觉设计。我们以“流体设计”和“格式塔心理学”为主要依据。网页样式始终保持正常，在适应大小时可以利用自动重排和连续缩放为工具，但是要避免意外的例如说撑破容器，元素重合，位置不正确等问题。网站使用 color-scheme: light dark; 以及 light-dark() 写法来实现跟随系统暗色模式。网站的所有颜色，字体，大小，间距等使用统一在 :root 处管理变量。网站不使用外部依赖如导入字体。需要精简合理的写法，避免冗余设计，不需要 -webkit 这种兼容写法。网站的主要视觉设计可以参考 blog/。动画应该足够快，避免让人看到掉帧，要不容易引起注意。
+网站的页面设计，左边为导航区，右边为内容区。右边内容区随着左边导航选择而改变。先说左边导航栏设计，最上面是客户端功能按钮/卡片，比如说设置/搜索消息/加入房间/创建房间等等。点击后会弹窗或者显示到内容区（需讨论）。下面的频道/房间/私聊使用折叠设计，记忆上次折叠，展开后可以选择房间/频道。点击左边卡片/按钮后，右边会显示内容。我们虽然没有手机和电脑版设计，但是可以用 auto-fit, clamp, minimax, 容器查询等来根据尺寸变化，尽量保证任何尺寸下都能使用。当尺寸足够小的时候，导航区会隐藏，点击内容区顶栏功能区可以切换到导航区，点击按钮跳转到对应内容区。关于房间设置的入口是收集起来放到设置里面的一个子菜单内，还是放到房间顶栏导航区里点击后弹窗 or 内容区跳转需要讨论。聊天内容区中，我们用着类似于 Telegram 的气泡设计。输入框会随着内容变多稍微增大，但有上限。我们不支持 markdown 语法输入，用户写的任何内容都会原封不动的被自己和其他人看到。而是选中文本右键选择样式。可以渲染 markdown 消息内容。
+主线程 UI 应该只使用本地数据。目前绝大多数 Matrix 都很卡顿，远远没有 Telegram 流畅。我们的客户端应该是这样的，页面加载后就可以离线使用。当浏览器 offline 或者检查服务端无法连接，就会进入离线模式。客户端的查看消息，按照内容搜索消息，以及所有不需要服务端参与的客户端设置都不需要联网就能用。消息点击即可发送，左边会有标记提醒没有发送完。我们不应该有阻塞 UI 的设计，比如说动画无法打断，按钮无法响应的情况应该避免。
+我们应该尽可能使用原生现代 API。要让客户端尽可能地降低占用，提高加载速度。我们暂时不打算支持通话和视频等功能。部分功能可以暂缺。多语言和多用户可以考虑是否一开始就需要添加支持。登录界面需要支持登录和注册。
+这些内容应该整理好记在 AGENTS.md 里面
+```
+
+### 0.3 What the brief left open, and what was decided
+
+| Question in the brief | Decision |
+| --- | --- |
+| Actions open a dialog or the content area | A dialog. The content area holds one room and nothing else, so back and forward never fight a dialog. |
+| Where room settings live | In the room header, as a dialog. Settings has no room submenu. |
+| Narrow layout | The navigation *is* the home screen; a room is the next screen with a back control. One container query, no drawer. |
+| Markdown | Not an input format. Selecting text and picking a style writes `formatted_body`; an incoming `formatted_body` is rendered, a plain body is shown as written. |
+| Multi-language | From the start: `en` is the source catalog, `zh-CN` a translation, the language is switchable at runtime. |
+| Multi-account | One account. The database is keyed by account hash so a second one is a later change, not a migration. |
+| Calls and video | Out of scope. A missing feature is absent from the interface, never present and dead. |
+
+### 0.4 Rules that came after the brief
+
+| ID | Decision |
+| --- | --- |
+| U1 | Enter inserts a newline; the send button or Ctrl/Cmd+Enter sends. |
+| U2 | A key is required before the shell is interactive: the recovery key or passphrase, or start over with a new one. A signed-in device whose keys are missing can take the key again from Settings. |
+| U3 | Every control works and every missing feature is absent, so there are no placeholders and no dead rows in Settings. |
+| U4 | The composer is three parts: attach, the field with an emoji control inside it, and send. An empty field with attachments still sends; an empty field with nothing shows stickers. |
+| U5 | Styled text renders in place when the field is not focused; clicking it returns to editing at that character. |
+| U6 | Right-click and long-press open the same menu. No hover-only control, no desktop and mobile split. |
+| U7 | Images and stickers carry no bubble; the time sits as a chip on the picture. |
+| U8 | Avatars are round but never cropped: the picture is scaled to fit. The letter is the resting state, so a room with an avatar never flashes its initial. |
+| U9 | The navigation has no brand row and no identity row; the quick actions are always visible; the account is the last row and opens Settings. |
+| U10 | Blur is subtle: the dialog backdrop is a scrim, a popover or menu is an opaque surface with a hairline, and nothing looks decorative. |
+| U11 | A dialog fades in and out in under a fifth of a second and never re-fades when replaced; reduced motion removes it. |
+| U12 | One dialog at a time, opened from the URL (`?d=`), closed by Escape, its own control, or Back. |
+
+### 0.5 Engineering decisions
+
+| ID | Decision |
+| --- | --- |
+| E1 | The interface reads a projection and never the SDK; the worker owns sync, crypto and the projection writes. |
+| E2 | A queued message is an ordinary message with a status, written by the main thread and deleted by the worker when the echo lands. No second pending model. |
+| E3 | Relations are read from the room aggregate, not replayed from a relation store. |
+| E4 | One projection pass per sync revisits the events after the room cursor plus the last rows, because a relation changes an older event in place. |
+| E5 | Search runs in the worker against the database index. |
+| E6 | Media is fetched with the access token in the worker, decrypted there, cached in the account database. |
+| E7 | The build fails on inline script, inline style, `!important`, a vendor prefix, or the SDK in the main bundle. |
+| E8 | The source audit fails on a catalog key nothing uses, a `t()` key that does not exist, or an import that crosses the worker and interface boundary. |
+| E9 | The one visual source is the token table in `:root`, copied from `blog/`; rules take their values from it and never invent a literal. |
+| E10 | Two static HTML entries, one per language, both real Vite entries; no post-processing step. |
 
 ## 1. Shape
 
@@ -33,21 +82,19 @@ These come from the user and outrank everything below.
 src/
   core/        types, ids, IndexedDB schema, guards, text escaping
   protocol/    the command and event unions between the threads
-  worker/      SDK, sync, crypto, projection, media, delivery
+  worker/      SDK, sync, crypto, projection, media, delivery, verification
   client/      the main-thread worker adapter
   store/       application state, selectors, local database reads
-  ui/          DOM helpers, views, composer, picker, dialogs, screens
+  ui/          DOM helpers, shell, timeline, composer, picker, dialogs, screens
   i18n/        catalogs and formatters
   styles/      one stylesheet
   app/         configuration, composition root
-scripts/       the output audit
+scripts/       the output audit, the source audit, the catalog normaliser
 test/          unit tests and the browser flow
 ```
 
-The dependency direction is one way: `app -> ui -> store -> core`, and
-`worker -> core`, `protocol`. The UI never imports `matrix-js-sdk`; the worker never
-touches the DOM or the UI store. `docs/code-organization.md` lists the boundaries that
-matter and why.
+Dependencies flow one way: `app -> ui -> store -> core`, and `worker -> core`, `protocol`.
+The interface never imports the SDK; the worker never touches the DOM or the UI store.
 
 ## 2. Ownership
 
@@ -60,122 +107,60 @@ matter and why.
 | Drafts, settings, last account | `maski-ui` database, main thread | main thread |
 | Render state | `state` in `store/state.ts` | UI |
 | Object URLs | `ui/media.ts` | UI |
+| Design values | `styles/style.css` `:root` | every rule |
 
-One writer per store. The one shared store is `events`: the main thread writes a queued
-row keyed by its transaction id, and the worker deletes that key when the remote echo
-arrives. The two never write the same row, and the queue is written before the command
-is sent, so the delete can never miss.
+One writer per store. The one shared store is `events`: the main thread writes a queued row
+under its transaction id and the worker deletes that key when the echo arrives. The queue is
+written before the command is sent, so the delete cannot arrive first.
 
-## 3. What is settled
+## 3. Known gaps
 
-| ID | Decision |
-| --- | --- |
-| U1 | Enter inserts a newline; only the send button or Ctrl/Cmd+Enter sends. |
-| U2 | A key is required before the shell is interactive: unlock with a recovery key or passphrase, or start over. |
-| U3 | One account. The interface language is switchable, English is the source catalog and the fallback. |
-| U4 | Settings stay minimal: Account, Notifications, Security, About. No theme or density switch. |
-| U5 | Composer: attachment, field with an emoji control, send. With an empty field the third control offers stickers. |
-| U6 | Styled text renders in place when the field is not focused; clicking it returns to editing at that character. |
-| U7 | Right-click and long-press open the same action menu. No hover-only control, no desktop and mobile split. |
-| U8 | Images and stickers carry no bubble; their time is a chip on the picture. |
-| U9 | The navigation is the home screen on a narrow window; a room is the next screen with a back control. |
-| U10 | Dialogs are URL state (`?d=`) over the hash route, one at a time, native `<dialog>`. |
-| E1 | The projection is the interface's only source. The SDK store and the crypto store stay separate and are never read by the main thread. |
-| E2 | A queued message is an ordinary message record with a status; there is no second pending model. |
-| E3 | Relations are read from the room aggregate, not replayed from a relation store. |
-| E4 | One projection pass per sync covers the rooms the sync touched, keyed by a per-room cursor plus the last rows, so an edit, a reaction or a redaction applies without a new timeline event. |
-| E5 | Search runs in the worker against the database index. |
-| E6 | Media is fetched with the access token in the worker, decrypted there, and cached in the account database. |
-| E7 | The output audit fails a build with inline script, inline style, `!important`, a vendor prefix or the SDK in the main bundle. |
+Absent on purpose, so the interface has no dead control: threads, spaces, calls, a push
+gateway, SSO, password reset, multi-account, notification for a closed page, pack authoring.
+`docs/roadmap.md` orders what comes next.
 
-## 4. Known gaps
-
-Absent on purpose, so they are not dead controls: threads, spaces, calls, push gateway,
-SSO, password reset, moderation, pack authoring, multi-account, device verification by
-SAS, and notifications for a closed page. `docs/roadmap.md` orders the work that is next.
-
-## 5. Verifying
+## 4. Verifying
 
 ```
 npm run code     # tsc --noEmit
 npm run lint     # Oxlint type-aware, then Stylelint
 npm test         # Vitest
 npm run build    # code check, then Vite
-npm run verify   # output audit
+npm run verify   # output audit, source audit
 npm run check    # all of the above
 ```
 
-`test/browser/flow.mjs` drives a real server; it needs the dev server and a homeserver
-reachable from the browser. Read `docs/testing.md` before running it.
+`test/browser/flow.mjs` drives a real server; read `docs/testing.md` before running it.
 
-## 6. Working notes
-
-Facts that took a second pass to get right, recorded so the next change does not reopen
-them.
+## 5. Working notes
 
 **One activation path.** Login, a restored session and the end of the key gate all end in
-`App.applySession`. It opens the account database, reads the rooms, asks for the key status,
-decides the phase and mounts. A second path that mounted the shell itself is how the last
-version ended up with a screen that never left the gate.
+`App.applySession`. It opens the account database, reads the rooms, decides the phase from
+the stored key flag and mounts; the authoritative key status settles after the first frame.
 
 **Two writers, disjoint keys.** The main thread writes a queued message under its
-transaction id; the worker deletes that key when the echo lands. The queue row is written
-before the command is dispatched, so the delete cannot arrive first. Nothing else is
-written by two threads.
+transaction id; the worker deletes it when the echo lands. Nothing else is written twice.
 
-**Only the first projection writes a row.** A projection pass writes records, never clears
-them: the SDK window holds the last pages, and a clear would delete history that a rebuild
-cannot recreate. A room disappears only when the user leaves it.
+**A local echo is not a message.** The SDK writes the message being sent into the timeline
+as `~room:txn`; the projection skips it, and the echo replaces the queued row.
 
-**A keyed row is updated in place.** `keyed` calls `update`, and the timeline's `update`
-rebuilds the row's children while keeping the node. Without it an edit, a reaction or a
-status change would leave the old row on screen, which is the defect the previous
-implementation shipped.
+**A keyed row is updated in place.** An edit, a reaction or a status change rebuilds the
+row's content while keeping its node, so what the reader is looking at never disappears.
 
-**The composer is not store state.** A keystroke writes a debounced draft and nothing else.
-`setState` schedules a frame; putting the text there would repaint the navigation, the
-header and the timeline on every character.
+**The composer is not store state.** A keystroke writes a debounced draft and nothing else;
+putting the text in the store would repaint the whole shell per character.
 
-**The gate has codes, not one message.** `no-keys`, `invalid`, `restore`, `uia`. A vague
-"the key does not work" hides a missing secret storage from the user and from us.
+**The gate has codes, not one message.** `no-keys`, `invalid`, `restore`, `uia`.
 
-**A local echo is not a message.** The SDK writes the message you just sent into the
-timeline with an id of `~room:txn` before the server answers. That row is the queued one
-the main thread already wrote, so the projection skips an id starting with `~`; the remote
-echo arrives with a real id and replaces the queued row by its transaction id.
+**Copy and boundaries are checked.** `scripts/audit.ts` makes dead copy and a crossed
+boundary a build failure rather than a review note.
 
-**Copy is checked.** `scripts/audit.ts` fails on a key the interface does not use, a `t()`
-call whose key does not exist, an interface file that imports the SDK or the worker, and a
-worker file that imports the interface. Dead copy and a broken boundary are build failures,
-not code review notes.
+## 6. Where the work stands
 
-## 7. Where the work stands
+Verified against a real homeserver: sign in, the key gate (unlock, reset, taking the key
+again on a signed-in device), SAS device verification, session listing and signing the
+others out, room list with sections, invites, E2EE send and receive, media with progress and
+cancel, drafts, picker, settings, search, both colour schemes, the narrow shell.
 
-Done and verified against a real homeserver: sign in, the key gate (unlock, reset, and a
-signed-in device taking the key again), SAS device verification, session listing and signing
-the others out, room list with sections and previews, invites, E2EE send and receive,
-media with progress and cancel, drafts, picker, settings, search, both colour schemes, the
-narrow shell.
-
-Next, in order, each inside an existing boundary:
-
-1. Split `ui/dialogs.ts` by dialog; it holds every dialog and is the largest view file.
-2. Unit tests for `store/select.ts` (sections, timeline items, preview) and for the
-   projection's cursor decision in `worker/project.ts`.
-3. Member permissions in room settings: kick and ban follow the power level the summary
-   already carries in `myPower`.
-
-## 8. Picking the work up
-
-```
-npm install
-npm run check                       # the gate: typecheck, lint, tests, build, two audits
-npm run dev                         # http://localhost:5173/
-```
-
-`test/browser/flow.mjs` drives the real app. It reads `MASKI_SERVER`, `MASKI_USER`,
-`MASKI_PASSWORD`, `MASKI_RECOVERY`, `MASKI_PROFILE` and `MASKI_SHOTS`; the profile directory
-is kept between runs so the account sees one device instead of a new one each time. A fresh
-profile exercises the whole first-run path. Verification needs a second client, so it is
-tested by hand: start it from the other client, accept here, compare the seven emoji, and
-confirm on both sides.
+Next, each inside an existing boundary: member permissions are in room settings and need a
+second account to exercise; `docs/roadmap.md` holds the rest.

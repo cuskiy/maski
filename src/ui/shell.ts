@@ -29,6 +29,7 @@ export class Shell {
   private header: HTMLElement;
   private empty: HTMLElement;
   private invite: HTMLElement;
+  private intro: HTMLElement;
   private banner: HTMLElement;
   private ctx: UiContext;
 
@@ -41,13 +42,17 @@ export class Shell {
     this.header = el("header", { class: "room-header" });
     this.empty = el("div", { class: "empty-panel" }, [el("h2", { text: t("room.empty") }), el("p", { text: t("room.emptyHint") })]);
     this.invite = el("div", { class: "invite-panel", attrs: { hidden: true } });
+    this.intro = el("div", { class: "intro-panel", attrs: { hidden: true } });
     this.banner = el("div", { class: "connection-banner", attrs: { hidden: true, role: "status" } });
-    this.content = el("main", { class: "content" }, [this.header, this.empty, this.invite, this.timeline.root, el("div", { class: "composer-dock" }, [this.picker.root, this.composer.root])]);
+    this.content = el("main", { class: "content" }, [this.header, this.empty, this.invite, this.intro, this.timeline.root, el("div", { class: "composer-dock" }, [this.picker.root, this.composer.root])]);
     this.root = el("div", { class: "shell" }, [this.nav, this.content, this.banner]);
     this.picker.root.addEventListener("picker-insert", (event) => {
       const text = (event as CustomEvent<string>).detail;
       this.composer.insert(text);
       this.composer.focus();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.picker.isOpen) this.picker.close();
     });
     this.nav.addEventListener("contextmenu", (event) => this.onNavMenu(event));
     this.nav.addEventListener("pointerdown", (event) => this.onLongPress(event));
@@ -121,6 +126,7 @@ export class Shell {
     this.renderNav();
     this.renderHeader();
     this.renderInvite();
+    this.renderIntro();
     this.timeline.render(state.messages, activeRoom());
     this.root.dataset["view"] = state.activeRoomId ? "room" : "home";
   }
@@ -161,6 +167,25 @@ export class Shell {
         }, [el("span", { text: t("room.decline") })]),
       ]),
     );
+  }
+
+  private renderIntro(): void {
+    const room = activeRoom();
+    const fresh = Boolean(room) && room?.membership === "join" && state.messages.length === 0;
+    this.intro.hidden = !fresh;
+    if (!fresh || !room) return;
+    const children: (Node | null)[] = [
+      avatar(room.avatar, room.name, 72),
+      el("h2", { class: "intro-title", text: room.name }),
+      room.topic ? el("p", { class: "intro-topic", text: room.topic }) : null,
+      el("p", {
+        class: "dialog-note",
+        text: room.joined === 1 ? t("room.joinedOne") : t("room.joined", { n: room.joined }),
+      }),
+      el("p", { class: "dialog-note", text: room.encrypted ? t("roomSettings.encryptionOn") : t("roomSettings.encryptionOff") }),
+      el("p", { class: "intro-end", text: t("room.beginning") }),
+    ];
+    this.intro.replaceChildren(...children.filter((node): node is Node => node !== null));
   }
 
   private renderBanner(): void {

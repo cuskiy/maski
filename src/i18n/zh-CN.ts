@@ -77,6 +77,7 @@ export const zhCN: Catalog = {
   "room.sending": "发送中",
   "room.noPermission": "你无法在此房间发言",
   "room.discard": "丢弃",
+  "room.beginning": "这里是房间的开始",
   "room.timeline": "消息",
   "room.emptyPreview": "还没有消息",
   "room.today": "今天",

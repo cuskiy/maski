@@ -35,6 +35,25 @@ export async function projectRooms(db: AccountDb, client: MatrixClient, roomIds:
   return changed;
 }
 
+/**
+ * The indexes to project: everything after the room's cursor, and the last rows again
+ * because a reaction, an edit or a redaction changes an older event without adding one.
+ */
+export function selectFresh(ids: string[], cursor: string | undefined, tail = 30, limit = 400): number[] {
+  const after = new Set<number>();
+  for (let index = ids.length - 1; index >= 0 && after.size < limit; index -= 1) {
+    const id = ids[index] ?? "";
+    if (cursor !== undefined && id === cursor) break;
+    after.add(index);
+  }
+  const start = Math.max(0, ids.length - tail);
+  const chosen: number[] = [];
+  for (let index = 0; index < ids.length; index += 1) {
+    if (index >= start || after.has(index)) chosen.push(index);
+  }
+  return chosen;
+}
+
 async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string>, self: string): Promise<boolean> {
   // A room that was left or banned is not part of the account any more, so its local
   // copy goes with it.
@@ -48,24 +67,7 @@ async function projectRoom(db: AccountDb, room: Room, direct: Map<string, string
   const cursors = await db.meta<Record<string, string>>("cursors", {});
   const cursor = cursors[room.roomId];
   const events = room.getLiveTimeline().getEvents();
-  const reached = new Set<string>();
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!event) continue;
-    const id = event.getId() ?? "";
-    if (id === cursor) break;
-    reached.add(id);
-    if (reached.size > 400) break;
-  }
-  // A relation or a redaction changes an older event in place, so the last rows
-  // are revisited on every pass; writes are idempotent.
-  const tailStart = Math.max(0, events.length - 30);
-  const fresh: MatrixEvent[] = [];
-  for (let index = 0; index < events.length; index += 1) {
-    const event = events[index];
-    if (!event) continue;
-    if (index >= tailStart || reached.has(event.getId() ?? "")) fresh.push(event);
-  }
+  const fresh = selectFresh(events.map((event) => event.getId() ?? ""), cursor).map((index) => events[index]).filter((event): event is MatrixEvent => Boolean(event));
 
   let changed = false;
   let membersChanged = false;

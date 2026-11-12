@@ -82,6 +82,7 @@ export class Picker {
 
   close(): void {
     this.root.hidden = true;
+    document.removeEventListener("pointerdown", this.outside, true);
   }
 
   toggle(mode: "emoji" | "sticker"): void {

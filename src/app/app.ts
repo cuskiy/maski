@@ -358,6 +358,12 @@ export class App implements UiContext {
   }
 
   openRoom(roomId: string, revealId?: string): void {
+    if (state.dialog) {
+      // A dialog action navigates: closing through history would undo the navigation.
+      this.dialogPushed = false;
+      closeDialog();
+      setState({ dialog: null });
+    }
     if (!roomId) {
       this.route(null, null);
       setState({ activeRoomId: null, messages: [], typing: [] });
