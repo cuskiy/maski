@@ -91,7 +91,12 @@ export class App {
   private shell: ShellRefs | null = null;
   private timeline: TimelineView | null = null;
   private composer: Composer | null = null;
-  private picker: { element: HTMLElement; trigger: HTMLElement; close: () => void } | null = null;
+  private picker: {
+    element: HTMLElement;
+    trigger: HTMLElement;
+    mode: "emoji" | "sticker";
+    close: () => void;
+  } | null = null;
   private renderQueued = false;
   private shellLocale: Locale | null = null;
   private authStep: AuthStep = "server";
@@ -1394,7 +1399,7 @@ export class App {
     body.appendChild(this.timeline.element);
     this.composer = new Composer({
       onSend: (message) => void this.send(message),
-      onOpenPicker: (anchor) => this.openPicker(anchor),
+      onOpenPicker: (anchor, mode) => this.openPicker(anchor, { mode }),
       onTyping: (active) => void this.sendTyping(active),
       onFormatMenu: (position) => this.openFormatMenu(position),
       onChange: () => this.scheduleDraftSave(),
@@ -1439,7 +1444,6 @@ export class App {
         "aria-controls": "menu-card",
       },
     }, [
-      icon("menu"),
       el("span", { text: t("nav.menu") }),
       el("span", { class: "nav-menu-chevron" }, [icon("chevron")]),
     ]);
@@ -2189,6 +2193,7 @@ export class App {
       });
   }
 
+  // A profile is a card about a person: picture, name, id, then what can be done
   private openProfile(userId: string): void {
     void this.adapter
       .request<{ profile: { userId: string; displayName: string; avatarMxc: string | null; verified: boolean; identityChanged: boolean } }>(
@@ -2197,25 +2202,37 @@ export class App {
       )
       .then((result) => {
         const profile = result.profile;
-        const body = el("div", { class: "profile-card" }, [
-          el("div", { class: "profile-head" }, [
-            this.profileAvatar(profile.avatarMxc, profile.displayName),
-            el("div", {}, [
-              el("h3", { text: profile.displayName }),
-              el("div", { class: "member-id", text: profile.userId }),
-            ]),
+        const copy = iconButton(t("profile.copyId"), "copy", () => {
+          void navigator.clipboard.writeText(profile.userId).then(() => {
+            this.notify(t("common.copied"));
+            this.copyFeedback(copy);
+          });
+        }, "icon-button profile-copy");
+        copy.title = t("profile.copyId");
+        const body = el("div", { class: "profile" }, [
+          this.profileAvatar(profile.avatarMxc, profile.displayName),
+          el("h3", { class: "profile-name", text: profile.displayName }),
+          el("div", { class: "profile-id" }, [
+            el("span", { text: profile.userId }),
+            copy,
           ]),
           profile.identityChanged ? el("p", { class: "error-text", text: t("profile.identityChanged") }) : null,
           el("div", { class: "profile-actions" }, [
             el("button", {
-              class: "button",
-              text: t("profile.copyId"),
+              class: "button primary",
+              text: t("profile.message"),
               attrs: { type: "button" },
-              on: { click: () => void navigator.clipboard.writeText(profile.userId) },
+              on: {
+                click: () => {
+                  this.dialogs.close();
+                  this.dialogName = null;
+                  void this.startDirectMessage(profile.userId);
+                },
+              },
             }),
             el("button", {
               class: "button",
-              text: t("profile.verify"),
+              text: profile.verified ? t("profile.verified") : t("profile.verify"),
               attrs: { type: "button" },
               on: { click: () => void this.verifyUser(profile.userId) },
             }),
@@ -2223,6 +2240,21 @@ export class App {
         ]);
         this.dialogs.open({ title: t("nav.profile"), body, onClose: () => { this.dialogName = null; } });
       });
+  }
+
+  private copyFeedback(node: HTMLElement): void {
+    node.classList.add("copied");
+    window.setTimeout(() => node.classList.remove("copied"), 900);
+  }
+
+  private async startDirectMessage(userId: string): Promise<void> {
+    try {
+      const result = await this.adapter.request<{ roomId: string }>("createDm", { userId });
+      await this.reloadProjection();
+      this.openRoom(result.roomId);
+    } catch (error) {
+      this.notify(messageOf(error));
+    }
   }
 
   private profileAvatar(mxc: string | null, name: string): HTMLElement {
@@ -3001,24 +3033,29 @@ export class App {
     });
   }
 
-  // One panel, no tabs: emoticons first, stickers below, exactly the order the
-  // reader scrolls. It is anchored above the button that opened it.
-  private openPicker(trigger: HTMLElement, options: { reactTo?: EventRecord } = {}): void {
+  // Two surfaces with one shape: the emoji panel lists emoticons and stickers in
+  // one scroll, the sticker panel picks a pack and shows its contents.
+  private openPicker(trigger: HTMLElement, options: { reactTo?: EventRecord; mode?: "emoji" | "sticker" } = {}): void {
     const previous = this.picker;
     if (previous) {
-      const sameTrigger = previous.trigger === trigger;
+      const same = previous.trigger === trigger && previous.mode === (options.mode ?? "emoji");
       previous.close();
-      if (sameTrigger) return;
+      if (same) return;
     }
     const snapshot = this.store.getSnapshot();
     const reactTo = options.reactTo ?? null;
-    const picker = el("div", { class: "picker", attrs: { role: "dialog", "aria-label": t("picker.title") } });
+    let mode: "emoji" | "sticker" = options.mode ?? "emoji";
+    let packId: string | null = null;
+    const picker = el("div", {
+      class: `picker${mode === "sticker" ? " picker-sticker" : ""}`,
+      attrs: { role: "dialog", "aria-label": t("picker.title") },
+    });
     const search = el("input", {
-      class: "input",
+      class: "input picker-input",
       attrs: { placeholder: t("picker.search"), "aria-label": t("picker.search") },
     });
+    const tabs = el("div", { class: "picker-packs" });
     const body = el("div", { class: "picker-body" });
-    const closeButton = iconButton(t("common.close"), "close", () => close(), "icon-button picker-close");
     const close = (): void => {
       if (this.picker?.element !== picker) return;
       this.picker = null;
@@ -3042,14 +3079,16 @@ export class App {
     const place = (): void => {
       const rect = trigger.getBoundingClientRect();
       picker.style.visibility = "hidden";
+      picker.classList.toggle("picker-sticker", mode === "sticker");
       const width = picker.offsetWidth;
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
       picker.style.left = `${left}px`;
       picker.style.bottom = `${window.innerHeight - rect.top + 8}px`;
       picker.style.visibility = "";
     };
+
     type PackImage = { shortcode: string; url: string; body: string; info: Record<string, unknown> };
-    const grid = (images: PackImage[], usage: "emoticon" | "sticker"): HTMLElement =>
+    const packGrid = (images: PackImage[]): HTMLElement =>
       el(
         "div",
         { class: "emoji-grid pack-grid" },
@@ -3066,11 +3105,6 @@ export class App {
                     close();
                     return;
                   }
-                  if (usage === "sticker") {
-                    void this.sendSticker(image);
-                    close();
-                    return;
-                  }
                   void this.media
                     .get({ mediaKey: "", mxc: image.url, width: 32, height: 32, method: "scale" })
                     .then((url) => {
@@ -3083,67 +3117,158 @@ export class App {
           ),
         ),
       );
-    const renderList = (query: string): void => {
+    const unicodeGrid = (entries: string[]): HTMLElement =>
+      el(
+        "div",
+        { class: "emoji-grid" },
+        entries.map((emoji) =>
+          el("button", {
+            class: "emoji-cell",
+            text: emoji,
+            attrs: { type: "button" },
+            on: {
+              click: () => {
+                if (reactTo) {
+                  void this.react(reactTo, emoji);
+                  close();
+                  return;
+                }
+                this.composer?.insertUnicode(emoji);
+              },
+            },
+          }),
+        ),
+      );
+    const stickerGrid = (packs: typeof snapshot.packs): HTMLElement =>
+      el(
+        "div",
+        { class: "emoji-grid pack-grid" },
+        packs.flatMap((pack) =>
+          Object.values(pack.images).map((image) =>
+            el(
+              "button",
+              {
+                class: "emoji-cell pack-cell",
+                attrs: { type: "button", title: image.shortcode },
+                on: {
+                  click: () => {
+                    void this.sendSticker(image);
+                    close();
+                  },
+                },
+              },
+              [this.packImage(image.url, image.shortcode)],
+            ),
+          ),
+        ),
+      );
+
+    const renderEmoji = (query: string): void => {
+      tabs.hidden = true;
       body.replaceChildren();
       const matches = (value: string): boolean => value.includes(query);
       const unicode = EMOJI.filter(matches);
       if (unicode.length > 0) {
         body.appendChild(
-          el("div", { class: "picker-section" }, [
-            el("h3", { text: t("picker.emoticons") }),
-            el(
-              "div",
-              { class: "emoji-grid" },
-              unicode.map((emoji) =>
-                el("button", {
-                  class: "emoji-cell",
-                  text: emoji,
-                  attrs: { type: "button" },
-                  on: {
-                    click: () => {
-                      if (reactTo) {
-                        void this.react(reactTo, emoji);
-                        close();
-                        return;
-                      }
-                      this.composer?.insertUnicode(emoji);
-                    },
-                  },
-                }),
-              ),
-            ),
-          ]),
+          el("div", { class: "picker-section" }, [el("h3", { text: t("picker.emoticons") }), unicodeGrid(unicode)]),
         );
       }
       for (const pack of snapshot.packs) {
         if (pack.usage !== "emoticon") continue;
         const images = Object.values(pack.images).filter((image) => matches(image.shortcode));
         if (images.length === 0) continue;
-        body.appendChild(el("div", { class: "picker-section" }, [el("h3", { text: pack.displayName }), grid(images, "emoticon")]));
+        body.appendChild(el("div", { class: "picker-section" }, [el("h3", { text: pack.displayName }), packGrid(images)]));
       }
-      if (!reactTo) {
-        const stickerPacks = snapshot.packs.filter((pack) => pack.usage === "sticker");
-        const stickers = stickerPacks.flatMap((pack) => Object.values(pack.images).filter((image) => matches(image.shortcode)));
-        if (stickers.length > 0) {
+      const stickers = snapshot.packs.filter((pack) => pack.usage === "sticker");
+      if (!reactTo && stickers.length > 0) {
+        const any = stickers.some((pack) => Object.values(pack.images).some((image) => matches(image.shortcode)));
+        if (any) {
           body.appendChild(
-            el("div", { class: "picker-section" }, [
-              el("h3", { text: t("picker.stickers") }),
-              grid(stickers, "sticker"),
-            ]),
+            el("div", { class: "picker-section" }, [el("h3", { text: t("picker.stickers") }), stickerGrid(stickers)]),
           );
         }
       }
       if (!body.hasChildNodes()) body.appendChild(el("div", { class: "empty", text: t("picker.empty") }));
     };
-    search.addEventListener("input", () => renderList(search.value.trim()));
-    picker.append(el("div", { class: "picker-search" }, [search, closeButton]), body);
+
+    const renderStickers = (query: string): void => {
+      const packs = snapshot.packs.filter((pack) => pack.usage === "sticker");
+      tabs.hidden = false;
+      tabs.replaceChildren(
+        el("button", {
+          class: "picker-pack",
+          text: t("picker.emoticons"),
+          attrs: { type: "button" },
+          on: {
+            click: () => {
+              mode = "emoji";
+              renderMode(query);
+            },
+          },
+        }),
+        ...packs.map((pack) =>
+          el("button", {
+            class: "picker-pack",
+            attrs: { type: "button", "aria-pressed": String(pack.packId === packId) },
+            on: {
+              click: () => {
+                packId = pack.packId;
+                renderStickers(query);
+              },
+            },
+          }, [pack.displayName]),
+        ),
+      );
+      const active = packs.find((pack) => pack.packId === packId) ?? packs[0] ?? null;
+      packId = active?.packId ?? null;
+      if (!active) {
+        body.replaceChildren(el("div", { class: "empty", text: t("picker.empty") }));
+        return;
+      }
+      for (const button of tabs.querySelectorAll<HTMLElement>(".picker-pack")) {
+        if (button.textContent === active.displayName) button.setAttribute("aria-pressed", "true");
+      }
+      const images = Object.values(active.images).filter((image) => image.shortcode.includes(query));
+      body.replaceChildren(
+        images.length === 0
+          ? el("div", { class: "empty", text: t("picker.empty") })
+          : el("div", { class: "emoji-grid pack-grid" }, images.map((image) =>
+              el(
+                "button",
+                {
+                  class: "emoji-cell pack-cell",
+                  attrs: { type: "button", title: image.shortcode },
+                  on: {
+                    click: () => {
+                      void this.sendSticker(image);
+                      close();
+                    },
+                  },
+                },
+                [this.packImage(image.url, image.shortcode)],
+              ),
+            )),
+      );
+    };
+
+    const renderMode = (query: string): void => {
+      if (mode === "sticker" && !reactTo) renderStickers(query);
+      else renderEmoji(query);
+      place();
+    };
+
+    search.addEventListener("input", () => renderMode(search.value.trim()));
+    const closeButton = iconButton(t("common.close"), "close", () => close(), "icon-button picker-close");
+    picker.append(
+      el("div", { class: "picker-head" }, [search, closeButton]),
+      tabs,
+      body,
+    );
     document.body.appendChild(picker);
-    renderList("");
-    this.picker = { element: picker, trigger, close };
+    renderMode("");
+    this.picker = { element: picker, trigger, mode, close };
     trigger.setAttribute("aria-expanded", "true");
     place();
-    // One entrance, started here: a declarative animation would restart whenever
-    // the panel is re-inserted, which is what made it blink.
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       picker.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "ease-out" });
     }
