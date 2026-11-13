@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; connect-src *" />
+    <title>maski</title>
+    <link rel="stylesheet" href="/src/styles/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot">
+        <p class="boot-name">maski</p>
+        <p class="boot-text">正在启动</p>
+      </div>
+    </div>
+    <noscript>
+      <div class="boot">
+        <p class="boot-name">maski</p>
+        <p class="boot-text">Matrix 同步和端到端加密都在浏览器中运行，因此这个客户端需要 JavaScript。</p>
+        <p class="boot-text"><a href="/">English</a></p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

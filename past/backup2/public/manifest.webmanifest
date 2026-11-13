@@ -1,0 +1,10 @@
+{
+  "name": "maski",
+  "short_name": "maski",
+  "description": "A fast, local-first Matrix client",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#141414",
+  "theme_color": "#141414",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
