@@ -729,6 +729,31 @@ no transpiler: `node scripts/build.ts`, `node --test "test/*.test.ts"`. That rem
 
 `dompurify` is added when the sanitizer lands; a dependency nothing imports is not a dependency.
 
+## 3.15.1 Contracts, and how each one is audited
+
+A rule that only a reviewer remembers is not a rule. Every promise has an owner, a place it is
+written, and a check that fails in `npm run check`. The checks live in `scripts/contracts.ts` and
+each failure prints `<id>: <what broke>`.
+
+| id | contract | written in | enforced by |
+| --- | --- | --- | --- |
+| C1 | one catalog key set per language, every key read, nothing empty | 2.13, 3.2 | `contracts.ts` C1 and the catalog test |
+| C2 | every protocol command has a handler | 3.4 | `contracts.ts` C2 |
+| C3 | the client never imports the SDK, the worker never imports the interface, a page never imports client code | 3.2 | `contracts.ts` C3 |
+| C4 | every page has `lang`, one `h1`, a `<noscript>` note, and the chat page carries every region and surface | 3.6, 3.9 | `contracts.ts` C4 and the page tests |
+| C5 | every manifest name is hashed and present in `dist/` | 3.9 | `contracts.ts` C5 and the output audit |
+| C6 | client bundle ≤ 200 kB, stylesheet ≤ 40 kB | 2.11 | `contracts.ts` C6 |
+| C7 | no TODO marker, no console output, no Chinese outside the Chinese catalog | 1.4 | `contracts.ts` C7 |
+| C8 | every screen exists in every language, English at the root | 2.4 | `contracts.ts` C8 |
+| — | no vendor prefix, no `!important`, no `outline: none` | 1.4, 2.11 | Stylelint and the CSS audit |
+| — | a dependency nothing imports is not a dependency | 3.15 | `package.json` review, recorded here |
+
+A budget is a decision, not a target: raising one is a change to this file with the reason, and it
+is never done to make a failing build pass.
+
+The same promises are how a new contributor starts: `npm run check` is the whole contract, and the
+table above says which one broke and where its rule lives.
+
 ## 3.16 What is built, as of this commit
 
 | area | state |
