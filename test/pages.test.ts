@@ -6,7 +6,7 @@ import { chatPage } from "../src/pages/chat.ts";
 import { routerPage } from "../src/pages/router.ts";
 import { REGION, SURFACE } from "../src/pages/regions.ts";
 
-const assets = { stylesheet: "/assets/style-x.css", script: "/assets/client-x.js", worker: "/assets/worker-x.js", wasm: "/assets/crypto-x.wasm" };
+const assets = { stylesheet: "/assets/style-x.css", script: "/assets/client-x.js", worker: "/assets/worker-x.js", wasm: "/assets/crypto-x.wasm", icon: "/assets/icon-x.svg" };
 
 function pages(): Array<{ name: string; html: string }> {
   const list: Array<{ name: string; html: string }> = [];

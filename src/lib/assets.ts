@@ -3,4 +3,5 @@ export interface Assets {
   readonly script: string;
   readonly worker: string;
   readonly wasm: string;
+  readonly icon: string;
 }

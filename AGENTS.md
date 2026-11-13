@@ -435,7 +435,7 @@ client import, so the two cannot disagree.
 
 | where | what | name |
 | --- | --- | --- |
-| `static/` | only what a platform asks for by name: `/favicon.ico`, `/robots.txt`, `/sw.js`, `/404.html` | copied verbatim, never hashed |
+| `static/` | only what a platform asks for by name: `/robots.txt`, `/sw.js`, `/404.html` | copied verbatim, never hashed |
 | `src/assets/` | images, icons and any file a module or a stylesheet imports | imported, hashed by the bundler |
 | the crypto wasm | the one file the SDK resolves by its own URL | copied by the build with a hash of its bytes |
 
@@ -476,9 +476,14 @@ its *filename*:
 
 This is a client, not a content site with stable landing addresses: a release changes the shell, the
 service worker and the whole bundle together, and the reader reloads the client as one thing. So
-**content hash everywhere**; the only stable names are the four platform paths, and the only file that
-is both stable and ours — the favicon — is copied twice, the stable path for the browser's probe and
-the hashed path for our `<link>`.
+**content hash everywhere**, and the only stable names are the three paths a platform asks for by name.
+
+**The icon has one name, not two.** An earlier draft copied it twice — a stable `/favicon.ico` for a
+browser's speculative probe and a hashed copy for our `<link>` — which is the same file with two
+identities and two chances to disagree. The root of the problem is the probe, and the probe only
+happens when a page declares no icon: every page we generate declares `<link rel="icon">` with the
+hashed name, so there is nothing to probe for and no `.ico` is shipped. A browser that asks for
+`/favicon.ico` anyway gets a 404, which breaks nothing: the tab already has its icon from the link.
 
 **The wasm** is copied by the build with a hash of its bytes, because esbuild leaves the SDK's
 `new URL(…, import.meta.url)` untouched. The worker calls `initAsync(wasm)` before `initRustCrypto`, so
@@ -593,6 +598,7 @@ of it. They are not decoration: removing one of these mechanisms re-opens its fa
 | An IndexedDB transaction closes when the event loop yields | the IndexedDB spec | a read that spans an `await` opens its own transaction or a cursor |
 | Long unbroken strings, URLs and CJK text overflow a flex child | CSS box model | `min-inline-size: 0` and `overflow-wrap` on text holders |
 | A click can be lost when the element under the pointer is replaced mid-gesture | our second attempt's room list | a keyed list that updates rows in place, never rebuilds them (2.6) |
+| One file under two names is two facts that can disagree; a second name is only justified when the platform demands it | the favicon in this file's own first draft | one hashed icon, declared in `<head>`, and no `/favicon.ico` at all (3.9) |
 
 ## 3.14 Testing
 

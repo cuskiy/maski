@@ -24,7 +24,18 @@ function assetsOf(result: BuildResult): Assets {
     if (entry.entryPoint === "src/worker/worker.ts") worker = name;
   }
   if (!stylesheet || !script || !worker) throw new Error("the bundle did not produce a stylesheet, a script and a worker");
-  return { stylesheet, script, worker, wasm: "" };
+  return { stylesheet, script, worker, wasm: "", icon: "" };
+}
+
+/** A file the page needs and no module imports: hashed here, named in the manifest. */
+async function emitPageAsset(name: string, source: string): Promise<string> {
+  const bytes = await readFile(join(root, "src", "assets", source));
+  const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 10);
+  const extension = source.slice(source.lastIndexOf("."));
+  const target = `/assets/${name}-${hash}${extension}`;
+  await mkdir(join(dist, "assets"), { recursive: true });
+  await writeFile(join(dist, target), bytes);
+  return target;
 }
 
 /** The crypto wasm is a file esbuild leaves alone, so the build hashes and copies it. */
@@ -50,7 +61,7 @@ async function emitPages(assets: Assets): Promise<number> {
 }
 
 async function onBundle(result: BuildResult): Promise<void> {
-  const assets = { ...assetsOf(result), wasm: await emitWasm() };
+  const assets = { ...assetsOf(result), wasm: await emitWasm(), icon: await emitPageAsset("icon", "icon.svg") };
   await cp(join(root, "static"), dist, { recursive: true });
   await mkdir(buildDir, { recursive: true });
   await writeFile(join(buildDir, "manifest.json"), JSON.stringify(assets, null, 2), "utf8");

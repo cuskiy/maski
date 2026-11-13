@@ -46,14 +46,15 @@ const stylesheet = names("stylesheet");
 const script = names("script");
 const worker = names("worker");
 const wasm = names("wasm");
+const icon = names("icon");
 const problems: Problem[] = [];
 
-for (const asset of [stylesheet, script, worker, wasm]) {
+for (const asset of [stylesheet, script, worker, wasm, icon]) {
   if (!asset.startsWith("/assets/")) problems.push({ file: "manifest", message: `asset is not hashed: ${asset}` });
   if (!(await exists(join(dist, asset)))) problems.push({ file: "manifest", message: `asset is missing: ${asset}` });
 }
 
-const pages = renderPages({ stylesheet, script, worker, wasm });
+const pages = renderPages({ stylesheet, script, worker, wasm, icon });
 for (const page of pages) {
   const target = join(dist, page.file);
   if (!(await exists(target))) {

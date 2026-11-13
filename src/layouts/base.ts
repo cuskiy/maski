@@ -31,7 +31,7 @@ export function base(input: BaseInput): Html {
 <meta name="description" content="${input.description}">
 <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16191c" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="${input.assets.icon}" type="image/svg+xml">
 <link rel="canonical" href="${input.canonical}">
 ${alternates}<link rel="stylesheet" href="${input.assets.stylesheet}">
 <meta name="maski:worker" content="${input.assets.worker}">
