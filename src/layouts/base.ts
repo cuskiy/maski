@@ -1,3 +1,4 @@
+import type { Assets } from "../lib/assets.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
 
@@ -9,8 +10,7 @@ export interface BaseInput {
   readonly description: string;
   readonly canonical: string;
   readonly alternates: ReadonlyArray<{ lang: string; href: string }>;
-  readonly stylesheet: string;
-  readonly script?: string;
+  readonly assets: Assets;
   readonly body: Html;
 }
 
@@ -33,10 +33,12 @@ export function base(input: BaseInput): Html {
 <meta name="theme-color" content="#16191c" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="canonical" href="${input.canonical}">
-${alternates}<link rel="stylesheet" href="${input.stylesheet}">
+${alternates}<link rel="stylesheet" href="${input.assets.stylesheet}">
+<meta name="maski:worker" content="${input.assets.worker}">
+<meta name="maski:wasm" content="${input.assets.wasm}">
 </head>
 <body data-page="${input.page}">
-${input.body}${input.script === undefined ? html`` : html`\n<script type="module" src="${input.script}"></script>`}
+${input.body}\n<script type="module" src="${input.assets.script}"></script>
 </body>
 </html>`;
 }

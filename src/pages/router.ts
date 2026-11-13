@@ -14,8 +14,7 @@ export function routerPage(input: PageInput): string {
     description: t(c, "app.description"),
     canonical: `${input.origin}${locale.path}`,
     alternates: input.alternates,
-    stylesheet: input.stylesheet,
-    script: input.script,
+    assets: input.assets,
     body: html`<main class="router" data-page="router">
   <h1 class="router-mark">${t(c, "app.name")}</h1>
   <span class="router-spinner" aria-hidden="true"></span>

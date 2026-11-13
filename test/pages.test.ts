@@ -6,12 +6,12 @@ import { chatPage } from "../src/pages/chat.ts";
 import { routerPage } from "../src/pages/router.ts";
 import { REGION, SURFACE } from "../src/pages/regions.ts";
 
-const assets = { stylesheet: "/assets/style-x.css", script: "/assets/client-x.js" };
+const assets = { stylesheet: "/assets/style-x.css", script: "/assets/client-x.js", worker: "/assets/worker-x.js", wasm: "/assets/crypto-x.wasm" };
 
 function pages(): Array<{ name: string; html: string }> {
   const list: Array<{ name: string; html: string }> = [];
   for (const locale of locales) {
-    const shared = { locale, ...assets, origin: "", page: "x", alternates: [] };
+    const shared = { locale, assets, origin: "", page: "x", alternates: [] };
     list.push({ name: `${locale.id}/chat`, html: chatPage(shared) });
     list.push({ name: `${locale.id}/router`, html: routerPage(shared) });
   }

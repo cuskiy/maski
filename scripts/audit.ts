@@ -41,16 +41,19 @@ async function exists(path: string): Promise<boolean> {
 const manifest: unknown = JSON.parse(await readFile(join(root, "build", "manifest.json"), "utf8"));
 if (typeof manifest !== "object" || manifest === null) throw new Error("manifest is missing");
 const record = manifest as Record<string, unknown>;
-const stylesheet = typeof record["stylesheet"] === "string" ? record["stylesheet"] : "";
-const script = typeof record["script"] === "string" ? record["script"] : "";
+const names = (key: string): string => (typeof record[key] === "string" ? record[key] : "");
+const stylesheet = names("stylesheet");
+const script = names("script");
+const worker = names("worker");
+const wasm = names("wasm");
 const problems: Problem[] = [];
 
-for (const asset of [stylesheet, script]) {
+for (const asset of [stylesheet, script, worker, wasm]) {
   if (!asset.startsWith("/assets/")) problems.push({ file: "manifest", message: `asset is not hashed: ${asset}` });
   if (!(await exists(join(dist, asset)))) problems.push({ file: "manifest", message: `asset is missing: ${asset}` });
 }
 
-const pages = renderPages({ stylesheet, script });
+const pages = renderPages({ stylesheet, script, worker, wasm });
 for (const page of pages) {
   const target = join(dist, page.file);
   if (!(await exists(target))) {

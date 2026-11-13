@@ -1,5 +1,6 @@
 import { t } from "../lib/catalog.ts";
 import type { Locale } from "../catalogs/index.ts";
+import type { Assets } from "../lib/assets.ts";
 import { html } from "../lib/html.ts";
 import { appShell } from "../layouts/app.ts";
 import { base } from "../layouts/base.ts";
@@ -7,8 +8,7 @@ import { base } from "../layouts/base.ts";
 export interface PageInput {
   readonly locale: Locale;
   readonly page: string;
-  readonly stylesheet: string;
-  readonly script: string;
+  readonly assets: Assets;
   readonly origin: string;
   readonly alternates: ReadonlyArray<{ lang: string; href: string }>;
 }
@@ -24,8 +24,7 @@ export function chatPage(input: PageInput): string {
     description: t(c, "app.description"),
     canonical: `${input.origin}${locale.path === "/" ? "" : locale.path}chat/`,
     alternates: input.alternates,
-    stylesheet: input.stylesheet,
-    script: input.script,
+    assets: input.assets,
     body: html`${appShell({ c, backHref: "./" })}`,
   }).value;
 }
