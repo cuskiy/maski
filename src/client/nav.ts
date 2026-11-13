@@ -3,6 +3,7 @@ import type { Media, Room } from "../core/types.ts";
 import { el } from "../ui.ts";
 import { get, subscribe } from "./store.ts";
 import { openRoom } from "./router.ts";
+import { readAccount } from "./account.ts";
 import type { WorkerClient } from "./worker.ts";
 
 const SECTIONS = [
@@ -15,19 +16,29 @@ const SECTIONS = [
 const OPEN_KEY = "maski:sections";
 const TIME = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 
-function openState(): Record<string, boolean> {
+function stateKey(): string {
+  const account = readAccount();
+  return account === null ? OPEN_KEY : `${OPEN_KEY}:${account.hash}`;
+}
+
+function readState(key: string): Record<string, boolean> {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(OPEN_KEY) ?? "{}");
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "{}");
     return typeof value === "object" && value !== null ? (value as Record<string, boolean>) : {};
   } catch {
     return {};
   }
 }
 
+/** The old global map is the base; the account's own choices override it. */
+function openState(): Record<string, boolean> {
+  return { ...readState(OPEN_KEY), ...readState(stateKey()) };
+}
+
 function remember(section: string, open: boolean): void {
   const state = openState();
   state[section] = open;
-  localStorage.setItem(OPEN_KEY, JSON.stringify(state));
+  localStorage.setItem(stateKey(), JSON.stringify(state));
 }
 
 function previewText(room: Room): string {
@@ -85,7 +96,7 @@ export class Nav {
     const open = openState();
     for (const section of this.root.querySelectorAll<HTMLDetailsElement>("details[data-section]")) {
       const id = section.dataset["section"] ?? "";
-      section.open = open[id] === true;
+      section.open = open[id] ?? (id === "rooms");
       section.addEventListener("toggle", () => remember(id, section.open));
     }
     subscribe(["phase", "rooms", "roomId"], () => this.render());
