@@ -4,9 +4,11 @@ export type Command =
   | { type: "start"; accountHash: string | null; wasm: string }
   | { type: "discover"; address: string }
   | { type: "login"; baseUrl: string; user: string; password: string }
+  | { type: "register"; baseUrl: string; username: string; password: string }
   | { type: "logout" }
   | { type: "keyStatus" }
   | { type: "unlock"; input: string }
+  | { type: "resetKey"; password: string }
   | { type: "open"; roomId: string }
   | { type: "older"; roomId: string; keep: number }
   | { type: "send"; roomId: string; txnId: string; body: string; html: string | null }

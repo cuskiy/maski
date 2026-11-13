@@ -38,6 +38,10 @@ export class WorkerApi {
       }
       case "unlock":
         return this.session.unlock(command.input);
+      case "register":
+        return this.session.register(command.baseUrl, command.username, command.password, this.wasm);
+      case "resetKey":
+        return this.session.resetKey(command.password);
       case "open":
         return this.session.open(command.roomId);
       case "older":

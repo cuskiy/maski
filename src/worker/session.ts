@@ -6,6 +6,7 @@ import { accountHash } from "../core/id.ts";
 import type { Event } from "../protocol/messages.ts";
 import { AccountDb, type StoredSession } from "./db.ts";
 import { unlockWith } from "./keys.ts";
+import { register, type RegisterResult } from "./register.ts";
 import { fetchMedia } from "./media.ts";
 import { projectRooms } from "./project.ts";
 
@@ -71,11 +72,58 @@ export class WorkerSession {
     this.post({ event: "ready", session: null, keys: null });
   }
 
+  /** A new account starts with no keys, so its session is saved and the gate is answered by reset. */
+  async register(baseUrl: string, username: string, password: string, wasm: string): Promise<RegisterResult> {
+    const result = await register(baseUrl, username, password);
+    if (result.kind === "token") return result;
+    const stored = result.session;
+    const hash = await accountHash(stored.session.userId);
+    const db = new AccountDb(hash);
+    await db.open();
+    this.db?.close();
+    this.db = db;
+    stored.session.accountHash = hash;
+    await db.setMeta("session", stored);
+    await this.begin(stored, wasm);
+    return { kind: "done", session: { ...stored, } };
+  }
+
+  /** Without a recovery key the device starts over: new secret storage, new cross-signing, new backup. */
+  async resetKey(password: string): Promise<{ key: string; keys: Keys }> {
+    const client = this.requireClient();
+    const crypto = await this.requireCrypto();
+    const generated = await crypto.createRecoveryKeyFromPassphrase();
+    const userId = client.getUserId() ?? "";
+    try {
+      await crypto.bootstrapSecretStorage({
+        createSecretStorageKey: () => Promise.resolve(generated),
+        setupNewSecretStorage: true,
+        setupNewKeyBackup: true,
+      });
+      await crypto.bootstrapCrossSigning({
+        setupNewCrossSigning: true,
+        authUploadDeviceSigningKeys: (makeRequest) =>
+          makeRequest({ type: "m.login.password", identifier: { type: "m.id.user", user: userId }, password }),
+      });
+    } catch {
+      throw new Error("uia");
+    }
+    const keys = await this.keys();
+    this.post({ event: "keys", keys });
+    return { key: generated.encodedPrivateKey ?? "", keys };
+  }
+
   /** One path out of the gate: the recovery key or passphrase that opens secret storage. */
   async unlock(input: string): Promise<Keys> {
     const keys = await unlockWith(this.requireClient(), input);
     this.post({ event: "keys", keys });
     return keys;
+  }
+
+  private async requireCrypto(): Promise<NonNullable<ReturnType<MatrixClient["getCrypto"]>>> {
+    const crypto = this.client?.getCrypto();
+    if (!crypto) throw new Error("encryption is not ready");
+    return crypto;
   }
 
   async keys(): Promise<Keys> {

@@ -27,6 +27,8 @@ export function startAuth(): void {
   if (flow === "server") wireServer(worker, fail);
   if (flow === "login") wireLogin(worker, fail);
   if (flow === "unlock") wireUnlock(worker, fail);
+  if (flow === "register") wireRegister(worker, fail);
+  if (flow === "reset") wireReset(worker, fail);
 }
 
 function value(id: string): string {
@@ -128,4 +130,77 @@ function messageOf(cause: unknown): string {
   if (text === "no-keys") return t("auth.key.noKeys");
   if (text === "invalid") return t("auth.key.invalid");
   return t("auth.key.failed");
+}
+
+function wireRegister(worker: WorkerClient, fail: (message: string, form: HTMLFormElement) => void): void {
+  const form = document.querySelector<HTMLFormElement>('form[data-flow="register"]');
+  if (!form) return;
+  const baseUrl = new URLSearchParams(location.search).get("server");
+  if (baseUrl === null) {
+    const back = el("p", { class: "note" }, [el("a", { class: "link", text: t("auth.flowBack"), attrs: { href: "../server/" } })]);
+    form.before(back);
+    form.querySelectorAll("input, button").forEach((control) => {
+      (control as HTMLInputElement).disabled = true;
+    });
+    return;
+  }
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (value("password") !== value("confirm")) {
+      fail(t("auth.register.mismatch"), form);
+      return;
+    }
+    const button = form.querySelector("button");
+    if (button) button.disabled = true;
+    void worker
+      .send<{ kind: "done"; session: { session: Session } } | { kind: "token" }>({
+        type: "register",
+        baseUrl,
+        username: value("username"),
+        password: value("password"),
+      })
+      .then((result) => {
+        if (result.kind === "token") {
+          if (button) button.disabled = false;
+          fail(t("auth.register.token"), form);
+          return;
+        }
+        const session = result.session.session;
+        writeAccount({ hash: session.accountHash, userId: session.userId, name: session.name, baseUrl: session.baseUrl, keysReady: false });
+        location.assign("../key/");
+      })
+      .catch((cause: unknown) => {
+        if (button) button.disabled = false;
+        const text = cause instanceof Error ? cause.message : "";
+        fail(text.startsWith("unsupported stage") ? t("auth.register.unsupported") : t("auth.register.failed"), form);
+      });
+  });
+}
+
+/** Starting over needs the account password for the interactive auth the server wants. */
+function wireReset(worker: WorkerClient, fail: (message: string, form: HTMLFormElement) => void): void {
+  const form = document.querySelector<HTMLFormElement>('form[data-flow="reset"]');
+  const account = readAccount();
+  const output = document.querySelector<HTMLElement>('[data-region="key-out"]');
+  if (!form || account === null || !output) return;
+  void worker.send({ type: "start", accountHash: account.hash, wasm: worker.wasm() }).catch(() => undefined);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const button = form.querySelector("button");
+    if (button) button.disabled = true;
+    void worker
+      .send<{ key: string; keys: Keys }>({ type: "resetKey", password: value("reset-password") })
+      .then((result) => {
+        form.hidden = true;
+        output.hidden = false;
+        output.textContent = result.key;
+        if (result.keys.ready) writeAccount({ ...account, keysReady: true });
+        const next = el("p", { class: "note" }, [el("a", { class: "link", text: t("router.open"), attrs: { href: "../chat/" } })]);
+        output.after(next);
+      })
+      .catch((cause: unknown) => {
+        if (button) button.disabled = false;
+        fail(cause instanceof Error && cause.message === "uia" ? t("auth.reset.failed") : t("auth.key.failed"), form);
+      });
+  });
 }
