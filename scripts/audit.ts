@@ -78,7 +78,7 @@ for (const page of pages) {
 }
 
 const staticFiles = await readdir(join(dist)).catch(() => [] as string[]);
-for (const name of ["robots.txt", "404.html"]) {
+for (const name of ["robots.txt", "404.html", "404.css"]) {
   if (!staticFiles.includes(name)) problems.push({ file: name, message: "static copy is missing" });
 }
 

@@ -7,6 +7,19 @@ summarised and brought in line with the current design. **Design** is the engine
 
 # Part 1 — Rules
 
+## 1.0 第一原则：保持善良
+
+**考虑用户体验是最核心的一条规则。** 它排在技术偏好、代码整洁、甚至「这样做更省事」之前。
+
+- 不做会伤害读者的东西：不闪白（暗色模式下的白屏）、不抖动（占位换成内容）、不吞点击、不让动画
+  挡住操作、不把错误藏在控制台。
+- 能少一步就少一步，能少一次等待就少一次；等待必须可见、可打断、可取消。
+- 一个控件只要出现就必须真的能用；做不到的功能宁可不出现。
+- 报错说人话，说明发生了什么、能做什么，内部状态不端给读者看。
+- 慢就是无礼：加载、翻页、滚动、输入都要当成人的时间在花。
+
+后面所有规则都是这条的具体化。与它冲突的「最佳实践」不适用。
+
 ## 1.1 Working rules
 
 1. 思考方案或写代码前，必须查询最新官方资料和相关项目（包括 `past/git/`）的代码。
@@ -438,7 +451,7 @@ client import, so the two cannot disagree.
 
 | where | what | name |
 | --- | --- | --- |
-| `static/` | only what a platform asks for by name: `/robots.txt`, `/404.html`, and `/sw.js` when it exists | copied verbatim, never hashed |
+| `static/` | only what a platform asks for by name: `/robots.txt`, `/404.html` with `/404.css`, and `/sw.js` when it exists | copied verbatim, never hashed |
 | `src/assets/` | images and icons a module, a stylesheet or the page generator needs — never markup | hashed by the bundler, or by the build for a page asset |
 | the crypto wasm | the one file the SDK resolves by its own URL | copied by the build with a hash of its bytes |
 
@@ -483,6 +496,12 @@ its *filename*:
 This is a client, not a content site with stable landing addresses: a release changes the shell, the
 service worker and the whole bundle together, and the reader reloads the client as one thing. So
 **content hash everywhere**, and the only stable names are the three paths a platform asks for by name.
+
+**A static page carries its own small stylesheet, in system colours.** `404.html` cannot know the
+hashed stylesheet name, so `404.css` sits beside it and uses `Canvas`, `CanvasText` and
+`color-scheme` instead of the palette: the platform already knows both colour schemes, so there is no
+second copy of a colour to drift, and `<meta name="color-scheme" content="light dark">` in the head
+makes the page dark before any CSS arrives — which is what stops the white flash.
 
 **The icon has one name, not two.** An earlier draft copied it twice — a stable `/favicon.ico` for a
 browser's speculative probe and a hashed copy for our `<link>` — which is the same file with two
@@ -605,6 +624,7 @@ of it. They are not decoration: removing one of these mechanisms re-opens its fa
 | Long unbroken strings, URLs and CJK text overflow a flex child | CSS box model | `min-inline-size: 0` and `overflow-wrap` on text holders |
 | A click can be lost when the element under the pointer is replaced mid-gesture | our second attempt's room list | a keyed list that updates rows in place, never rebuilds them (2.6) |
 | One file under two names is two facts that can disagree; a second name is only justified when the platform demands it | the favicon in this file's own first draft | one hashed icon, declared in `<head>`, and no `/favicon.ico` at all (3.9) |
+| A page paints the user agent's canvas before its stylesheet arrives; in a dark colour scheme that is a white flash in the face | every site that ships a link to a stylesheet and nothing else | `color-scheme` in the head of every page, and a static page's stylesheet written in system colours (3.9) |
 
 ## 3.14 Testing
 

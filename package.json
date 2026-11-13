@@ -10,7 +10,7 @@
     "pages": "tsx scripts/pages.ts",
     "audit": "tsx scripts/audit.ts",
     "code": "tsc --noEmit",
-    "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" --max-warnings=0",
+    "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" \"static/**/*.css\" --max-warnings=0",
     "test": "vitest run",
     "check": "npm run code && npm run lint && npm test && npm run build && npm run audit",
     "features": "tsx scripts/features.ts"

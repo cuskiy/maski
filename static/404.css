@@ -1,0 +1,49 @@
+/* The not-found page cannot know the hashed stylesheet, so it carries its own small one. System
+   colours follow `color-scheme`, which keeps the palette in one place and the dark canvas dark. */
+
+:root {
+  color-scheme: light dark;
+}
+
+html {
+  background: Canvas;
+  color: CanvasText;
+}
+
+body {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 0.6rem;
+  min-block-size: 100dvh;
+  margin: 0;
+  padding: 1.6rem;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0;
+  opacity: 0.75;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a {
+    transition: opacity 120ms;
+  }
+
+  a:hover {
+    opacity: 0.75;
+  }
+}
