@@ -16,11 +16,6 @@ const TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-/** The dev-time reload talks to this; a built site never sees it. */
-function injection(): string {
-  return `<script>new EventSource("/__reload").onmessage = () => location.reload();</script>`;
-}
-
 export interface ServeOptions {
   readonly reload?: boolean;
 }
@@ -40,6 +35,12 @@ export function serve(root: string, port: number, options: ServeOptions = {}): P
       return;
     }
 
+    if (url.pathname === "/__reload.js" && options.reload === true) {
+      response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
+      response.end('new EventSource("/__reload").onmessage = () => location.reload();');
+      return;
+    }
+
     if (url.pathname === "/__version") {
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       response.end(JSON.stringify({ version }));
@@ -51,7 +52,8 @@ export function serve(root: string, port: number, options: ServeOptions = {}): P
     try {
       let body = await readFile(join(root, path));
       if (options.reload === true && path.endsWith(".html")) {
-        body = Buffer.from(body.toString("utf8").replace("</body>", `${injection()}</body>`));
+        // Same-origin, so the page CSP allows it; a built site never sees it.
+        body = Buffer.from(body.toString("utf8").replace("</body>", `<script src="/__reload.js"></script></body>`));
       }
       response.writeHead(200, { "content-type": TYPES[extname(path)] ?? "application/octet-stream", "cache-control": "no-store" });
       response.end(body);
