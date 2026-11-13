@@ -11,7 +11,7 @@ export type Command =
   | { type: "resetKey"; password: string }
   | { type: "open"; roomId: string }
   | { type: "older"; roomId: string; keep: number }
-  | { type: "send"; roomId: string; txnId: string; body: string; html: string | null }
+  | { type: "send"; roomId: string; txnId: string; body: string; html: string | null; replyTo: string | null }
   | { type: "retry"; txnId: string; roomId: string }
   | { type: "discard"; txnId: string; roomId: string }
   | { type: "media"; media: Media; size: number }

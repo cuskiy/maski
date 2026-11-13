@@ -3,6 +3,8 @@ import { t } from "../i18n.ts";
 import { el } from "../ui.ts";
 import { openViewer } from "./viewer.ts";
 import { openMenu, type MenuItem } from "./menu.ts";
+import type { Composer } from "./composer.ts";
+import type { Picker } from "./picker.ts";
 import { copyText } from "./clipboard.ts";
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
@@ -16,12 +18,16 @@ export class Timeline {
   private readonly list: HTMLElement;
   private readonly older: HTMLButtonElement;
   private readonly worker: WorkerClient;
+  private readonly composer: Composer;
+  private readonly picker: Picker;
   private pinned = true;
   private loading = false;
 
-  constructor(root: HTMLElement, worker: WorkerClient) {
+  constructor(root: HTMLElement, worker: WorkerClient, composer: Composer, picker: Picker) {
     this.root = root;
     this.worker = worker;
+    this.composer = composer;
+    this.picker = picker;
     const list = root.querySelector("ol");
     const older = root.querySelector("button");
     if (!list || !older) throw new Error("the timeline region is incomplete");
@@ -82,6 +88,13 @@ export class Timeline {
     const state = get();
     const own = message.sender === state.session?.userId;
     const items: MenuItem[] = [];
+    if (message.id.startsWith("$")) {
+      items.push({ label: t("action.reply"), run: () => this.composer.setReply(message) });
+      items.push({ label: t("action.react"), run: () => this.picker.startReaction(message.roomId, message.id) });
+    }
+    if (own && message.kind === "text" && message.id.startsWith("$")) {
+      items.push({ label: t("action.edit"), run: () => this.composer.setEdit(message) });
+    }
     items.push({ label: t("action.copy"), run: () => copyText(message.body, t("action.copied")) });
     if (message.id.startsWith("$")) {
       items.push({

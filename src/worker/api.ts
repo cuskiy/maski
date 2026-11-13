@@ -48,7 +48,7 @@ export class WorkerApi {
       case "older":
         return this.session.older(command.roomId, command.keep);
       case "send":
-        await this.session.send(command.roomId, command.txnId, command.body, command.html);
+        await this.session.send(command.roomId, command.txnId, command.body, command.html, command.replyTo);
         return {};
       case "retry":
         await this.session.retry(command.txnId, command.roomId);

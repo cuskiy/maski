@@ -27,10 +27,11 @@ export function startChat(): void {
 
   const worker = new WorkerClient();
   new Nav(navRoot);
-  const timeline = new Timeline(timelineRoot, worker);
   const composer = new Composer(composerRoot, worker);
   const emojiSurface = document.querySelector<HTMLElement>('#surface-emoji');
-  if (emojiSurface) new Picker(emojiSurface, worker, (text) => composer.insert(text), () => get().roomId);
+  if (!emojiSurface) return;
+  const picker = new Picker(emojiSurface, worker, (text) => composer.insert(text), () => get().roomId);
+  const timeline = new Timeline(timelineRoot, worker, composer, picker);
   const settingsBody = document.querySelector<HTMLElement>('[data-region="settings-body"]');
   if (settingsBody) mountSettings(settingsBody, worker);
 

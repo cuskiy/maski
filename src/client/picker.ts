@@ -15,6 +15,7 @@ export class Picker {
   private mode: "emoticon" | "sticker" = "emoticon";
   private query = "";
   private packId = "";
+  private reaction: { roomId: string; eventId: string } | null = null;
 
   constructor(root: HTMLElement, worker: WorkerClient, insert: (text: string) => void, roomId: () => string | null) {
     this.root = root;
@@ -24,6 +25,23 @@ export class Picker {
     this.root.addEventListener("toggle", () => {
       if (this.root.matches(":popover-open")) void this.load();
     });
+  }
+
+  /** Reacting reuses this panel: the same grid, but a choice becomes an annotation. */
+  startReaction(roomId: string, eventId: string): void {
+    this.reaction = { roomId, eventId };
+    this.root.showPopover();
+  }
+
+  private choose(emoji: string): void {
+    const reaction = this.reaction;
+    if (reaction === null) {
+      this.insert(emoji);
+      return;
+    }
+    this.reaction = null;
+    this.root.hidePopover();
+    void this.worker.send({ type: "react", roomId: reaction.roomId, eventId: reaction.eventId, key: emoji, on: true });
   }
 
   private async load(): Promise<void> {
@@ -102,7 +120,7 @@ export class Picker {
             class: "picker-cell",
             text: emoji,
             attrs: { type: "button" },
-            on: { click: () => this.insert(emoji) },
+            on: { click: () => this.choose(emoji) },
           } as never),
         ),
       );
