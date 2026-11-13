@@ -38,7 +38,7 @@ export class WorkerApi {
         return keys;
       }
       case "unlock":
-        return this.session.unlock(command.input, command.password);
+        return this.session.unlock(command.input);
       case "register":
         return this.session.register(command.baseUrl, command.username, command.password, this.wasm);
       case "resetKey":

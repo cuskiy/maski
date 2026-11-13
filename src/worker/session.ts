@@ -119,8 +119,8 @@ export class WorkerSession {
 
   /** One path out of the gate: the recovery key or passphrase that opens secret storage. */
   /**
-   * The cross-signing public keys arrive with sync, and the import fails silently without them, so
-   * a restore waits for the first sync instead of racing it.
+   * The import needs the account's public cross-signing keys, which sync does not fetch, so a
+   * restore waits for the first sync and then asks for them outright.
    */
   private waitForSync(): Promise<void> {
     if (this.online) return Promise.resolve();
@@ -130,14 +130,14 @@ export class WorkerSession {
     });
   }
 
-  async unlock(input: string, password: string): Promise<Keys> {
+  async unlock(input: string): Promise<Keys> {
     // The key was checked and the cross-signing keys were imported, so this device is open now.
     // Asking the predicate again would race the signing round-trip and close the door again.
     const client = this.requireClient();
     this.secretKey = await secretKeyFor(client, input);
     await this.waitForSync();
     try {
-      await openKeys(client, password);
+      await openKeys(client);
     } finally {
       this.secretKey = null;
     }
@@ -154,14 +154,15 @@ export class WorkerSession {
   }
 
   /**
-   * The gate asks whether this device holds the account's cross-signing keys, cached here or fetched
-   * through secret storage. A freshly signed-in device does not, so the gate stays shut until the
-   * reader opens it with the recovery key.
+   * The gate is open when this device holds the account's keys: cross-signing imported from secret
+   * storage, or the key backup opened. A device that is unlocked but unsigned says so elsewhere;
+   * the gate only asks whether encrypted history is readable.
    */
   async keys(): Promise<Keys> {
     const crypto = this.client?.getCrypto();
     if (!crypto) return { ready: false };
-    return { ready: await crypto.isCrossSigningReady() };
+    if (await crypto.isCrossSigningReady()) return { ready: true };
+    return { ready: (await crypto.getActiveSessionBackupVersion()) !== null };
   }
 
   async open(roomId: string): Promise<Window> {

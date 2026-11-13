@@ -32,27 +32,27 @@ export async function secretKeyFor(client: MatrixClient, input: string): Promise
 }
 
 /**
- * Restoring is one path: with the key available to the client's callbacks, the SDK imports the
- * cross-signing keys (which signs this device) and reopens the backup with what it finds there.
+ * Unlocking opens the account's secrets for this device: the cross-signing private keys are
+ * imported from secret storage and this device is signed with them, and the backup key opens the
+ * encrypted history. Signing needs the account's public cross-signing keys, which sync does not
+ * fetch, so they are asked for first; without them the import fails silently and the gate stays
+ * shut with nothing to read.
  */
-export async function openKeys(client: MatrixClient, password: string): Promise<void> {
+export async function openKeys(client: MatrixClient): Promise<void> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error("restore");
+  const userId = client.getUserId() ?? "";
+  const status = await crypto.getCrossSigningStatus();
+  // Creating a new identity here would rotate the account's keys behind the reader's back, and
+  // that is what the gate's "start over" path is for.
+  if (!status.privateKeysInSecretStorage) throw new Error("no-cross-signing");
   try {
-    const userId = client.getUserId() ?? "";
-    await crypto.bootstrapCrossSigning({
-      // Signing this device uploads a signature, and the server asks the account to confirm that.
-      authUploadDeviceSigningKeys: (makeRequest) =>
-        makeRequest({ type: "m.login.password", identifier: { type: "m.id.user", user: userId }, password }),
-    });
-    await crypto.bootstrapSecretStorage({});
+    // A key query, not a sync, is what puts the account's public keys in the machine.
+    await crypto.getUserDeviceInfo([userId], true);
+    await crypto.bootstrapCrossSigning({});
   } catch (cause) {
-    // The cause is a protocol message, not a secret, and without it the failure is a guess.
-    const message = cause instanceof Error ? cause.message : String(cause);
-    throw new Error(message.includes("importCrossSigningKeys") ? "no-cross-signing" : `restore: ${message}`, { cause });
+    throw new Error("restore", { cause });
   }
-  // A backup is not the gate: the keys are. When the account has none, or its key is not in secret
-  // storage, the device still opens and the timeline keeps saying what it cannot read.
   await crypto.loadSessionBackupPrivateKeyFromSecretStorage().catch(() => undefined);
   await crypto.checkKeyBackupAndEnable().catch(() => undefined);
 }

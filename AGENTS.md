@@ -896,32 +896,31 @@ is never done to make a failing build pass.
 The same promises are how a new contributor starts: `npm run check` is the whole contract, and the
 table above says which one broke and where its rule lives.
 
-## 3.15.2 Open defect: the recovery key does not open the chat
+## 3.15.2 Open verification: the unlock path
 
-Other clients accept the same recovery key, so the fault is here. What is known, in the order it was
-established, each step verified at the worker rung:
+The gate now opens in code, but the fix has not been run at rung 5: the test account's credentials
+are not in this environment. Until `test/browser/unlock.mjs` reports `after.ready` true, this is an
+open verification, not a closed defect.
 
-1. `secretStorage.hasKey()` and `checkKey()` pass: the key is the account's key.
-2. The key reaches the SDK through `cryptoCallbacks` given to `createClient`, and the callback now
-   answers for any secret the SDK asks about.
-3. The password travels with the unlock, because signing this device needs UIA.
-4. The restore waits for the first sync, and queries the user's devices, before importing. It still
-   fails with `importCrossSigningKeys failed to import the keys`.
-5. Reading the SDK source, that message is thrown when `hasMaster`, `hasSelfSigning` or
-   `hasUserSigning` is false after the import — the call "will fail silently if the public keys are
-   not available".
+- The symptom was `importCrossSigningKeys failed to import the keys` after a recovery key that
+  secret storage itself accepted.
+- The cause is in the SDK's import: it fails silently unless the account's public cross-signing
+  keys are already in the olm machine, and sync does not fetch them. The earlier device query used
+  `downloadKeysForUsers`, which performs the HTTP call but never feeds the machine.
+- The change is `openKeys` (3.4): read `getCrossSigningStatus` first, so an account with no
+  cross-signing secret is sent to "start over" or to another session instead of having its identity
+  rotated; then `getUserDeviceInfo([userId], true)`, which does update the machine;
+  `bootstrapCrossSigning({})`, which imports the private keys and signs this device (a device
+  signature needs no UIA, so the account password is no longer part of the gate); then the backup
+  key from secret storage and `checkKeyBackupAndEnable`. The gate is open when cross-signing is
+  ready or a backup version is active.
+- Next: run the browser check with `MASKI_USER`, `MASKI_PASSWORD` and `MASKI_RECOVERY`; a false
+  `after.ready` is the remaining defect, and its first reading is `getCrossSigningStatus` before and
+  after the import.
 
-So the import runs, finds the private keys it read from secret storage, and ends with the machine
-believing it holds none of the three. The untested hypothesis that the public keys arrive with sync
-was wrong, and so was forcing a device query.
-
-Next step, in one place: print, right before the bootstrap, `crypto.getCrossSigningStatus()` and the
-olm machine's device status, and read which of the three keys the import dropped. That answer decides
-whether the call is wrong (use `crossSignDevice` after `bootstrapSecretStorage`) or the account's
-state is unusual, and it is not a question worth another guess.
-
-Until then: the gate says what state it is in, "start over" with the account password is the path
-that creates new keys, and the older encrypted history stays unreadable, which is Megolm's rule.
+The other two gate paths are unchanged and written where they are implemented: verifying this
+device from another session opens it through cross-signing, and "start over" with the account
+password creates new keys and a new backup, which is the only honest path when the old key is gone.
 
 ## 3.15.3 Scope review, and what "done" means
 

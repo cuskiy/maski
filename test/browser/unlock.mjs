@@ -36,7 +36,7 @@ const result = await page.evaluate(
     const login = await ask({ type: "login", baseUrl, user: name, password: secret });
     if (!login.ok) return { step: "login", error: login.error };
     const before = await ask({ type: "keyStatus" });
-    const unlock = await ask({ type: "unlock", input: key, password: secret });
+    const unlock = await ask({ type: "unlock", input: key });
     const after = await ask({ type: "keyStatus" });
     return { before: before.data, unlock: unlock.ok ? unlock.data : `failed: ${unlock.error}`, after: after.data };
   },

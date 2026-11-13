@@ -125,7 +125,7 @@ function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLForm
     const button = form.querySelector("button");
     if (button) button.disabled = true;
     void worker
-      .send<Keys>({ type: "unlock", input: value("recovery"), password: value("key-password") })
+      .send<Keys>({ type: "unlock", input: value("recovery") })
       .then((keys) => {
         if (!keys.ready) {
           if (button) button.disabled = false;

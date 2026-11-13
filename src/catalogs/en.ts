@@ -41,7 +41,6 @@ export const en = {
   "auth.key.failed": "The keys could not be restored.",
   "auth.reset.failed": "The server did not accept the password.",
   "auth.key.noCrossSigning": "This account keeps no signing keys in secret storage. Start over below, or verify this device from another session.",
-  "auth.key.password": "Account password, to sign this device",
   "auth.key.reset": "Start over with a new key",
   "auth.key.unlock": "Unlock",
 
