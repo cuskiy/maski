@@ -5,35 +5,31 @@
   "type": "module",
   "description": "A fast, local-first Matrix client",
   "scripts": {
-    "dev": "tsx scripts/build.ts --watch",
-    "build": "tsx scripts/build.ts",
-    "pages": "tsx scripts/pages.ts",
-    "audit": "tsx scripts/audit.ts",
+    "dev": "node scripts/build.ts --watch",
+    "build": "node scripts/build.ts",
+    "pages": "node scripts/pages.ts",
+    "audit": "node scripts/audit.ts",
+    "features": "node scripts/features.ts",
     "code": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" \"static/**/*.css\" --max-warnings=0",
-    "test": "vitest run",
-    "check": "npm run code && npm run lint && npm test && npm run build && npm run audit",
-    "features": "tsx scripts/features.ts"
+    "test": "node --test \"test/*.test.ts\"",
+    "check": "npm run code && npm run lint && npm test && npm run build && npm run audit"
   },
   "dependencies": {
     "@matrix-org/matrix-sdk-crypto-wasm": "18.9.2",
-    "dompurify": "3.4.17",
     "matrix-js-sdk": "45.1.0"
   },
   "devDependencies": {
-    "@mdn/browser-compat-data": "^8.1.9",
     "@types/html-minifier-terser": "^7.0.2",
     "@types/node": "26.6.6",
     "esbuild": "0.28.2",
     "html-minifier-terser": "^7.2.0",
-    "oxlint": "1.93.0",
-    "oxlint-tsgolint": "7.0.2006",
+    "oxlint": "^1.93.0",
+    "oxlint-tsgolint": "^7.0.2006",
     "playwright": "1.65.0",
     "stylelint": "18.0.0",
     "stylelint-config-standard": "41.0.0",
-    "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vitest": "5.1.0",
     "web-features": "^3.46.0"
   },
   "engines": {

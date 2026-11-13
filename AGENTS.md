@@ -645,3 +645,26 @@ of it. They are not decoration: removing one of these mechanisms re-opens its fa
   popover open and close.
 - `test/browser/worker.mjs` speaks the protocol to the bundled worker and is the check for P1; it takes
   `MASKI_USER`, `MASKI_PASSWORD` and `MASKI_BASE` from the environment.
+
+## 3.15 Tooling decisions
+
+**eslint versus oxlint.** `typescript-eslint` (8.x and the canary) declares `typescript >=4.8.4
+<6.1.0`, and this project is on TypeScript 7.0.2. Choosing ESLint therefore means pinning the
+compiler back two majors to satisfy the linter. Oxlint's type-aware mode runs through
+`oxlint-tsgolint`, its own type engine, so it works with TypeScript 7 and needs one config file.
+
+The decision: **strictness of the compiler first, Oxlint as the gate**, with the rules that matter
+most for a client turned on explicitly — `no-floating-promises`, type-aware correctness, `suspicious`
+and `perf` categories, warnings denied. When `typescript-eslint` supports TypeScript 7, this is
+revisited: its type-checked configs are a superset of Oxlint's type-aware rules, and the only reason
+it is not used today is the peer range.
+
+**The toolchain.** Node runs TypeScript directly (type stripping), so the scripts and the tests need
+no transpiler: `node scripts/build.ts`, `node --test "test/*.test.ts"`. That removed `tsx` and
+`vitest` and their trees; the tests use `node:test` and `node:assert/strict`.
+
+| runtime | build time |
+| --- | --- |
+| `matrix-js-sdk`, `@matrix-org/matrix-sdk-crypto-wasm` | `esbuild`, `html-minifier-terser`, `typescript`, `oxlint`, `oxlint-tsgolint`, `stylelint`, `stylelint-config-standard`, `playwright`, `web-features`, `@types/node`, `@types/html-minifier-terser` |
+
+`dompurify` is added when the sanitizer lands; a dependency nothing imports is not a dependency.

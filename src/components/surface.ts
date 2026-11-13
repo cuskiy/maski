@@ -16,7 +16,7 @@ export function surface({ c, id, titleKey, body }: SurfaceInput): Html {
     <h2 class="surface-title" id="${id}-title">${t(c, titleKey)}</h2>
     <button class="surface-close" type="button" popovertarget="${id}" popovertargetaction="hide" aria-label="${t(c, "surface.close")}"></button>
   </header>
-  <div class="surface-body" data-region="${id}-body">${body ?? html`<p class="note">${t(c, "noscript.surface")}</p>`}</div>
+  <div class="surface-body" data-region="${id}-body">${body ?? html`<p class="note">${t(c, "surface.empty")}</p>`}</div>
 </section>`;
 }
 

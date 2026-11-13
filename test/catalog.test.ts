@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { en } from "../src/catalogs/en.ts";
 import { zhCN } from "../src/catalogs/zh-CN.ts";
 
@@ -12,21 +13,18 @@ function sources(dir: string): string[] {
   });
 }
 
-const used = [sources(join("src")), sources(join("scripts"))].flat().join("\n");
+const used = [...sources(join("src")), ...sources(join("scripts"))].join("\n");
 
-describe("catalog", () => {
-  it("has the same keys in every language", () => {
-    expect(Object.keys(zhCN).toSorted()).toEqual(Object.keys(en).toSorted());
-  });
+void test("every language has the same keys", () => {
+  assert.deepEqual(Object.keys(zhCN).toSorted(), Object.keys(en).toSorted());
+});
 
-  it("has no empty entry", () => {
-    for (const [key, value] of Object.entries(en)) expect(value, key).not.toBe("");
-    for (const [key, value] of Object.entries(zhCN)) expect(value, key).not.toBe("");
-  });
+void test("no entry is empty", () => {
+  for (const [key, value] of Object.entries(en)) assert.notEqual(value, "", key);
+  for (const [key, value] of Object.entries(zhCN)) assert.notEqual(value, "", key);
+});
 
-  /** A key nothing reads is copy somebody wrote and forgot; it is deleted, not kept for later. */
-  it("has no key that the code does not read", () => {
-    const unused = Object.keys(en).filter((key) => !used.includes(`"${key}"`));
-    expect(unused).toEqual([]);
-  });
+void test("no key that the code does not read", () => {
+  const unused = Object.keys(en).filter((key) => !used.includes(`"${key}"`));
+  assert.deepEqual(unused, []);
 });

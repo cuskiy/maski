@@ -1,5 +1,6 @@
-import type { Keys, Session } from "../core/types.ts";
-import type { Command, Event } from "../protocol/messages.ts";
+import type { Keys, Media, Session } from "../core/types.ts";
+import type { Command } from "../protocol/messages.ts";
+import type { Event } from "../protocol/messages.ts";
 import { WorkerSession } from "./session.ts";
 
 /** One handler per command. Nothing here knows about pages or styles. */
@@ -13,11 +14,9 @@ export class WorkerApi {
 
   async dispatch(command: Command): Promise<unknown> {
     switch (command.type) {
-      case "start": {
+      case "start":
         this.wasm = command.wasm;
-        const state = await this.session.start(command.accountHash, command.wasm);
-        return state;
-      }
+        return this.session.start(command.accountHash, command.wasm);
       case "login": {
         const session: Session = await this.session.login(command.baseUrl, command.user, command.password, this.wasm);
         return { session };
@@ -29,11 +28,34 @@ export class WorkerApi {
         const keys: Keys = await this.session.keys();
         return keys;
       }
+      case "open":
+        return this.session.open(command.roomId);
+      case "older":
+        return this.session.older(command.roomId, command.keep);
       case "send":
-        await this.session.send(command.roomId, command.txnId, command.body);
+        await this.session.send(command.roomId, command.txnId, command.body, command.html);
+        return {};
+      case "retry":
+        await this.session.retry(command.txnId, command.roomId);
+        return {};
+      case "discard":
+        await this.session.discard(command.txnId, command.roomId);
+        return {};
+      case "media": {
+        const blob: Blob = await this.session.media(command.media, command.size);
+        return { blob };
+      }
+      case "markRead":
+        await this.session.markRead(command.roomId, command.eventId);
+        return {};
+      case "typing":
+        await this.session.typing(command.roomId, command.on);
         return {};
       default:
         throw new Error("unknown command");
     }
   }
 }
+
+export type { Command, Event };
+export type { Media };

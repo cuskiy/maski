@@ -30,7 +30,12 @@ export const zhCN = {
 
   "noscript.router": "这个页面需要 JavaScript。",
   "noscript.chat": "消息需要 JavaScript。",
-  "noscript.surface": "这个面板需要 JavaScript。",
+  "room.undecryptable": "无法解密",
+  "room.queued": "尚未发送",
+  "room.sending": "发送中",
+  "room.failed": "发送失败",
+  "room.image": "图片",
+  "surface.empty": "这里还没有内容。",
 
   "nav.search": "搜索",
   "nav.newMessage": "新消息",
@@ -58,6 +63,8 @@ export const zhCN = {
   "surface.emoji": "表情",
   "surface.close": "关闭",
 
+  "chat.notSignedIn": "未登录",
+  "chat.keyMissing": "加密密钥尚未设置",
   "chat.title": "聊天",
   "chat.loadOlder": "加载更早的消息",
   "chat.back": "返回房间列表",

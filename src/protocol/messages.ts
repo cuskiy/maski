@@ -1,15 +1,24 @@
-import type { Keys, Room, Session } from "../core/types.ts";
+import type { Keys, Media, Message, Outbox, Room, Session, Window } from "../core/types.ts";
 
 export type Command =
   | { type: "start"; accountHash: string | null; wasm: string }
   | { type: "login"; baseUrl: string; user: string; password: string }
   | { type: "logout" }
   | { type: "keyStatus" }
-  | { type: "send"; roomId: string; txnId: string; body: string };
+  | { type: "open"; roomId: string }
+  | { type: "older"; roomId: string; keep: number }
+  | { type: "send"; roomId: string; txnId: string; body: string; html: string | null }
+  | { type: "retry"; txnId: string; roomId: string }
+  | { type: "discard"; txnId: string; roomId: string }
+  | { type: "media"; roomId: string; media: Media; size: number }
+  | { type: "markRead"; roomId: string; eventId: string }
+  | { type: "typing"; roomId: string; on: boolean };
 
 export type Event =
   | { event: "ready"; session: Session | null; keys: Keys | null }
   | { event: "rooms"; rooms: Room[] }
+  | { event: "window"; window: Window }
+  | { event: "outbox"; outbox: Outbox }
   | { event: "connection"; state: "connecting" | "online" | "offline" | "error"; message: string }
   | { event: "keys"; keys: Keys }
   | { event: "fatal"; message: string };
@@ -20,3 +29,5 @@ export interface Envelope {
   readonly id: number;
   readonly command: Command;
 }
+
+export type MessageRow = Message;

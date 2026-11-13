@@ -30,7 +30,12 @@ export const en = {
 
   "noscript.router": "This page needs JavaScript.",
   "noscript.chat": "Messages need JavaScript.",
-  "noscript.surface": "This panel needs JavaScript.",
+  "room.undecryptable": "Cannot be decrypted",
+  "room.queued": "Not sent yet",
+  "room.sending": "Sending",
+  "room.failed": "Not sent",
+  "room.image": "Image",
+  "surface.empty": "Nothing to show here yet.",
 
   "nav.search": "Search",
   "nav.newMessage": "New message",
@@ -58,6 +63,8 @@ export const en = {
   "surface.emoji": "Emoji",
   "surface.close": "Close",
 
+  "chat.notSignedIn": "Not signed in",
+  "chat.keyMissing": "The encryption keys are not set up",
   "chat.title": "Chat",
   "chat.loadOlder": "Load older messages",
   "chat.back": "Back to the room list",

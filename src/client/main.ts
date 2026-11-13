@@ -1,4 +1,7 @@
-import { restoreSections } from "./sections.ts";
+import { startChat } from "./chat.ts";
 
 const page = document.body.dataset["page"] ?? "";
-if (page === "chat") restoreSections();
+
+if (page === "chat") {
+  startChat();
+}
