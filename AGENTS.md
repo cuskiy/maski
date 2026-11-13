@@ -102,7 +102,9 @@ ignored.
 ## 2.4 页面与地址
 
 - 每个页面是独立文档，地址不带 `.html`：`/`、`/server/`、`/login/`、`/login-oauth/`、`/register/`、
-  `/reset/`、`/key/`、`/chat/`，另有 `/404.html`。
+  `/reset/`、`/key/`、`/chat/`。
+- `/404.html` 是一个手写的静态文件，不参与生成、不带样式表：一句话说明地址不存在，一个回 `/` 的链接。
+  错误页不值得一套构建流程。
 - 每种语言一套，放在语言前缀下：`/zh-CN/chat/`；英文生成两份，`/` 与 `/en/`，`/en/` 的 canonical
   指回 `/`。
 - 房间不是页面：`/chat/#/room/<id>`。窄屏由 hash 决定显示导航屏还是房间屏；无 hash 或 id 不存在
@@ -393,6 +395,7 @@ client import, so the two cannot disagree.
 | `chat/index.html` | `nav`, `menu`, `sections`, `content`, `header`, `timeline`, `composer`, `tray`, one surface per menu entry |
 | login pages | `form`, `flow-back` (rendered by the script) |
 | `key/index.html` | `gate` |
+| `404.html` | none: a static file in `static/`, one link home |
 
 ## 3.7 Sanitizer and security
 
@@ -435,8 +438,8 @@ client import, so the two cannot disagree.
 
 | where | what | name |
 | --- | --- | --- |
-| `static/` | only what a platform asks for by name: `/robots.txt`, `/sw.js`, `/404.html` | copied verbatim, never hashed |
-| `src/assets/` | images, icons and any file a module or a stylesheet imports | imported, hashed by the bundler |
+| `static/` | only what a platform asks for by name: `/robots.txt`, `/404.html`, and `/sw.js` when it exists | copied verbatim, never hashed |
+| `src/assets/` | images and icons a module, a stylesheet or the page generator needs — never markup | hashed by the bundler, or by the build for a page asset |
 | the crypto wasm | the one file the SDK resolves by its own URL | copied by the build with a hash of its bytes |
 
 **Every case the pipeline must handle, decided once.**
@@ -459,6 +462,9 @@ path beside it. Three consequences are rules:
   figure it needs arrives from the main thread or through a command, never as a bundler URL.
 - **The generator never imports a browser module.** It is Node code: a file the page needs is named in
   the page-asset list and resolved through the manifest, so no DOM module is pulled into the build.
+- **Markup is never an asset.** A page is either generated from a function or written once in
+  `static/`; `src/assets/` holds no HTML, because a second place where markup can live is a second way
+  to build a page.
 
 **A file is imported, not typed into a string.** A module writes
 `import mark from "../assets/mark.svg"` and receives the hashed URL; a stylesheet writes `url(…)` and
