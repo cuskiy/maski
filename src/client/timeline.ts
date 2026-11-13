@@ -2,6 +2,8 @@ import type { Message } from "../core/types.ts";
 import { t } from "../i18n.ts";
 import { el } from "../ui.ts";
 import { openViewer } from "./viewer.ts";
+import { openMenu, type MenuItem } from "./menu.ts";
+import { copyText } from "./clipboard.ts";
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
 
@@ -75,6 +77,22 @@ export class Timeline {
     if (this.pinned) requestAnimationFrame(() => this.scrollToBottom());
   }
 
+  /** The five things a reader can do with a message, minus the ones they are not allowed to do. */
+  private menuFor(message: Message, x: number, y: number): void {
+    const state = get();
+    const own = message.sender === state.session?.userId;
+    const items: MenuItem[] = [];
+    items.push({ label: t("action.copy"), run: () => copyText(message.body, t("action.copied")) });
+    if (message.id.startsWith("$")) {
+      items.push({
+        label: t("action.copyLink"),
+        run: () => copyText(`${location.origin}${location.pathname}#/room/${encodeURIComponent(message.roomId)}/${message.id}`, t("action.copied")),
+      });
+    }
+    if (own) items.push({ label: t("action.redact"), run: () => void this.worker.send({ type: "redact", roomId: message.roomId, eventId: message.id }), danger: true });
+    openMenu(items, x, y);
+  }
+
   private row(message: Message, groupStart: boolean): HTMLElement {
     const own = message.sender === get().session?.userId;
     const row = el("li", { class: `row${own ? " row-own" : ""}${groupStart ? " row-start" : ""}` });
@@ -95,6 +113,16 @@ export class Timeline {
       bubble.append(el("span", { class: `bubble-status is-${message.status}`, text: statusText(message) }));
     }
     bubble.append(el("time", { class: "bubble-time", text: TIME.format(message.ts) }));
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.menuFor(message, event.clientX, event.clientY);
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+      event.preventDefault();
+      const box = row.getBoundingClientRect();
+      this.menuFor(message, box.left + 24, box.top + 12);
+    });
     row.append(avatar, bubble);
     return row;
   }

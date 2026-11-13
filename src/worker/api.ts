@@ -68,6 +68,15 @@ export class WorkerApi {
       case "sticker":
         await this.session.sticker(command.roomId, command.txnId, command.body, command.media);
         return {};
+      case "react":
+        await this.session.react(command.roomId, command.eventId, command.key, command.on);
+        return {};
+      case "edit":
+        await this.session.edit(command.roomId, command.eventId, command.body, command.html);
+        return {};
+      case "redact":
+        await this.session.redact(command.roomId, command.eventId);
+        return {};
       case "markRead":
         await this.session.markRead(command.roomId, command.eventId);
         return {};

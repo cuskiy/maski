@@ -255,6 +255,45 @@ export class WorkerSession {
     return this.client;
   }
 
+  /** An annotation is a reaction event; removing it redacts the one this account sent. */
+  async react(roomId: string, eventId: string, key: string, on: boolean): Promise<void> {
+    const client = this.requireClient();
+    if (on) {
+      await client.sendEvent(roomId, "m.reaction" as never, { "m.relates_to": { rel_type: "m.annotation", event_id: eventId, key } } as never);
+      return;
+    }
+    const self = client.getUserId() ?? "";
+    const container = client.getRoom(roomId)?.relations.getChildEventsForEvent(eventId, "m.annotation", "m.reaction");
+    const bySender = container === undefined ? undefined : container.getAnnotationsBySender();
+    const sent = bySender === undefined || bySender === null ? undefined : bySender[self];
+    for (const event of sent ?? []) {
+      if (String(event.getContent()["key"]) !== key) continue;
+      const id = event.getId();
+      if (id) await client.redactEvent(roomId, id);
+    }
+  }
+
+  /** An edit keeps the original event and carries the new content in a replacement relation. */
+  async edit(roomId: string, eventId: string, body: string, html: string | null): Promise<void> {
+    const client = this.requireClient();
+    const next: Record<string, unknown> = { msgtype: "m.text", body };
+    if (html !== null) {
+      next["format"] = "org.matrix.custom.html";
+      next["formatted_body"] = html;
+    }
+    await client.sendEvent(roomId, "m.room.message" as never, {
+      "m.new_content": next,
+      "m.relates_to": { rel_type: "m.replace", event_id: eventId },
+      msgtype: "m.text",
+      body: `* ${body}`,
+    } as never);
+  }
+
+  async redact(roomId: string, eventId: string): Promise<void> {
+    await this.requireClient().redactEvent(roomId, eventId);
+    await this.requireDb().del("events", eventId);
+  }
+
   async markRead(roomId: string, eventId: string): Promise<void> {
     await this.requireClient().setRoomReadMarkers(roomId, eventId);
   }

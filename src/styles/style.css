@@ -751,6 +751,41 @@ textarea {
   object-fit: contain;
 }
 
+/* one menu for rows */
+
+.menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: var(--space-1);
+  min-inline-size: 10rem;
+  translate: var(--menu-x, 0) var(--menu-y, 0);
+  border: var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--popover);
+  color: var(--page-text);
+
+  &:popover-open {
+    display: grid;
+    gap: 1px;
+  }
+}
+
+.menu-item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: calc(var(--radius-sm) / 2);
+  text-align: start;
+  font-size: var(--text-sm);
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &.is-danger {
+    font-weight: 600;
+  }
+}
+
 /* surfaces */
 
 .surface {
@@ -1177,4 +1212,18 @@ textarea {
   * {
     transition-duration: 1ms;
   }
+}
+
+.copy-note {
+  position: fixed;
+  inset-block-end: var(--space-5);
+  inset-inline: 0;
+  justify-self: center;
+  inline-size: fit-content;
+  margin-inline: auto;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--popover);
+  color: var(--page-text);
+  font-size: var(--text-sm);
 }
