@@ -26,6 +26,19 @@ export class Composer {
     this.render();
   }
 
+  /** Inserting a character keeps the caret where the reader left it. */
+  insert(text: string): void {
+    const start = this.field.selectionStart;
+    const end = this.field.selectionEnd;
+    const before = this.field.value.slice(0, start);
+    const after = this.field.value.slice(end);
+    this.field.value = `${before}${text}${after}`;
+    this.field.setSelectionRange(start + text.length, start + text.length);
+    this.field.focus();
+    this.render();
+    this.onInput();
+  }
+
   private onInput(): void {
     this.render();
     const state = get();

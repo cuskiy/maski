@@ -3,6 +3,7 @@ import { readServer } from "../core/server.ts";
 import { discover } from "./discover.ts";
 import type { Command } from "../protocol/messages.ts";
 import type { Event } from "../protocol/messages.ts";
+import { collectPacks } from "./packs.ts";
 import { WorkerSession } from "./session.ts";
 
 /** One handler per command. Nothing here knows about pages or styles. */
@@ -59,6 +60,14 @@ export class WorkerApi {
         const blob: Blob = await this.session.media(command.media, command.size);
         return { blob };
       }
+      case "packs": {
+        const client = this.session.activeClient();
+        if (!client) return { packs: [] };
+        return { packs: collectPacks(client) };
+      }
+      case "sticker":
+        await this.session.sticker(command.roomId, command.txnId, command.body, command.media);
+        return {};
       case "markRead":
         await this.session.markRead(command.roomId, command.eventId);
         return {};

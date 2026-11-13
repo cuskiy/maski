@@ -46,6 +46,11 @@ export const zhCN = {
 
   "noscript.router": "这个页面需要 JavaScript。",
   "noscript.chat": "消息需要 JavaScript。",
+  "picker.search": "搜索表情与贴纸",
+  "picker.emoji": "表情",
+  "picker.stickers": "贴纸",
+  "picker.empty": "还没有表情包包含这个表情。",
+  "picker.noStickers": "这个房间还没有贴纸包。",
   "viewer.close": "关闭",
   "media.show": "查看图片",
   "media.loading": "正在加载",

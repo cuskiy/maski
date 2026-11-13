@@ -46,6 +46,11 @@ export const en = {
 
   "noscript.router": "This page needs JavaScript.",
   "noscript.chat": "Messages need JavaScript.",
+  "picker.search": "Search emoji and stickers",
+  "picker.emoji": "Emoji",
+  "picker.stickers": "Stickers",
+  "picker.empty": "No pack carries this emoji yet.",
+  "picker.noStickers": "No sticker pack in this room yet.",
   "viewer.close": "Close",
   "media.show": "Show picture",
   "media.loading": "Loading",

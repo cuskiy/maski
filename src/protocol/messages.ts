@@ -15,6 +15,8 @@ export type Command =
   | { type: "retry"; txnId: string; roomId: string }
   | { type: "discard"; txnId: string; roomId: string }
   | { type: "media"; roomId: string; media: Media; size: number }
+  | { type: "packs" }
+  | { type: "sticker"; roomId: string; txnId: string; body: string; media: Media }
   | { type: "markRead"; roomId: string; eventId: string }
   | { type: "typing"; roomId: string; on: boolean };
 

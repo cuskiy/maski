@@ -5,6 +5,7 @@ import { useCatalog, t } from "../i18n.ts";
 import { el } from "../ui.ts";
 import { readAccount } from "./account.ts";
 import { Composer } from "./composer.ts";
+import { Picker } from "./picker.ts";
 import { mountSettings } from "./settings.ts";
 import { Nav } from "./nav.ts";
 import { watchRoute } from "./router.ts";
@@ -27,7 +28,9 @@ export function startChat(): void {
   const worker = new WorkerClient();
   new Nav(navRoot);
   const timeline = new Timeline(timelineRoot, worker);
-  new Composer(composerRoot, worker);
+  const composer = new Composer(composerRoot, worker);
+  const emojiSurface = document.querySelector<HTMLElement>('#surface-emoji');
+  if (emojiSurface) new Picker(emojiSurface, worker, (text) => composer.insert(text), () => get().roomId);
   const settingsBody = document.querySelector<HTMLElement>('[data-region="settings-body"]');
   if (settingsBody) mountSettings(settingsBody, worker);
 

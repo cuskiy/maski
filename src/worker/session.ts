@@ -213,6 +213,31 @@ export class WorkerSession {
     return fetchMedia(this.requireDb(), this.requireClient(), media, size);
   }
 
+  /** A sticker is its own event type, and its body is the shortcode a client shows as a name. */
+  async sticker(roomId: string, txnId: string, body: string, media: Media): Promise<void> {
+    const client = this.requireClient();
+    const content = {
+      body,
+      url: media.url,
+      info: { mimetype: media.mime, w: media.width ?? undefined, h: media.height ?? undefined, size: media.size },
+    };
+    this.postOutbox({ txnId, status: "sending", error: "" });
+    try {
+      await client.sendEvent(roomId, "m.sticker" as never, content as never, txnId);
+      this.postOutbox({ txnId, status: "sent", error: "" });
+    } catch (error) {
+      this.postOutbox({ txnId, status: "failed", error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  get ready(): boolean {
+    return this.client !== null;
+  }
+
+  activeClient(): MatrixClient | null {
+    return this.client;
+  }
+
   async markRead(roomId: string, eventId: string): Promise<void> {
     await this.requireClient().setRoomReadMarkers(roomId, eventId);
   }

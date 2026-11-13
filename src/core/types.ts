@@ -94,6 +94,20 @@ export interface Discovery {
   registration: boolean;
 }
 
+export interface PackImage {
+  shortcode: string;
+  body: string;
+  media: Media;
+}
+
+export interface Pack {
+  id: string;
+  name: string;
+  avatar: Media | null;
+  usage: "emoticon" | "sticker";
+  images: PackImage[];
+}
+
 export interface Keys {
   ready: boolean;
 }
