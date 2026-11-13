@@ -1,21 +1,12 @@
 import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
-import { base } from "../layouts/base.ts";
-import type { PageInput } from "./chat.ts";
+import type { PageContext, PageView } from "./kit.ts";
 
-export function routerPage(input: PageInput): string {
-  const { locale } = input;
+export function routerView({ locale }: PageContext): PageView {
   const c = locale.catalog;
-  return base({
-    c,
-    page: input.page,
-    lang: locale.id,
+  return {
     title: `${t(c, "app.name")} · ${t(c, "app.tagline")}`,
-    description: t(c, "app.description"),
-    canonical: `${input.origin}${locale.path}`,
-    alternates: input.alternates,
-    assets: input.assets,
-    body: html`<main class="router" data-page="router">
+    body: html`<main class="router">
   <h1 class="router-mark">${t(c, "app.name")}</h1>
   <span class="router-spinner" aria-hidden="true"></span>
   <p class="visually-hidden" role="status">${t(c, "router.opening")}</p>
@@ -24,5 +15,5 @@ export function routerPage(input: PageInput): string {
     <p class="note"><a class="link" href="./chat/">${t(c, "router.open")}</a></p>
   </noscript>
 </main>`,
-  }).value;
+  };
 }

@@ -2,18 +2,27 @@ import { describe, expect, it } from "vitest";
 import { en } from "../src/catalogs/en.ts";
 import { zhCN } from "../src/catalogs/zh-CN.ts";
 import { locales } from "../src/catalogs/index.ts";
-import { chatPage } from "../src/pages/chat.ts";
-import { routerPage } from "../src/pages/router.ts";
+import { chatView } from "../src/pages/chat.ts";
+import { keyView } from "../src/pages/key.ts";
+import { loginView } from "../src/pages/login.ts";
+import { oauthView } from "../src/pages/oauth.ts";
+import { registerView } from "../src/pages/register.ts";
+import { routerView } from "../src/pages/router.ts";
+import { serverView } from "../src/pages/server.ts";
+import { base } from "../src/layouts/base.ts";
 import { REGION, SURFACE } from "../src/pages/regions.ts";
 
 const assets = { stylesheet: "/assets/style-x.css", script: "/assets/client-x.js", worker: "/assets/worker-x.js", wasm: "/assets/crypto-x.wasm", icon: "/assets/icon-x.svg" };
 
+const views = { chat: chatView, router: routerView, server: serverView, login: loginView, oauth: oauthView, register: registerView, key: keyView };
+
 function pages(): Array<{ name: string; html: string }> {
   const list: Array<{ name: string; html: string }> = [];
   for (const locale of locales) {
-    const shared = { locale, assets, origin: "", page: "x", alternates: [] };
-    list.push({ name: `${locale.id}/chat`, html: chatPage(shared) });
-    list.push({ name: `${locale.id}/router`, html: routerPage(shared) });
+    for (const [name, view] of Object.entries(views)) {
+      const context = { locale, assets, path: `/${name}/`, localePath: "/", alternates: [] };
+      list.push({ name: `${locale.id}/${name}`, html: base({ c: locale.catalog, page: name, lang: locale.id, title: view(context).title, description: "x", canonical: "/", alternates: [], assets, body: view(context).body }).value });
+    }
   }
   return list;
 }
@@ -49,7 +58,7 @@ describe("pages", () => {
   });
 
   it("renders copy from the catalog, not from the component", () => {
-    const zh = pages()[2]?.html ?? "";
+    const zh = pages().find((page) => page.name === "zh-CN/chat")?.html ?? "";
     expect(zh).toContain(zhCN["composer.placeholder"]);
     expect(zh).not.toContain(en["composer.placeholder"]);
   });

@@ -157,7 +157,7 @@ textarea {
 
 .link {
   text-decoration: underline;
-  text-decoration-color: var(--line);
+  text-decoration-color: color-mix(in oklab, currentcolor 42%, transparent);
   text-underline-offset: 0.2em;
 
   &:hover {
@@ -561,6 +561,125 @@ textarea {
   max-block-size: calc(100dvh - 8rem);
   padding: var(--space-4);
   overflow: auto;
+}
+
+/* sign-in and the key gate */
+
+.auth {
+  display: grid;
+  place-items: center;
+  min-block-size: 100dvh;
+  padding: var(--space-6) var(--space-4) var(--space-7);
+  background: var(--page);
+}
+
+.auth-panel {
+  display: grid;
+  gap: var(--space-4);
+  inline-size: min(100%, 24rem);
+}
+
+.auth-mark {
+  color: var(--page-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.auth-title {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-display);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.auth-hint {
+  max-inline-size: 34ch;
+  color: var(--page-text-muted);
+  text-wrap: pretty;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field-label {
+  color: var(--page-text-muted);
+  font-size: var(--text-sm);
+}
+
+.field-hint {
+  color: var(--page-text-muted);
+  font-size: var(--text-xs);
+}
+
+.input {
+  inline-size: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--surface-text);
+
+  &:focus-visible {
+    border-color: var(--focus);
+    outline-offset: 1px;
+  }
+
+  &::placeholder {
+    color: var(--surface-text-muted);
+  }
+}
+
+.button-primary {
+  justify-self: start;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-active);
+  color: var(--surface-text);
+  font-size: var(--text-md);
+  font-weight: 600;
+  transition: background var(--ease);
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.auth-methods {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.lang {
+  position: fixed;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.lang-item {
+  color: var(--page-text-muted);
+
+  &:hover,
+  &[aria-current="page"] {
+    color: var(--page-text);
+  }
 }
 
 /* router page */

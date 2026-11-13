@@ -5,7 +5,7 @@ import { REGION, SURFACE } from "../pages/regions.ts";
 import { composer } from "../components/composer.ts";
 import { header } from "../components/header.ts";
 import { nav } from "../components/nav.ts";
-import { icons, surface } from "../components/surface.ts";
+import { surface } from "../components/surface.ts";
 import { timeline } from "../components/timeline.ts";
 
 export interface AppShellInput {
@@ -24,9 +24,7 @@ export function appShell({ c, backHref }: AppShellInput): Html {
     ${composer(c)}
   </main>
 </div>
-${surfaces(c)}
-<button class="nav-toggle" type="button" aria-label="${t(c, "chat.back")}" popovertarget="nav-drawer">${icons.back}</button>
-${drawer(c)}`;
+${surfaces(c)}`;
 }
 
 function surfaces(c: Catalog): Html {
@@ -42,10 +40,4 @@ function surfaces(c: Catalog): Html {
     { id: SURFACE.emoji, key: "surface.emoji" },
   ] as const;
   return html`${list.map((entry) => surface({ c, id: entry.id, titleKey: entry.key }))}`;
-}
-
-function drawer(c: Catalog): Html {
-  return html`<div class="drawer" id="nav-drawer" popover="auto">
-  <p class="note">${t(c, "noscript.surface")}</p>
-</div>`;
 }
