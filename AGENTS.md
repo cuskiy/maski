@@ -79,14 +79,24 @@ origin, the dev server host and port, the default homeserver, and the limits the
 The generator, the dev server and the client import it; nothing else writes a port or an address of
 its own. Copy is not configuration and stays in the catalogs.
 
-## 1.2.2 Previewing
+## 1.2.2 Commands
+
+One command per intent; the tools behind them are an implementation detail.
 
 | command | what it does |
 | --- | --- |
-| `npm run dev` | types and lint once, then type-check on save, build in watch mode, serve `dist/` on http://localhost:5173/ and reload after each build |
-| `npm run serve` | serve the built `dist/` on the same port, without the reload |
-| `npm run build` | `tsc` and the linters first, then write `dist/` and the manifest |
-| `npm run build:only` | the bundle and pages without the gates, for a watch loop that already ran them |
+| `npm run dev` | types, lint and style once, then the bundler in watch mode, a type checker in watch mode, and the site on http://localhost:5173/ with a reload after each build |
+| `npm run build` | the whole gate: types, lint, tests, bundle, output audit, contracts |
+| `npm run check` | the same as `build` — a build that was not checked is not the build we ship |
+| `npm run bundle` | the bundle and the pages, without the gates, for a watch loop that already ran them |
+| `npm run types` | `tsc --noEmit` |
+| `npm run lint` | Oxlint type-aware, then Stylelint over `src/` and `static/` |
+| `npm run test` | `node --test` over `test/*.test.ts` |
+| `npm run audit` | the output audit: generated pages equal the generator, every asset exists and is hashed |
+| `npm run contracts` | the eight contracts of 3.15.1 |
+| `npm run features` | the platform dataset: `-- <id> --require 2026` |
+| `npm run serve` | serve the built `dist/` without the reload |
+| `npm run clean` | remove `dist/` and `build/` |
 
 The dev server injects one `<script>` into each HTML response and nothing into the files, so the
 audit still compares the generated output byte for byte. It answers `application/wasm`, falls back

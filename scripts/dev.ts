@@ -1,41 +1,65 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../src/config.ts";
 import { serve } from "./static.ts";
 
-const root = fileURLToPath(new URL("../dist", import.meta.url));
+const root = fileURLToPath(new URL("..", import.meta.url));
+const bin = (name: string): string => join(root, "node_modules", ".bin", name);
 const port = Number(process.env["PORT"] ?? config.serve.port);
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
-/** The same gates `npm run check` uses, so a broken type or a stray marker shows up immediately. */
-function gate(args: readonly string[]): Promise<number> {
-  return new Promise((resolve) => {
-    const child = spawn(npm, args, { stdio: "inherit" });
-    child.on("exit", (code) => resolve(code ?? 1));
+/** A gate is one line: what ran, how long it took, and its output only when it fails. */
+async function gate(label: string, command: string, args: readonly string[]): Promise<boolean> {
+  const started = Date.now();
+  const output: string[] = [];
+  const code = await new Promise<number>((resolve) => {
+    const child = spawn(command, [...args], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.on("data", (chunk: Buffer) => output.push(chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => output.push(chunk.toString()));
+    child.on("error", () => resolve(1));
+    child.on("exit", (status) => resolve(status ?? 1));
   });
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  if (code !== 0) {
+    process.stderr.write(output.join(""));
+    process.stderr.write(`✗ ${label}\n`);
+    return false;
+  }
+  process.stdout.write(`✓ ${label} (${seconds}s)\n`);
+  return true;
 }
 
-for (const task of [["run", "code"], ["run", "lint"]]) {
-  const code = await gate(task);
-  if (code !== 0) {
-    process.stderr.write(`dev stopped: ${task.join(" ")} failed\n`);
-    process.exit(code);
+const gates: Array<[string, string, string[]]> = [
+  ["types", bin("tsc"), ["--noEmit", "--pretty", "false"]],
+  ["lint", bin("oxlint"), ["--type-aware", "--deny-warnings", "--import-plugin", "--promise-plugin", "src", "scripts", "test"]],
+  ["style", bin("stylelint"), ["src/**/*.css", "static/**/*.css", "--max-warnings=0"]],
+];
+
+for (const [label, command, args] of gates) {
+  if (!(await gate(label, command, args))) {
+    process.stderr.write("dev stopped before starting\n");
+    process.exit(1);
   }
 }
 
-const child = (command: string, args: readonly string[]): ReturnType<typeof spawn> =>
-  spawn(command, args, { stdio: "inherit" });
+const children: ChildProcess[] = [];
+const start = (label: string, command: string, args: readonly string[]): void => {
+  const child = spawn(command, [...args], { cwd: root, stdio: "inherit", env: { ...process.env, FORCE_COLOR: "1" } });
+  child.on("error", () => process.stderr.write(`${label} could not start\n`));
+  children.push(child);
+};
 
-const builder = child(npm, ["run", "build:only", "--", "--watch"]);
-const typecheck = child(npm, ["run", "code", "--", "--watch", "--preserveWatchOutput"]);
-const server = await serve(root, port, { reload: true });
-process.stdout.write(`dev on http://${config.serve.host}:${String(port)}/ — types are checked on save, the page reloads after each build\n`);
+start("bundle", process.execPath, ["scripts/build.ts", "--watch"]);
+start("types", bin("tsc"), ["--noEmit", "--watch", "--preserveWatchOutput", "--pretty", "false"]);
 
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    builder.kill();
-    typecheck.kill();
-    server.close();
-    process.exit(0);
-  });
-}
+const server = await serve(join(root, "dist"), port, { reload: true });
+process.stdout.write(`\nmaski dev → http://${config.serve.host}:${String(port)}/  (ctrl-c stops)\n`);
+
+const stop = (): void => {
+  for (const child of children) child.kill();
+  server.close();
+  process.stdout.write("\nstopped\n");
+  process.exit(0);
+};
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, stop);
