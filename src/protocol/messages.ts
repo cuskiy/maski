@@ -7,7 +7,7 @@ export type Command =
   | { type: "register"; baseUrl: string; username: string; password: string }
   | { type: "logout" }
   | { type: "keyStatus" }
-  | { type: "unlock"; input: string }
+  | { type: "unlock"; input: string; password: string }
   | { type: "resetKey"; password: string }
   | { type: "open"; roomId: string }
   | { type: "older"; roomId: string; keep: number }

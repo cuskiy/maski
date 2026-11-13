@@ -15,6 +15,7 @@ export function keyView({ locale, languages }: PageContext): PageView {
       hint: t(c, "auth.key.hint"),
       body: html`<form class="form" data-flow="unlock">
     ${field({ id: "recovery", label: t(c, "auth.key.recovery"), type: "text", autocomplete: "off" })}
+    ${field({ id: "key-password", label: t(c, "auth.key.password"), type: "password", autocomplete: "current-password" })}
     ${submit(t(c, "auth.key.unlock"))}
   </form>
   <form class="form" data-flow="reset">

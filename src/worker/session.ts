@@ -116,13 +116,13 @@ export class WorkerSession {
   }
 
   /** One path out of the gate: the recovery key or passphrase that opens secret storage. */
-  async unlock(input: string): Promise<Keys> {
+  async unlock(input: string, password: string): Promise<Keys> {
     // The key was checked and the cross-signing keys were imported, so this device is open now.
     // Asking the predicate again would race the signing round-trip and close the door again.
     const client = this.requireClient();
     this.secretKey = await secretKeyFor(client, input);
     try {
-      await openKeys(client);
+      await openKeys(client, password);
     } finally {
       this.secretKey = null;
     }

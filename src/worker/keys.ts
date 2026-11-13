@@ -35,14 +35,21 @@ export async function secretKeyFor(client: MatrixClient, input: string): Promise
  * Restoring is one path: with the key available to the client's callbacks, the SDK imports the
  * cross-signing keys (which signs this device) and reopens the backup with what it finds there.
  */
-export async function openKeys(client: MatrixClient): Promise<void> {
+export async function openKeys(client: MatrixClient, password: string): Promise<void> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error("restore");
   try {
-    await crypto.bootstrapCrossSigning({});
+    const userId = client.getUserId() ?? "";
+    await crypto.bootstrapCrossSigning({
+      // Signing this device uploads a signature, and the server asks the account to confirm that.
+      authUploadDeviceSigningKeys: (makeRequest) =>
+        makeRequest({ type: "m.login.password", identifier: { type: "m.id.user", user: userId }, password }),
+    });
     await crypto.bootstrapSecretStorage({});
   } catch (cause) {
-    throw new Error("restore", { cause });
+    // The cause is a protocol message, not a secret, and without it the failure is a guess.
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(message.includes("importCrossSigningKeys") ? "no-cross-signing" : `restore: ${message}`, { cause });
   }
   // A backup is not the gate: the keys are. When the account has none, or its key is not in secret
   // storage, the device still opens and the timeline keeps saying what it cannot read.

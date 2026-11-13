@@ -120,7 +120,7 @@ function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLForm
     const button = form.querySelector("button");
     if (button) button.disabled = true;
     void worker
-      .send<Keys>({ type: "unlock", input: value("recovery") })
+      .send<Keys>({ type: "unlock", input: value("recovery"), password: value("key-password") })
       .then((keys) => {
         if (!keys.ready) {
           if (button) button.disabled = false;
@@ -142,6 +142,7 @@ function messageOf(cause: unknown): string {
   const text = cause instanceof Error ? cause.message : "";
   if (text === "no-keys") return t("auth.key.noKeys");
   if (text === "invalid") return t("auth.key.invalid");
+  if (text === "no-cross-signing") return t("auth.key.noCrossSigning");
   return t("auth.key.failed");
 }
 

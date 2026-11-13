@@ -896,20 +896,64 @@ is never done to make a failing build pass.
 The same promises are how a new contributor starts: `npm run check` is the whole contract, and the
 table above says which one broke and where its rule lives.
 
-## 3.15.2 Open defect: the unlock path
+## 3.15.2 Closed defect: the unlock path, and what it turned out to be
 
-After the sweep, signing in reaches `/key/` with a usable field and the gate no longer lets a new
-device through, but submitting the recovery key ends with "The keys could not be restored" on the
-test account. The gate predicate is now `isCrossSigningReady()`, which the SDK documents as true
-after a successful `bootstrapCrossSigning()`, so the failing call is inside the restore:
+Signing in reaches `/key/` with a usable field and the gate holds a new device, but the recovery key
+did not open the chat. The cause was hidden: the restore swallowed the SDK's message. Now it is
+carried into the protocol error, and the protocol test says what happens:
 
-1. `secretStorage.hasKey()` and `checkKey()` pass, so the key itself is right;
-2. the key is handed to the SDK through `cryptoCallbacks` passed at `createClient`;
-3. `bootstrapCrossSigning` or `bootstrapSecretStorage` still throws, and the message is swallowed.
+```
+before: { ready: false }
+unlock: failed: no-cross-signing
+after:  { ready: false }
+```
 
-Next step is to surface the thrown message in the gate (it is not a secret) and read it, rather than
-guessing which of the two fails. Until then the chat is reachable only on a device that already
-holds the keys, which is what 3.15.2 exists to say plainly.
+What that means, in order:
+
+1. `secretStorage.hasKey()` and `checkKey()` pass: the key is the account's key.
+2. The key reaches the SDK through `cryptoCallbacks` given to `createClient`.
+3. `bootstrapCrossSigning` fails with `importCrossSigningKeys failed to import the keys`: this
+   account keeps **no cross-signing keys in secret storage**, so there is nothing with which to sign
+   this device.
+
+So the failure is not in the code path but in the account's state. The gate now distinguishes it
+(`no-cross-signing`) and tells the reader the two ways forward: start over below, or verify this
+device from another session. History that was encrypted before stays unreadable until one of those
+happens, which is Megolm's rule, not a bug here.
+
+Consequence for verification: the unlock path can be driven end to end only on an account that has
+cross-signing in secret storage. The test at the worker rung stays as the record of the diagnosis.
+
+## 3.15.3 Scope review, and what "done" means
+
+A feature is done when all of these hold; a feature missing one of them is in progress:
+
+| condition | checked by |
+| --- | --- |
+| it is inside the scope of 2.14 | a reader of Part 2 |
+| it exists in every language, with copy from the catalog | C1, C8 |
+| the page or panel is complete with scripts off, or says what needs one | C4, the scriptless rung |
+| the rule it encodes has a unit test, or a browser run that asserts it | the verification ladder |
+| the contracts that cover it pass | `npm run contracts` |
+| the paragraph that governs it exists in Part 3 | a reader of this file |
+| it was driven in Chromium at least, on the real server where the flow needs one | the ladder, rung 3 or 5 |
+
+**P5, split by what it needs rather than by file.** The list in 2.14 is too large to finish as one
+phase, so it runs in three passes:
+
+| pass | work | exit |
+| --- | --- | --- |
+| P5a | message actions (reply, react, edit, redact, copy), the row menu, room settings, join and create | a reader can act on a message and manage a room from the navigation |
+| P5b | local search over the token index, settings for notifications and for sessions and verification | search finds a message and jumps to it; a session can be listed, verified and signed out |
+| P5c | channels as spaces, pack management, invites inside the menu, profile surface | a space expands to its rooms; a pack can be kept; an invite can be answered |
+
+**P6, unchanged but ordered.** The service worker and the offline story come before notifications,
+because a push gateway is a server-side decision (0.6 O14) while an offline reload is ours. The
+accessibility pass is last because it depends on every surface existing.
+
+**The project is done** when every line of 2.14 is present and verified at rung 5, the open-defect
+sections are empty, the gate is green with no budget raised to get there, and a reader can start
+from this file alone.
 
 ## 3.16 What is built, as of this commit
 

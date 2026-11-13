@@ -40,6 +40,8 @@ export const zhCN = {
   "auth.key.invalid": "这个密钥打不开该账户。",
   "auth.key.failed": "无法恢复密钥。",
   "auth.reset.failed": "服务器没有接受这个密码。",
+  "auth.key.noCrossSigning": "这个账户的签名密钥不在 secret storage 里。可以在下面重新开始，或从另一台会话验证这台设备。",
+  "auth.key.password": "账户密码，用于签署这台设备",
   "auth.key.reset": "用新密钥重新开始",
   "auth.key.unlock": "解锁",
 
