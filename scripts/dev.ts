@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { watch } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../src/config.ts";
@@ -42,20 +43,45 @@ for (const [label, command, args] of gates) {
   }
 }
 
+const PAGE_DIRS = ["src/catalogs", "src/components", "src/layouts", "src/pages", "src/lib"] as const;
+
 const children: ChildProcess[] = [];
-const start = (label: string, command: string, args: readonly string[]): void => {
+const spawnChild = (label: string, command: string, args: readonly string[]): ChildProcess => {
   const child = spawn(command, [...args], { cwd: root, stdio: "inherit", env: { ...process.env, FORCE_COLOR: "1" } });
   child.on("error", () => process.stderr.write(`${label} could not start\n`));
   children.push(child);
+  return child;
 };
 
-start("bundle", process.execPath, ["scripts/build.ts", "--watch"]);
-start("types", bin("tsc"), ["--noEmit", "--watch", "--preserveWatchOutput", "--pretty", "false"]);
+let bundle = spawnChild("bundle", process.execPath, ["scripts/build.ts", "--watch"]);
+spawnChild("types", bin("tsc"), ["--noEmit", "--watch", "--preserveWatchOutput", "--pretty", "false"]);
+
+const restartBundle = (): void => {
+  const previous = bundle;
+  const index = children.indexOf(previous);
+  if (index >= 0) children.splice(index, 1);
+  previous.kill();
+  bundle = spawnChild("bundle", process.execPath, ["scripts/build.ts", "--watch"]);
+};
+
+let restartTimer: ReturnType<typeof setTimeout> | null = null;
+// Page sources are outside esbuild's watch entries; restart the generator so it imports them fresh.
+const scheduleRestart = (): void => {
+  if (restartTimer !== null) clearTimeout(restartTimer);
+  restartTimer = setTimeout(() => {
+    restartTimer = null;
+    restartBundle();
+  }, 150);
+};
+
+const watchers = PAGE_DIRS.map((dir) => watch(join(root, dir), { recursive: true }, scheduleRestart));
 
 const server = await serve(join(root, "dist"), port, { reload: true });
 process.stdout.write(`\nmaski dev → http://${config.serve.host}:${String(port)}/  (ctrl-c stops)\n`);
 
 const stop = (): void => {
+  if (restartTimer !== null) clearTimeout(restartTimer);
+  for (const watcher of watchers) watcher.close();
   for (const child of children) child.kill();
   server.close();
   process.stdout.write("\nstopped\n");
