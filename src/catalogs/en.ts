@@ -4,7 +4,6 @@ export const en = {
   "app.description": "A Matrix client that keeps your messages on your device",
 
   "lang.name": "English",
-  "lang.short": "EN",
   "lang.label": "Language",
 
   "noscript.auth": "Signing in needs JavaScript.",

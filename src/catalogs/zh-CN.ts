@@ -4,7 +4,6 @@ export const zhCN = {
   "app.description": "把你的消息留在自己设备上的 Matrix 客户端",
 
   "lang.name": "简体中文",
-  "lang.short": "中文",
   "lang.label": "语言",
 
   "noscript.auth": "登录需要 JavaScript。",

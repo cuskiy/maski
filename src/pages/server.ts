@@ -18,7 +18,7 @@ export function serverView({ locale, languages }: PageContext): PageView {
     ${field({ id: "homeserver", label: t(c, "auth.server.label"), type: "text", autocomplete: "url", value: config.homeserver.default })}
     ${submit(t(c, "auth.server.submit"))}
   </form>`,
-      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
+      language: languageSwitch(languages, t(c, "lang.label")),
       note: t(c, "noscript.auth"),
     }),
   };

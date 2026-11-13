@@ -23,7 +23,7 @@ export function keyView({ locale, languages }: PageContext): PageView {
     <button class="button-quiet" type="submit">${t(c, "auth.key.reset")}</button>
   </form>
   <p class="key-out" data-region="key-out" hidden></p>`,
-      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
+      language: languageSwitch(languages, t(c, "lang.label")),
       note: t(c, "noscript.key"),
     }),
   };

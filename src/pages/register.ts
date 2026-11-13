@@ -19,7 +19,7 @@ export function registerView({ locale, localePath, languages }: PageContext): Pa
     ${submit(t(c, "auth.register.submit"))}
   </form>`,
       footer: links([{ label: t(c, "auth.register.existing"), href: `${localePath}login/` }]),
-      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
+      language: languageSwitch(languages, t(c, "lang.label")),
       note: t(c, "noscript.auth"),
     }),
   };

@@ -22,7 +22,7 @@ export function loginView({ locale, localePath, languages }: PageContext): PageV
         { label: t(c, "auth.login.register"), href: `${localePath}register/` },
         { label: t(c, "auth.login.other"), href: `${localePath}login-oauth/` },
       ]),
-      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
+      language: languageSwitch(languages, t(c, "lang.label")),
       note: t(c, "noscript.auth"),
     }),
   };

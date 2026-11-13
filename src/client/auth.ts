@@ -97,10 +97,23 @@ function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLForm
   const form = document.querySelector<HTMLFormElement>('form[data-flow="unlock"]');
   const account = readAccount();
   if (!form || account === null) return;
-  const start = worker.send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account.hash, wasm: worker.wasm() });
-  void start.then((state) => {
-    if (state.keys?.ready === true) location.replace("../chat/");
-  }).catch(() => undefined);
+
+  // The field is disabled until the check settles: otherwise a late answer navigates away under
+  // the reader's hands, which is what a half-typed key felt like.
+  for (const control of form.querySelectorAll("input, button")) (control as HTMLInputElement).disabled = true;
+  void worker
+    .send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account.hash, wasm: worker.wasm() })
+    .then((state) => {
+      if (state.keys?.ready === true) {
+        location.replace("../chat/");
+        return;
+      }
+      for (const control of form.querySelectorAll("input, button")) (control as HTMLInputElement).disabled = false;
+      form.querySelector("input")?.focus();
+    })
+    .catch(() => {
+      for (const control of form.querySelectorAll("input, button")) (control as HTMLInputElement).disabled = false;
+    });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();

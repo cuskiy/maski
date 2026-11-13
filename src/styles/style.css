@@ -535,7 +535,7 @@ textarea {
   place-items: center;
   inline-size: var(--avatar);
   block-size: var(--avatar);
-  border-radius: calc(var(--radius) * 0.7);
+  border-radius: 50%;
   background: var(--surface-active);
   color: var(--surface-text-muted);
   font-size: var(--text-sm);
@@ -924,8 +924,11 @@ textarea {
 }
 
 .lang-button {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--control-size) + 0.35rem);
+  block-size: calc(var(--control-size) + 0.35rem);
+  border-radius: 50%;
   color: var(--page-text-muted);
   font-size: var(--text-sm);
 
@@ -937,15 +940,19 @@ textarea {
 
 .lang-menu {
   position: fixed;
-  inset: auto var(--space-4) calc(var(--space-4) + 2rem) auto;
-  display: grid;
-  gap: var(--space-1);
+  inset: auto var(--space-4) calc(var(--space-4) + 2.6rem) auto;
   min-inline-size: 9rem;
   padding: var(--space-2);
   border: var(--rule);
   border-radius: var(--radius);
   background: var(--popover);
   color: var(--page-text);
+
+  /* A display on the popover itself would keep it on screen while it is closed */
+  &:popover-open {
+    display: grid;
+    gap: var(--space-1);
+  }
 }
 
 .lang-item {
@@ -1064,8 +1071,6 @@ textarea {
 }
 
 .settings-lang-menu {
-  display: grid;
-  gap: var(--space-1);
   min-inline-size: 9rem;
   margin-inline-start: var(--space-3);
   padding: var(--space-2);
@@ -1073,6 +1078,11 @@ textarea {
   border-radius: var(--radius);
   background: var(--popover);
   color: var(--page-text);
+
+  &:popover-open {
+    display: grid;
+    gap: var(--space-1);
+  }
 
   & .is-current {
     background: var(--surface-active);

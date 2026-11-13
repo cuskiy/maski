@@ -15,7 +15,7 @@ export function oauthView({ locale, localePath, languages }: PageContext): PageV
       hint: t(c, "auth.oauth.hint"),
       body: html`<div class="auth-methods" data-flow="oauth"></div>`,
       footer: html`<nav class="auth-links"><a class="link" href="${localePath}login/">${t(c, "auth.login.submit")}</a></nav>`,
-      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
+      language: languageSwitch(languages, t(c, "lang.label")),
       note: t(c, "noscript.auth"),
     }),
   };
