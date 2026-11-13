@@ -38,18 +38,17 @@ function wireServer(worker: WorkerClient, fail: (message: string, form: HTMLForm
   if (!form) return;
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const typed = readServer(value("homeserver"));
-    if (typed === null) {
+    if (readServer(value("homeserver")) === null) {
       fail(t("auth.server.invalid"), form);
       return;
     }
     const button = form.querySelector("button");
     if (button) button.disabled = true;
     void worker
-      .send<Discovery>({ type: "discover", baseUrl: typed.baseUrl })
+      .send<Discovery>({ type: "discover", address: value("homeserver") })
       .then((discovery) => {
         const page = discovery.password ? "login" : "login-oauth";
-        location.assign(`../${page}/?server=${encodeURIComponent(discovery.baseUrl)}`);
+        location.assign(`../${page}/?server=${encodeURIComponent(discovery.baseUrl)}&name=${encodeURIComponent(discovery.serverName)}`);
       })
       .catch(() => {
         if (button) button.disabled = false;

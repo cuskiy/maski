@@ -36,6 +36,24 @@ summarised and brought in line with the current design. **Design** is the engine
 
 A change that needs one of these contradicted is a discussion, not an edit.
 
+## 1.2.1 The specification is on disk
+
+`past/spec/` is a shallow clone of `matrix-org/matrix-spec` (checked 2026-11-13 at `801afa6`), and
+`past/git/matrix-js-sdk` is the client library. Consult them **before** writing or changing anything
+that touches the protocol — not from memory, not from a blog post:
+
+| question | where |
+| --- | --- |
+| an endpoint, its fields, its errors | `past/spec/content/client-server-api/`, `rooms/`, `push-gateway-api.md` |
+| a data type or grammar (MXID, server name, event) | `past/spec/data-definitions/`, `past/spec/appendices.md` |
+| a proposal Matrix is pushing | `past/spec/content/proposals.md`, and MSCs via web search |
+| how the library implements it | `past/git/matrix-js-sdk/src/` |
+| what a real client does | `past/git/cinny/src/` |
+
+A specification statement wins over a library behaviour; where the library deviates, the deviation is
+what we have to work with, and it is recorded. `grep -rn` in that checkout is the normal first move:
+`grep -rn "well-known/matrix/client" past/spec/content | head`.
+
 ## 1.3 How the work is done
 
 - One module at a time, in the dependency order of 3.2.
@@ -587,6 +605,28 @@ not a fact.
 **Four questions** before a feature is used: does the design need the behaviour at all; does what we
 have already do the job; is the feature larger than the need; does it replace code or add a second way
 to spell the same thing. A feature that is available but unused is listed here with its reason.
+
+## 3.10.1 Discovery, as the specification states it
+
+`past/spec/content/client-server-api/_index.md` §"Well-known URIs" is the authority. The flow:
+
+1. Take the server name from the Matrix ID (the part after the first colon), or from what the reader
+   typed when it is a bare host.
+2. `GET https://<server name>/.well-known/matrix/client`, following 30x redirects.
+3. 404 → ignore, and fall back to `https://<server name>`; any other non-200 or an empty body → tell
+   the reader, do not guess; unparsable JSON → the same.
+4. `m.homeserver.base_url` is the client-server base; missing → tell the reader; not a URL → fail.
+5. Validate it against `/_matrix/client/versions` and its response shape.
+6. `base_url` may carry a path and a trailing slash; both are handled.
+
+Two things this implementation deliberately does not do. `m.identity_server` is ignored: nothing in
+the design uses an identity server. `m.server` in `/.well-known/matrix/server` is federation and
+belongs to the homeserver, not to us: a client discovers the *client-server* base, and the user's
+Matrix ID keeps the server name the person typed (`@maski:unredacted.org` even when the API lives at
+`matrix.unredacted.org`).
+
+A typed URL takes the other branch: it is the base URL as given, and no well-known is consulted,
+because a reader who wrote `https://matrix.example.org` has already named the API.
 
 ## 3.11 Phases
 

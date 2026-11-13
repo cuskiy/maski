@@ -89,6 +89,7 @@ export interface Window {
 
 export interface Discovery {
   baseUrl: string;
+  serverName: string;
   password: boolean;
   registration: boolean;
 }

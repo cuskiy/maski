@@ -2,7 +2,7 @@ import type { Keys, Media, Message, Outbox, Room, Session, Window } from "../cor
 
 export type Command =
   | { type: "start"; accountHash: string | null; wasm: string }
-  | { type: "discover"; baseUrl: string }
+  | { type: "discover"; address: string }
   | { type: "login"; baseUrl: string; user: string; password: string }
   | { type: "logout" }
   | { type: "keyStatus" }
