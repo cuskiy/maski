@@ -38,7 +38,8 @@ A change that needs one of these contradicted is a discussion, not an edit.
 - Correctness first, then human readability: domain names, straight lines, early returns, explicit
   data, no abbreviation a newcomer has to decode.
 - One module, one job; the file name says it. No abstraction before the third repetition.
-- One implementation per boundary. A second way to do the same thing is a defect.
+- One implementation per boundary. A second way to do the same thing is a defect: a case the choke
+  point does not cover extends that choke point, and is never worked around beside it.
 - No dead code, unused export, TODO, stub, placeholder or fake control. A missing feature is absent.
 - A comment only states what the code cannot: a protocol quirk, a security boundary, a browser
   behaviour, an invariant. One line, English, no trailing punctuation.
@@ -424,6 +425,27 @@ client import, so the two cannot disagree.
 | `src/assets/` | images, icons and any file a module or a stylesheet imports | imported, hashed by the bundler |
 | the crypto wasm | the one file the SDK resolves by its own URL | copied by the build with a hash of its bytes |
 
+**Every case the pipeline must handle, decided once.**
+
+| who needs the file | mechanism | example |
+| --- | --- | --- |
+| a client module | `import url from "../assets/x.png"` returns the hashed URL | an image the timeline draws |
+| a stylesheet | `url(…)` inside the CSS, rewritten by the bundler | a mask or a cursor |
+| the generated page | one lookup into the manifest, `asset("icon.svg")`, from a declared page-asset list | `<link rel="icon">` |
+| the client, for a file nothing imports | a `<meta>` tag written from the manifest | worker, wasm, service worker |
+| the service worker | a generated file with the manifest inlined | `/sw.js` |
+| the platform, by fixed name | copied from `static/` | `/robots.txt`, `/404.html` |
+
+There is no seventh mechanism, and a change that needs one extends this table instead of adding a
+path beside it. Three consequences are rules:
+
+- **Icons that follow `currentColor` are not files.** They are small typed functions returning `<svg>`;
+  a file loaded through a URL cannot inherit the text colour, so it would need a second icon system.
+- **The worker never imports an asset.** Its bundle resolves relative URLs at a different depth, and a
+  figure it needs arrives from the main thread or through a command, never as a bundler URL.
+- **The generator never imports a browser module.** It is Node code: a file the page needs is named in
+  the page-asset list and resolved through the manifest, so no DOM module is pulled into the build.
+
 **A file is imported, not typed into a string.** A module writes
 `import mark from "../assets/mark.svg"` and receives the hashed URL; a stylesheet writes `url(…)` and
 the bundler rewrites it; a file the *generator* has to reference, and nothing imports, is read out of
@@ -443,10 +465,6 @@ service worker and the whole bundle together, and the reader reloads the client 
 **content hash everywhere**; the only stable names are the four platform paths, and the only file that
 is both stable and ours — the favicon — is copied twice, the stable path for the browser's probe and
 the hashed path for our `<link>`.
-
-**Assets the page hands to the client.** The worker, the crypto wasm and the service worker cannot be
-imported by the page, so the generator writes them into `<meta>` tags from the manifest:
-`maski:worker`, `maski:wasm`, `maski:sw`. The client reads a tag; there is no generated module.
 
 **The wasm** is copied by the build with a hash of its bytes, because esbuild leaves the SDK's
 `new URL(…, import.meta.url)` untouched. The worker calls `initAsync(wasm)` before `initRustCrypto`, so
