@@ -397,6 +397,10 @@ export class Timeline {
     openMenu(items, x, y);
   }
 
+  atBottom(): boolean {
+    return this.pinned;
+  }
+
   scrollToBottom(): void {
     this.root.scrollTop = this.root.scrollHeight;
   }

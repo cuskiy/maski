@@ -41,7 +41,10 @@ export function startChat(): void {
     shell.dataset["room"] = room === null ? "false" : "true";
     drawHeader(header, room);
     drawNotice(timelineRoot, state.phase, timeline);
-    if (state.phase === "ready") markRead(state.roomId, state.messages.at(-1)?.id ?? "");
+    const newest = state.messages.at(-1) ?? null;
+    if (state.phase === "ready" && room !== null && newest !== null && newest.roomId === state.roomId) {
+      markRead(state.roomId, newest.id);
+    }
   };
 
   subscribe(["phase", "rooms", "roomId", "messages"], draw);
@@ -68,9 +71,21 @@ export function startChat(): void {
     if (event.event === "ready") applySession(event.session, event.keys);
   });
 
+  let marked = "";
+  let pending = "";
+
   const markRead = (roomId: string | null, eventId: string): void => {
-    if (roomId === null || !eventId.startsWith("$")) return;
-    void worker.send({ type: "markRead", roomId, eventId });
+    if (roomId === null || !eventId.startsWith("$") || !timeline.atBottom()) return;
+    const key = `${roomId}:${eventId}`;
+    if (marked === key || pending === key) return;
+    pending = key;
+    void worker
+      .send({ type: "markRead", roomId, eventId })
+      .catch(() => undefined)
+      .finally(() => {
+        marked = key;
+        if (pending === key) pending = "";
+      });
   };
 
   watchRoute((roomId) => {
@@ -92,15 +107,14 @@ export function startChat(): void {
 }
 
 function drawHeader(header: HTMLElement, room: Room | null): void {
-  const back = header.querySelector("a");
-  header.replaceChildren();
+  header.hidden = room === null;
+  const text = header.querySelector<HTMLElement>(".room-head-text");
+  if (!text) return;
+  text.replaceChildren();
   if (room === null) return;
-  if (back) header.append(back);
-  header.append(
-    el("div", { class: "room-head-text" }, [
-      el("h2", { class: "room-title", text: room.name }),
-      el("p", { class: "room-subtitle", text: room.topic }),
-    ]),
+  text.append(
+    el("h2", { class: "room-title", text: room.name }),
+    el("p", { class: "room-subtitle", text: room.topic }),
   );
 }
 

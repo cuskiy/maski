@@ -33,5 +33,7 @@ export function watchRoute(onRoom: (roomId: string | null) => void): void {
     set({ roomId });
     onRoom(roomId);
   });
-  onRoom(roomFromHash());
+  const initial = roomFromHash();
+  set({ roomId: initial });
+  onRoom(initial);
 }

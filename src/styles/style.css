@@ -302,6 +302,8 @@ textarea {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
   background: var(--page);
   color: var(--page-text);
 }
