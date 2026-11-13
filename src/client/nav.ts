@@ -34,7 +34,7 @@ function remember(section: string, open: boolean): void {
 export class Nav {
   private readonly root: HTMLElement;
   private readonly rows = new Map<string, HTMLElement>();
-  private order: string[] = [];
+  private readonly orders = new Map<string, string[]>();
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -62,10 +62,11 @@ export class Nav {
       count.textContent = rooms.length === 0 ? "" : String(rooms.length);
 
       const order = rooms.map((room) => room.roomId);
-      const changed = order.length !== this.order.length || order.some((id, index) => this.order[index] !== id);
+      const previous = this.orders.get(section.id) ?? [];
+      const changed = order.length !== previous.length || order.some((id, index) => previous[index] !== id);
       if (changed) {
         list.replaceChildren(...rooms.map((room) => this.row(room, state.roomId)));
-        this.order = order;
+        this.orders.set(section.id, order);
       } else {
         for (const room of rooms) this.update(this.rows.get(room.roomId) ?? null, room, state.roomId);
       }

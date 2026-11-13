@@ -4,7 +4,6 @@ import { el } from "../ui.ts";
 import { openViewer } from "./viewer.ts";
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
-import { openRoom } from "./router.ts";
 
 const DAY = new Intl.DateTimeFormat(undefined, { dateStyle: "full" });
 const TIME = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
@@ -14,7 +13,6 @@ export class Timeline {
   private readonly root: HTMLElement;
   private readonly list: HTMLElement;
   private readonly older: HTMLButtonElement;
-  private readonly rows = new Map<string, HTMLElement>();
   private readonly worker: WorkerClient;
   private pinned = true;
   private loading = false;
@@ -54,7 +52,6 @@ export class Timeline {
   private render(): void {
     const state = get();
     this.older.hidden = !state.hasOlder;
-    this.rows.clear();
     const nodes: HTMLElement[] = [];
     let day = "";
     let previous: Message | null = null;
@@ -120,7 +117,7 @@ export class Timeline {
       button.replaceChildren(el("span", { class: "media-name", text: t("media.loading") }));
       const size = media.file ? 0 : 640;
       void this.worker
-        .send<{ blob: Blob }>({ type: "media", roomId: message.roomId, media, size })
+        .send<{ blob: Blob }>({ type: "media", media, size })
         .then(({ blob }) => {
           const url = URL.createObjectURL(blob);
           if (media.mime.startsWith("video/")) {
@@ -156,5 +153,3 @@ function statusText(message: Message): string {
 function membershipLine(message: Message): string {
   return `${message.name} · ${message.membership ?? ""}`;
 }
-
-export { openRoom };

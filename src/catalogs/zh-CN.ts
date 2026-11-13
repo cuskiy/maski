@@ -115,4 +115,3 @@ export const zhCN = {
   "router.open": "打开客户端",
 } as const;
 
-export type ZhCatalog = typeof zhCN;

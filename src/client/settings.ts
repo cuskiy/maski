@@ -3,7 +3,6 @@ import { locales } from "../catalogs/index.ts";
 import { t } from "../i18n.ts";
 import { el } from "../ui.ts";
 import { readAccount, writeAccount } from "./account.ts";
-import { rememberLocale } from "./locale.ts";
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
 
@@ -106,5 +105,3 @@ function sections(phase: string, userId: string, name: string, worker: WorkerCli
 
   return blocks;
 }
-
-export { rememberLocale };

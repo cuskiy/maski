@@ -1,4 +1,4 @@
-import type { Keys, Media, Message, Outbox, Room, Session, Window } from "../core/types.ts";
+import type { Keys, Media, Outbox, Room, Session, Window } from "../core/types.ts";
 
 export type Command =
   | { type: "start"; accountHash: string | null; wasm: string }
@@ -14,7 +14,7 @@ export type Command =
   | { type: "send"; roomId: string; txnId: string; body: string; html: string | null }
   | { type: "retry"; txnId: string; roomId: string }
   | { type: "discard"; txnId: string; roomId: string }
-  | { type: "media"; roomId: string; media: Media; size: number }
+  | { type: "media"; media: Media; size: number }
   | { type: "packs" }
   | { type: "sticker"; roomId: string; txnId: string; body: string; media: Media }
   | { type: "markRead"; roomId: string; eventId: string }
@@ -31,9 +31,3 @@ export type Event =
 
 export type Reply = { id: number; ok: true; data: unknown } | { id: number; ok: false; error: string };
 
-export interface Envelope {
-  readonly id: number;
-  readonly command: Command;
-}
-
-export type MessageRow = Message;

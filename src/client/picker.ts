@@ -129,7 +129,7 @@ export class Picker {
 
   private async thumbnail(image: PackImage): Promise<string | null> {
     try {
-      const { blob } = await this.worker.send<{ blob: Blob }>({ type: "media", roomId: this.roomId() ?? "", media: image.media, size: 64 });
+      const { blob } = await this.worker.send<{ blob: Blob }>({ type: "media", media: image.media, size: 64 });
       return URL.createObjectURL(blob);
     } catch {
       return null;

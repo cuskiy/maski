@@ -23,4 +23,3 @@ export const SURFACE = {
   emoji: "surface-emoji",
 } as const;
 
-export type SurfaceId = (typeof SURFACE)[keyof typeof SURFACE];

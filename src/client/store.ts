@@ -55,7 +55,3 @@ export function subscribe(keys: readonly (keyof State)[], listener: Listener): (
 export function applySession(session: Session | null, keys: { ready: boolean } | null): void {
   set({ session, phase: session === null ? "signedOut" : keys?.ready === true ? "ready" : "gated" });
 }
-
-export function roomById(roomId: string | null): Room | null {
-  return roomId === null ? null : (state.rooms.find((room) => room.roomId === roomId) ?? null);
-}

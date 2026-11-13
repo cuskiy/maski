@@ -51,16 +51,7 @@ function mediaOf(content: Record<string, unknown>, name: string): Media | null {
   };
 }
 
-function relationsOf(content: Record<string, unknown>): Record<string, unknown> | null {
-  const rel = content["m.relates_to"];
-  return isRecord(rel) ? rel : null;
-}
 
-export function replyTarget(event: MatrixEvent): string | null {
-  const rel = relationsOf(event.getWireContent()) ?? relationsOf(event.getContent());
-  const target = rel ? rel["m.in_reply_to"] : null;
-  return isRecord(target) ? str(target["event_id"]) || null : null;
-}
 
 export function transactionId(event: MatrixEvent): string {
   const txn = event.getUnsigned()["transaction_id"];

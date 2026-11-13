@@ -1,6 +1,5 @@
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
-import { openRoom } from "./router.ts";
 
 /** Enter inserts a newline; the button or Ctrl/Cmd+Enter sends. */
 export class Composer {
@@ -92,5 +91,3 @@ export class Composer {
 function escapeText(text: string): string {
   return text.replace(/[&<>"']/gu, (character) => `&#${String(character.charCodeAt(0))};`);
 }
-
-export { openRoom };

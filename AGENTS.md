@@ -791,6 +791,21 @@ is never done to make a failing build pass.
 The same promises are how a new contributor starts: `npm run check` is the whole contract, and the
 table above says which one broke and where its rule lives.
 
+## 3.15.2 Open defect: the unlock path
+
+After the sweep, signing in reaches `/key/` with a usable field and the gate no longer lets a new
+device through, but submitting the recovery key ends with "The keys could not be restored" on the
+test account. The gate predicate is now `isCrossSigningReady()`, which the SDK documents as true
+after a successful `bootstrapCrossSigning()`, so the failing call is inside the restore:
+
+1. `secretStorage.hasKey()` and `checkKey()` pass, so the key itself is right;
+2. the key is handed to the SDK through `cryptoCallbacks` passed at `createClient`;
+3. `bootstrapCrossSigning` or `bootstrapSecretStorage` still throws, and the message is swallowed.
+
+Next step is to surface the thrown message in the gate (it is not a secret) and read it, rather than
+guessing which of the two fails. Until then the chat is reachable only on a device that already
+holds the keys, which is what 3.15.2 exists to say plainly.
+
 ## 3.16 What is built, as of this commit
 
 | area | state |

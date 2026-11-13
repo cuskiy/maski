@@ -115,4 +115,3 @@ export const en = {
   "router.open": "Open the client",
 } as const;
 
-export type EnCatalog = typeof en;

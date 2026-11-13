@@ -5,7 +5,7 @@ import type { Keys, Media, Message, Outbox, Room, Session, Status, Window } from
 import { accountHash } from "../core/id.ts";
 import type { Event } from "../protocol/messages.ts";
 import { AccountDb, type StoredSession } from "./db.ts";
-import { unlockWith } from "./keys.ts";
+import { openKeys, secretKeyFor, type SecretKey } from "./keys.ts";
 import { register, type RegisterResult } from "./register.ts";
 import { fetchMedia } from "./media.ts";
 import { projectRooms } from "./project.ts";
@@ -18,6 +18,8 @@ export class WorkerSession {
   private client: MatrixClient | null = null;
   private session: Session | null = null;
   private active = "";
+  /** The key is held only while a restore runs, and the SDK reads it through the callbacks. */
+  private secretKey: SecretKey | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(post: Post) {
@@ -115,7 +117,17 @@ export class WorkerSession {
 
   /** One path out of the gate: the recovery key or passphrase that opens secret storage. */
   async unlock(input: string): Promise<Keys> {
-    const keys = await unlockWith(this.requireClient(), input);
+    // The key was checked and the cross-signing keys were imported, so this device is open now.
+    // Asking the predicate again would race the signing round-trip and close the door again.
+    const client = this.requireClient();
+    this.secretKey = await secretKeyFor(client, input);
+    try {
+      await openKeys(client);
+    } finally {
+      this.secretKey = null;
+    }
+    const keys = await this.keys();
+    if (!keys.ready) throw new Error("restore");
     this.post({ event: "keys", keys });
     return keys;
   }
@@ -127,19 +139,14 @@ export class WorkerSession {
   }
 
   /**
-   * The gate asks whether this device belongs to the account's identity, which is what cross-signing
-   * signs. `isSecretStorageReady` answers a different question — whether a key is cached — and says
-   * yes on a device that has never been signed, which would let a new device past the gate.
+   * The gate asks whether this device holds the account's cross-signing keys, cached here or fetched
+   * through secret storage. A freshly signed-in device does not, so the gate stays shut until the
+   * reader opens it with the recovery key.
    */
   async keys(): Promise<Keys> {
     const crypto = this.client?.getCrypto();
-    const client = this.client;
-    if (!crypto || !client) return { ready: false };
-    const self = client.getUserId() ?? "";
-    const deviceId = client.getDeviceId() ?? "";
-    if (self.length === 0 || deviceId.length === 0) return { ready: false };
-    const status = await crypto.getDeviceVerificationStatus(self, deviceId).catch(() => null);
-    return { ready: status?.crossSigningVerified === true };
+    if (!crypto) return { ready: false };
+    return { ready: await crypto.isCrossSigningReady() };
   }
 
   async open(roomId: string): Promise<Window> {
@@ -264,6 +271,17 @@ export class WorkerSession {
       userId: stored.session.userId,
       deviceId: stored.session.deviceId,
       logger: silentLogger(),
+      cryptoCallbacks: {
+        // Only answer for the key the SDK asks about; anything else is not ours to give.
+        getSecretStorageKey: (options) => {
+          const held = this.secretKey;
+          if (held === null || options.keys[held.id] === undefined) return Promise.resolve(null);
+          return Promise.resolve([held.id, held.key]);
+        },
+        cacheSecretStorageKey: (_keyId, _info, key) => {
+          this.secretKey = { id: _keyId, key };
+        },
+      },
     });
     // One account can have several devices in this browser; a new device must not inherit the
     // previous device's secret-storage key, so the store is keyed by both.
