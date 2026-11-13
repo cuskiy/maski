@@ -138,6 +138,78 @@ the next step is a redesign of that boundary, not a third patch.
 - A rule without an enforcing check is a wish. Adding a rule adds its row to 3.15.1 and, when it can
   be checked, the check itself.
 
+### What a step leaves behind
+
+A step is not a conversation; it is a change to the tree. When it ends, these exist or it did not
+happen:
+
+| for a change that | the step also leaves |
+| --- | --- |
+| fixes a defect | the reproduction that failed before and passes after, named in the commit |
+| adds behaviour | a unit test for the rule, or a browser run whose assertion is the behaviour |
+| adds or moves a rule | its row in 3.15.1 and the check that enforces it |
+| changes a decision | the rewritten paragraph in Part 2 or Part 3, never a second description beside it |
+| adds a dependency | the reason, and the removal of one nothing imports |
+| touches the protocol | the spec path it was checked against, quoted in the commit |
+
+### The verification ladder
+
+A claim names its rung. A claim one rung above its evidence is a reporting defect.
+
+1. **Pure** — a unit test under `node --test`: no DOM, no network.
+2. **Worker** — the protocol driven from a browser: login, sync, send, decrypt.
+3. **Surface** — the page driven in Chromium: the control does what it says, scripts on.
+4. **Scriptless** — the same page with JavaScript disabled: the frame is complete and every visible
+   control either works or says what it needs.
+5. **Real server** — the whole flow against a homeserver, on a device whose state is real.
+6. **Other engines** — Firefox and Safari. Until this rung is run, a browser claim says Chromium.
+
+### Defects
+
+A defect found and not fixed is written into a numbered open-defect section with four fields: the
+symptom a reader sees, what is known, what was ruled out, and the next concrete step. An open defect
+blocks the exit of its own phase, not the next unrelated step. A defect whose cause is unknown after
+two attempts is a boundary problem (1.6): the third attempt starts by redesigning that boundary
+instead of looking harder.
+
+### Starting and leaving a session
+
+Start by reading 1.3, the open-defect sections, and the status table in 3.16. What they say is the
+truth about the tree, not the memory of the last conversation.
+
+Leave the tree green, the documents in step, the commits pushed, and one paragraph that says what
+moved, what is verified at which rung, and what comes next. An unfinished change is finished or
+removed before the session ends; never left half-applied.
+
+### Reviews
+
+Before a change that spans several files is reported, it is read once more against this file: the
+contracts it touches, the section that governs its behaviour, and the diff itself. The reviewer is a
+reader with no memory of writing it — a subagent where the change is large enough to justify it — and
+the answer is a list of blockers, not praise.
+
+### Commits and snapshots
+
+- One commit is one coherent change, in the imperative, with the reason in the body and the contract
+  or section it serves named when that is not obvious.
+- History is never rewritten: no amend, no rebase, no force push. A mistake is corrected by the next
+  commit, and its message says what was wrong.
+- Every commit is a place a reader can stop: the tree builds, the gate passes, the documents agree.
+- A snapshot can be restored at any point precisely because of the previous line. A restored tree is
+  read again from 1.3 before work continues, because the conversation is ahead of it.
+
+### Deciding and asking
+
+| the agent decides | the agent asks |
+| --- | --- |
+| module boundaries, names, file layout | what the product promises |
+| which existing pattern to follow | anything a reader would notice as a change of behaviour |
+| a cheaper implementation of the same promise | a rule in Part 2, a budget, a scope cut |
+| deleting code it has just made dead | deleting code it did not write and cannot attribute |
+
+A question carries a recommendation and what it rules out, and work continues on the parts that do
+not depend on the answer.
+
 ### What the loop forbids
 
 - Committing a tree that fails a gate, or leaving an unfinished change behind at the end of a turn.
