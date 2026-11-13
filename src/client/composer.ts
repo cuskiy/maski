@@ -1,14 +1,19 @@
+import type { Message } from "../core/types.ts";
+import { t } from "../i18n.ts";
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
 
 /** Enter inserts a newline; the button or Ctrl/Cmd+Enter sends. */
 export class Composer {
   private readonly field: HTMLTextAreaElement;
+  private readonly banner: HTMLElement;
   private readonly send: HTMLButtonElement;
   private readonly root: HTMLElement;
   private readonly worker: WorkerClient;
   private typingTimer = 0;
   private typing = false;
+  private replyTo: Message | null = null;
+  private editing: Message | null = null;
 
   constructor(root: HTMLElement, worker: WorkerClient) {
     this.worker = worker;
@@ -18,6 +23,13 @@ export class Composer {
     this.field = field;
     this.send = send;
     this.root = root;
+    this.banner = document.createElement("div");
+    this.banner.className = "composer-banner";
+    this.banner.hidden = true;
+    this.banner.addEventListener("click", (event) => {
+      if (event.target instanceof HTMLElement && event.target.classList.contains("composer-banner-close")) this.clearTarget();
+    });
+    root.prepend(this.banner);
     field.addEventListener("input", () => this.onInput());
     field.addEventListener("keydown", (event) => this.onKey(event));
     send.addEventListener("click", () => void this.commit());
@@ -65,16 +77,71 @@ export class Composer {
     void this.commit();
   }
 
+  /** A reply names its target; an edit replaces the body of the message it started from. */
+  setReply(message: Message): void {
+    this.editing = null;
+    this.replyTo = message;
+    this.drawBanner(t("composer.replying", { name: message.name }));
+    this.field.focus();
+  }
+
+  setEdit(message: Message): void {
+    this.replyTo = null;
+    this.editing = message;
+    this.field.value = message.body;
+    this.drawBanner(t("composer.editing"));
+    this.field.focus();
+    this.render();
+  }
+
+  private clearTarget(): void {
+    const wasEditing = this.editing !== null;
+    this.replyTo = null;
+    this.editing = null;
+    this.drawBanner("");
+    if (wasEditing) {
+      this.field.value = "";
+      this.render();
+    }
+  }
+
+  private drawBanner(text: string): void {
+    this.banner.replaceChildren();
+    if (text.length === 0) {
+      this.banner.hidden = true;
+      return;
+    }
+    this.banner.hidden = false;
+    const label = document.createElement("span");
+    label.className = "composer-banner-text";
+    label.textContent = text;
+    const close = document.createElement("button");
+    close.className = "composer-banner-close";
+    close.type = "button";
+    close.textContent = "×";
+    close.setAttribute("aria-label", t("composer.cancelTarget"));
+    this.banner.append(label, close);
+  }
+
   private async commit(): Promise<void> {
     const state = get();
     const body = this.field.value.trim();
     if (state.roomId === null || state.phase !== "ready" || body.length === 0) return;
+    if (this.editing !== null) {
+      const editing = this.editing;
+      this.clearTarget();
+      await this.worker.send({ type: "edit", roomId: editing.roomId, eventId: editing.id, body, html: null });
+      return;
+    }
+    const replyTo = this.replyTo === null ? null : this.replyTo.id;
+    this.replyTo = null;
+    this.drawBanner("");
     const txnId = `txn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const html = body.includes("\n") ? escapeText(body).replace(/\n/gu, "<br>") : null;
     this.field.value = "";
     this.setTyping(false);
     this.render();
-    await this.worker.send({ type: "send", roomId: state.roomId, txnId, body, html });
+    await this.worker.send({ type: "send", roomId: state.roomId, txnId, body, html, replyTo });
     this.field.focus();
   }
 

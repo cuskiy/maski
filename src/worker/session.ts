@@ -20,6 +20,8 @@ export class WorkerSession {
   private active = "";
   /** The key is held only while a restore runs, and the SDK reads it through the callbacks. */
   private secretKey: SecretKey | null = null;
+  private synced: (() => void) | null = null;
+  private online = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(post: Post) {
@@ -116,11 +118,24 @@ export class WorkerSession {
   }
 
   /** One path out of the gate: the recovery key or passphrase that opens secret storage. */
+  /**
+   * The cross-signing public keys arrive with sync, and the import fails silently without them, so
+   * a restore waits for the first sync instead of racing it.
+   */
+  private waitForSync(): Promise<void> {
+    if (this.online) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.synced = resolve;
+      setTimeout(resolve, 20000);
+    });
+  }
+
   async unlock(input: string, password: string): Promise<Keys> {
     // The key was checked and the cross-signing keys were imported, so this device is open now.
     // Asking the predicate again would race the signing round-trip and close the door again.
     const client = this.requireClient();
     this.secretKey = await secretKeyFor(client, input);
+    await this.waitForSync();
     try {
       await openKeys(client, password);
     } finally {
@@ -175,7 +190,7 @@ export class WorkerSession {
     return { roomId, messages: await db.window(roomId, Math.max(keep, 80)), hasOlder: stored?.hasOlder ?? false };
   }
 
-  async send(roomId: string, txnId: string, body: string, html: string | null): Promise<void> {
+  async send(roomId: string, txnId: string, body: string, html: string | null, replyTo: string | null): Promise<void> {
     const db = this.requireDb();
     const client = this.requireClient();
     const session = this.requireSession();
@@ -203,7 +218,14 @@ export class WorkerSession {
     await db.putMessages([queued]);
     this.postOutbox({ txnId, status: "queued", error: "" });
     await this.pushWindow(roomId);
-    const content = html === null ? { msgtype: "m.text", body } : { msgtype: "m.text", body, format: "org.matrix.custom.html", formatted_body: html };
+    // A reply carries the relation other clients read, with the quote they render as the fallback.
+    const relation = replyTo === null ? {} : { "m.relates_to": { "m.in_reply_to": { event_id: replyTo } } };
+    const content = {
+      msgtype: "m.text",
+      body,
+      ...relation,
+      ...(html === null ? {} : { format: "org.matrix.custom.html", formatted_body: html }),
+    };
     this.setStatus(txnId, "sending");
     try {
       await client.sendEvent(roomId, "m.room.message" as never, content as never, txnId);
@@ -218,7 +240,7 @@ export class WorkerSession {
     const row = await db.get<Message>("events", txnId);
     if (!row) return;
     await db.del("events", txnId);
-    await this.send(roomId, txnId, row.body, row.html);
+    await this.send(roomId, txnId, row.body, row.html, row.reply?.id ?? null);
   }
 
   async discard(txnId: string, roomId: string): Promise<void> {
@@ -255,6 +277,45 @@ export class WorkerSession {
     return this.client;
   }
 
+  /** An annotation is a reaction event; removing it redacts the one this account sent. */
+  async react(roomId: string, eventId: string, key: string, on: boolean): Promise<void> {
+    const client = this.requireClient();
+    if (on) {
+      await client.sendEvent(roomId, "m.reaction" as never, { "m.relates_to": { rel_type: "m.annotation", event_id: eventId, key } } as never);
+      return;
+    }
+    const self = client.getUserId() ?? "";
+    const container = client.getRoom(roomId)?.relations.getChildEventsForEvent(eventId, "m.annotation", "m.reaction");
+    const bySender = container === undefined ? undefined : container.getAnnotationsBySender();
+    const sent = bySender === undefined || bySender === null ? undefined : bySender[self];
+    for (const event of sent ?? []) {
+      if (String(event.getContent()["key"]) !== key) continue;
+      const id = event.getId();
+      if (id) await client.redactEvent(roomId, id);
+    }
+  }
+
+  /** An edit keeps the original event and carries the new content in a replacement relation. */
+  async edit(roomId: string, eventId: string, body: string, html: string | null): Promise<void> {
+    const client = this.requireClient();
+    const next: Record<string, unknown> = { msgtype: "m.text", body };
+    if (html !== null) {
+      next["format"] = "org.matrix.custom.html";
+      next["formatted_body"] = html;
+    }
+    await client.sendEvent(roomId, "m.room.message" as never, {
+      "m.new_content": next,
+      "m.relates_to": { rel_type: "m.replace", event_id: eventId },
+      msgtype: "m.text",
+      body: `* ${body}`,
+    } as never);
+  }
+
+  async redact(roomId: string, eventId: string): Promise<void> {
+    await this.requireClient().redactEvent(roomId, eventId);
+    await this.requireDb().del("events", eventId);
+  }
+
   async markRead(roomId: string, eventId: string): Promise<void> {
     await this.requireClient().setRoomReadMarkers(roomId, eventId);
   }
@@ -272,11 +333,11 @@ export class WorkerSession {
       deviceId: stored.session.deviceId,
       logger: silentLogger(),
       cryptoCallbacks: {
-        // Only answer for the key the SDK asks about; anything else is not ours to give.
-        getSecretStorageKey: (options) => {
+        // The key was checked against secret storage before it is held, so it answers for any
+        // secret the SDK asks about; the id it hands back is the one the account stores.
+        getSecretStorageKey: () => {
           const held = this.secretKey;
-          if (held === null || options.keys[held.id] === undefined) return Promise.resolve(null);
-          return Promise.resolve([held.id, held.key]);
+          return Promise.resolve(held === null ? null : [held.id, held.key]);
         },
         cacheSecretStorageKey: (_keyId, _info, key) => {
           this.secretKey = { id: _keyId, key };
@@ -310,6 +371,9 @@ export class WorkerSession {
     client.on(ClientEvent.Sync, (state: SyncState, _previous: SyncState | null, data?: unknown) => {
       if (state === SyncState.Prepared || state === SyncState.Syncing) {
         this.post({ event: "connection", state: "online", message: "" });
+        this.online = true;
+        this.synced?.();
+        this.synced = null;
         this.schedule();
         return;
       }

@@ -11,12 +11,15 @@ export type Command =
   | { type: "resetKey"; password: string }
   | { type: "open"; roomId: string }
   | { type: "older"; roomId: string; keep: number }
-  | { type: "send"; roomId: string; txnId: string; body: string; html: string | null }
+  | { type: "send"; roomId: string; txnId: string; body: string; html: string | null; replyTo: string | null }
   | { type: "retry"; txnId: string; roomId: string }
   | { type: "discard"; txnId: string; roomId: string }
   | { type: "media"; media: Media; size: number }
   | { type: "packs" }
   | { type: "sticker"; roomId: string; txnId: string; body: string; media: Media }
+  | { type: "react"; roomId: string; eventId: string; key: string; on: boolean }
+  | { type: "edit"; roomId: string; eventId: string; body: string; html: string | null }
+  | { type: "redact"; roomId: string; eventId: string }
   | { type: "markRead"; roomId: string; eventId: string }
   | { type: "typing"; roomId: string; on: boolean };
 
