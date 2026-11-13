@@ -11,12 +11,13 @@ export function startAuth(): void {
   const locale = locales.find((entry) => entry.id === document.documentElement.lang) ?? locales[0];
   if (locale) useCatalog(locale.catalog);
 
-  const flow = document.querySelector<HTMLFormElement>("form[data-flow]")?.dataset["flow"] ?? "";
-  if (flow.length === 0) return;
+  if (document.querySelector("form[data-flow]") === null) return;
 
   const worker = new WorkerClient();
-  const start = worker.send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: null, wasm: worker.wasm() });
-  void start.catch(() => undefined);
+  const keyPage = document.querySelector('form[data-flow="unlock"], form[data-flow="reset"]') !== null;
+  const account = keyPage ? readAccount() : null;
+  const started = worker.send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account?.hash ?? null, wasm: worker.wasm() });
+  void started.catch(() => undefined);
 
   const error = el("p", { class: "note error", attrs: { role: "alert" } });
   const fail = (message: string, form: HTMLFormElement): void => {
@@ -24,11 +25,11 @@ export function startAuth(): void {
     form.append(error);
   };
 
-  if (flow === "server") wireServer(worker, fail);
-  if (flow === "login") wireLogin(worker, fail);
-  if (flow === "unlock") wireUnlock(worker, fail);
-  if (flow === "register") wireRegister(worker, fail);
-  if (flow === "reset") wireReset(worker, fail);
+  wireServer(worker, fail);
+  wireLogin(worker, fail);
+  wireUnlock(worker, started, fail);
+  wireRegister(worker, fail);
+  wireReset(worker, started, fail);
 }
 
 function value(id: string): string {
@@ -93,7 +94,11 @@ function wireLogin(worker: WorkerClient, fail: (message: string, form: HTMLFormE
   });
 }
 
-function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLFormElement) => void): void {
+function wireUnlock(
+  worker: WorkerClient,
+  started: Promise<{ session: Session | null; keys: Keys | null }>,
+  fail: (message: string, form: HTMLFormElement) => void,
+): void {
   const form = document.querySelector<HTMLFormElement>('form[data-flow="unlock"]');
   const account = readAccount();
   if (form === null) return;
@@ -106,8 +111,7 @@ function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLForm
   // The field is disabled until the check settles: otherwise a late answer navigates away under
   // the reader's hands, which is what a half-typed key felt like.
   for (const control of form.querySelectorAll("input, button")) (control as HTMLInputElement).disabled = true;
-  void worker
-    .send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account.hash, wasm: worker.wasm() })
+  void started
     .then((state) => {
       if (state.keys?.ready === true) {
         location.replace("../chat/");
@@ -197,12 +201,20 @@ function wireRegister(worker: WorkerClient, fail: (message: string, form: HTMLFo
 }
 
 /** Starting over needs the account password for the interactive auth the server wants. */
-function wireReset(worker: WorkerClient, fail: (message: string, form: HTMLFormElement) => void): void {
+function wireReset(
+  worker: WorkerClient,
+  started: Promise<{ session: Session | null; keys: Keys | null }>,
+  fail: (message: string, form: HTMLFormElement) => void,
+): void {
   const form = document.querySelector<HTMLFormElement>('form[data-flow="reset"]');
   const account = readAccount();
   const output = document.querySelector<HTMLElement>('[data-region="key-out"]');
   if (!form || account === null || !output) return;
-  void worker.send({ type: "start", accountHash: account.hash, wasm: worker.wasm() }).catch(() => undefined);
+  const controls = form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, button");
+  for (const control of controls) control.disabled = true;
+  void started.catch(() => undefined).finally(() => {
+    for (const control of controls) control.disabled = false;
+  });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const button = form.querySelector("button");

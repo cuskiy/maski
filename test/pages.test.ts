@@ -59,6 +59,14 @@ void test("copy comes from the catalog, not the component", () => {
   assert.ok(!zh.includes(en["composer.placeholder"]));
 });
 
+for (const page of pages()) {
+  void test(`${page.name}: forms post so secrets never enter the URL`, () => {
+    for (const match of page.html.matchAll(/<form\b[^>]*>/gu)) {
+      assert.match(match[0], /method="post"/u);
+    }
+  });
+}
+
 const minifyOptions = { collapseWhitespace: true, removeComments: true } as const;
 
 function textRuns(markup: string): string[] {

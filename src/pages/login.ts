@@ -13,7 +13,7 @@ export function loginView({ locale, localePath, languages }: PageContext): PageV
     body: authLayout({
       c,
       title: t(c, "auth.login.title"),
-      body: html`<form class="form" data-flow="login">
+      body: html`<form class="form" method="post" data-flow="login">
     ${field({ id: "username", label: t(c, "auth.username"), type: "text", autocomplete: "username" })}
     ${field({ id: "password", label: t(c, "auth.password"), type: "password", autocomplete: "current-password" })}
     ${submit(t(c, "auth.login.submit"))}

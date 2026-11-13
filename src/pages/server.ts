@@ -14,7 +14,7 @@ export function serverView({ locale, languages }: PageContext): PageView {
       c,
       title: t(c, "auth.server.title"),
       hint: t(c, "auth.server.hint"),
-      body: html`<form class="form" data-flow="server">
+      body: html`<form class="form" method="post" data-flow="server">
     ${field({ id: "homeserver", label: t(c, "auth.server.label"), type: "text", autocomplete: "url", value: config.homeserver.default })}
     ${submit(t(c, "auth.server.submit"))}
   </form>`,

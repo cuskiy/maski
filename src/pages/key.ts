@@ -13,11 +13,11 @@ export function keyView({ locale, languages }: PageContext): PageView {
       c,
       title: t(c, "auth.key.title"),
       hint: t(c, "auth.key.hint"),
-      body: html`<form class="form" data-flow="unlock">
+      body: html`<form class="form" method="post" data-flow="unlock">
     ${field({ id: "recovery", label: t(c, "auth.key.recovery"), type: "text", autocomplete: "off" })}
     ${submit(t(c, "auth.key.unlock"))}
   </form>
-  <form class="form" data-flow="reset">
+  <form class="form" method="post" data-flow="reset">
     <p class="field-hint">${t(c, "auth.key.resetHint")}</p>
     ${field({ id: "reset-password", label: t(c, "auth.password"), type: "password", autocomplete: "current-password" })}
     <button class="button-quiet" type="submit">${t(c, "auth.key.reset")}</button>

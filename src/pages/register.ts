@@ -12,7 +12,7 @@ export function registerView({ locale, localePath, languages }: PageContext): Pa
     body: authLayout({
       c,
       title: t(c, "auth.register.title"),
-      body: html`<form class="form" data-flow="register">
+      body: html`<form class="form" method="post" data-flow="register">
     ${field({ id: "username", label: t(c, "auth.username"), type: "text", autocomplete: "username" })}
     ${field({ id: "password", label: t(c, "auth.password"), type: "password", autocomplete: "new-password" })}
     ${field({ id: "confirm", label: t(c, "auth.register.confirm"), type: "password", autocomplete: "new-password" })}
