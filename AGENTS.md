@@ -81,6 +81,8 @@ ignored.
 - 需要 JS 的能力必须是 `<button>`，打开后由面板自己说明「需要 JavaScript」；不用 `<a>` 假装能点。
 - 属于流程内部的返回入口（例如从密码页回到选服务器页）由 JS 渲染；静态页放 `<noscript>` 说明。
 - JS 只填充内容、使用已经写好的类和样式，不发明新样式。
+- **整个界面由 HTML + CSS 承担。** 一项交互如果 HTML + CSS 做不到，先考虑能不能换个设计绕开；
+  确实绕不开才用 JS，而那时样式仍然写在 CSS 里，JS 只切换已经存在的类或状态。
 
 ## 2.4 页面与地址
 
@@ -135,6 +137,9 @@ ignored.
 - 文字消息的时间在气泡右下；**只有一行时气泡撑长，时间留在同一行**，不换行到下一行。
 - 日期分隔、已读线、新消息提示都是行间的小元素，不做重线条。
 - 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。右键、长按、键盘都能打开。
+- 直聊房间如果没有自己的房间头像，就用对方的头像（列表与顶栏一致）。
+- 贴纸在时间线里不弹大图：`body` 是可访问名称，shortcode 是提示；表情包媒体不加密。
+- 只有表情的消息用下一档字号显示；提及当前用户的消息有底色标记。
 - 系统与成员事件是一行浅色文字，没有气泡、没有侧线。
 - 不能解密的消息说明原因；正在解密时说正在解密；被删除的消息离开时间线。
 - 加载更早、跳到被回复的消息、未读时的新消息提示，都不阻塞滚动。
@@ -153,15 +158,37 @@ ignored.
 - 文字为空且没有文件时不能发送。
 - 发送顺序：图片与文件一条一个消息，按顺序；随后文字稿作为独立的 `m.text`。不做说明文字，不做相册。
 - 输入框随内容长高，有上限，然后内部滚动。草稿按房间保存，本地有效，离线也能排队。
+- 带样式的草稿在失焦时就地渲染成它将被发送的样子；点回该处恢复纯文本并把光标放到对应字符，
+  光标永远不会与样式副本错位。
 - 选中文本右键可以加粗、斜体、下划线、删除线、行内代码、标题、引用、代码块，并可取消样式；写下的文字
   始终原样保留，不解析 markdown 输入。
 
-## 2.9 首帧
+## 2.9 设置、搜索、通知、表情包
+
+- **设置**只有一个对话框，滚动分区：账户、通知、安全、关于。没有外观、主题、密度或「回车发送」开关——
+  样式与用法是固定的。
+- **账户**：头像、显示名、MXID（只读可复制）、语言切换（立即生效并改变地址前缀）、退出登录（确认并说明
+  本地加密历史与设备密钥会被清除）。
+- **安全**：本机设备验证状态、恢复密钥、密钥备份、重置恢复；**会话列表**可以验证单台设备、登出单台、
+  一键登出本设备之外的所有设备（当前设备保留，需要密码时用交互式认证，密码不保存）。
+- **通知**：在应用内用未读与提及徽章，标题显示总数；桌面通知默认关闭，只有用户手势才请求权限，
+  可关闭消息预览（预览可能暴露解密后的内容）。
+- **关于**：版本、源码、依赖许可、无统计、本地搜索、本地通知、无推送网关的说明。
+- **搜索**在本地索引上进行（NFKC、小写、去变音、`Intl.Segmenter`），离线可用；结果按时间倒序，
+  显示房间、发送者、时间与命中片段；点选跳到那条消息。
+- **表情包**：房间包（`m.room.image_pack`）、全局包（`m.image_pack.rooms`）、旧标识为兼容读取；
+  选择器有搜索、Emoji 与贴纸两个页签、可滚动的包带与网格；最近与收藏按账户保存；
+  「在所有房间使用」写入稳定与旧的账户数据。表情包媒体不加密，这一点要写在包里。
+- **房间设置**从左侧房间卡片的菜单打开：概况（头像、名称、话题）、成员（搜索、邀请）、通知模式
+  （全部/仅提及/静音）、加密状态（只读）、离开（就地确认）。没有权限时只读。
+- **个人资料**从消息发送者、成员行或提及打开：头像、名称、MXID、验证状态、发消息、验证、复制 MXID。
+
+## 2.10 首帧
 
 - 第一眼看到的就是最终画面：没有骨架屏、没有闪烁、没有「先占位再替换」的抖动。
 - 没有数据的列表就是空的；数据出现时以它最终的大小出现。图片先按事件里的宽高占好位置。
 
-## 2.10 样式
+## 2.11 样式
 
 - 以「流体设计」和「格式塔心理学」为依据：分组靠距离、相似与共同区域，不靠边框与阴影；层级靠字号、
   色调与间距指向同一方向。
@@ -169,32 +196,33 @@ ignored.
 - 所有颜色、字体、字号、间距、圆角、时长都是 `:root` 的 token；规则只用 token。
 - 流体：`clamp()`、`minmax()`、`auto-fit`、容器查询；不用宽度媒体查询。窄屏与宽屏是同一套布局的两种状态。
 - 不用阴影、渐变、玻璃、卡片化仪表盘、大厂范式、图标字体、外部字体。
-- 平台新特性要用，但必须 **Chrome、Firefox、Safari 在 2026 年都支持**（以 web-features 数据集为准）；
-  不用前缀、不用 polyfill、不为迁就某个引擎写 `@supports` 分支；同一功能只有一种写法。
+- 平台新特性要用，但必须 **Chrome、Firefox、Safari 在 2026 年都支持**；每引入一条新属性或新函数，
+  都用工具查一次三家版本（`npm run features -- <id> --require 2026`），不靠记忆、不靠文章。不用前缀、
+  不用 polyfill、不为迁就某个引擎写 `@supports` 分支；同一功能只有一种写法。
 - 动画短、可打断、只动 transform/opacity/color；`prefers-reduced-motion` 下关闭。
 - 焦点永远可见；点击目标不小于 24px。
 
-## 2.11 离线与速度
+## 2.12 离线与速度
 
 - service worker 预缓存 shell（页面、CSS、JS、worker、wasm）；导航 cache-first 并后台更新，刷新先出画。
 - 消息、房间、头像在 IndexedDB 里，由 worker 独占；homeserver 请求永不进 HTTP 缓存。
 - 离线是正常状态，不是错误页：能看、能搜、能排队发送。
 
-## 2.12 多语言
+## 2.13 多语言
 
 - 界面语言可切换；英文是源语言与兜底。
 - 文案只存在于带类型的 catalog 里，缺键是编译错误；layout 与 component 里不出现任何字面文案，
   连标题与 `aria-label` 也不行。
 - 页面在构建时按语言提前渲染，客户端不做翻译；日期、数字、复数用 `Intl`。
 
-## 2.13 安全
+## 2.14 安全
 
 - 事件、资料、房间名、`formatted_body` 一律不可信；富文本过白名单消毒器。
 - CSP 不允许内联脚本与内联样式；没有第三方请求、没有统计。
 - token 与密钥只在 worker 里；主线程只看到会话摘要与一次性显示的恢复密钥。
 - 不记录 token、密钥与消息正文。
 
-## 2.14 范围
+## 2.15 范围
 
 - **先做**：登录与强制密钥门，做到能用。
 - **范围内**：房间与时间线、发送与接收、回复/编辑/删除/回应、媒体（点击才加载）、贴纸与表情包管理、
@@ -388,27 +416,56 @@ client import, so the two cannot disagree.
 
 ## 3.9 Build, assets and caching
 
-- **Names.** Anything we reference ourselves is content-hashed by esbuild
-  (`assets/[name]-[hash][ext]`). `static/` holds only the names a platform asks for by name:
-  `/favicon.ico`, `/robots.txt`, `/sw.js`, `/404.html`. A file that is both platform-probed and ours
-  is copied twice: the stable path for the probe, the hashed path for our `<link>`.
-- **Assets the page hands to the client.** The worker, the crypto wasm and the service worker cannot be
-  imported by the page, so they are written into `<meta>` tags from the build manifest: `maski:worker`,
-  `maski:wasm`, `maski:sw`. The client reads a tag; there is no generated module.
-- **The wasm** is copied by the build with a hash of its bytes, because esbuild leaves the SDK's
-  `new URL(…, import.meta.url)` untouched. The worker calls `initAsync(wasm)` before `initRustCrypto`,
-  so the SDK's no-argument call reuses that promise. The host must serve it as `application/wasm`.
-- **Pages** are generated from functions with the catalog and the manifest, then minified; the output
-  is committed, and the audit regenerates it and fails on a byte of difference.
-- **Audit.** Every page exists for every locale, carries `lang` and a title, has no inline CSS or JS,
-  contains the region ids, has one `h1`, carries a `<noscript>` note, holds no placeholder `href`;
-  every referenced asset exists; the manifest names are hashed.
-- **Service worker.** Generated with the manifest inlined, so its bytes change exactly when the shell
-  does. Install precaches the locale's pages and hashed assets; navigation is cache-first with a
-  background revalidate; `skipWaiting` and `clients.claim` keep one version live; registration happens
-  only in a production build, with `updateViaCache: "none"` and an `update()` on load.
-- **Dev.** esbuild watch plus a small static server: rebuild, regenerate pages, full reload. No HMR and
-  no dev-time service worker, so the page a developer sees is the page the generator wrote.
+**Three kinds of file, three rules.**
+
+| where | what | name |
+| --- | --- | --- |
+| `static/` | only what a platform asks for by name: `/favicon.ico`, `/robots.txt`, `/sw.js`, `/404.html` | copied verbatim, never hashed |
+| `src/assets/` | images, icons and any file a module or a stylesheet imports | imported, hashed by the bundler |
+| the crypto wasm | the one file the SDK resolves by its own URL | copied by the build with a hash of its bytes |
+
+**A file is imported, not typed into a string.** A module writes
+`import mark from "../assets/mark.svg"` and receives the hashed URL; a stylesheet writes `url(…)` and
+the bundler rewrites it; a file the *generator* has to reference, and nothing imports, is read out of
+the build manifest by one function. A hand-written asset path is a bug, and the audit fails when a
+referenced file is missing.
+
+**Two hashes, and why we use one of them.** A name can carry a hash of the file's *content* or a hash of
+its *filename*:
+
+- a content hash changes when the bytes change, so the URL can be cached forever and the switch lands
+  atomically with the deploy;
+- a filename hash stays put across content changes, giving a longer cache life to a name that must stay
+  stable, at the cost of a revalidation step.
+
+This is a client, not a content site with stable landing addresses: a release changes the shell, the
+service worker and the whole bundle together, and the reader reloads the client as one thing. So
+**content hash everywhere**; the only stable names are the four platform paths, and the only file that
+is both stable and ours — the favicon — is copied twice, the stable path for the browser's probe and
+the hashed path for our `<link>`.
+
+**Assets the page hands to the client.** The worker, the crypto wasm and the service worker cannot be
+imported by the page, so the generator writes them into `<meta>` tags from the manifest:
+`maski:worker`, `maski:wasm`, `maski:sw`. The client reads a tag; there is no generated module.
+
+**The wasm** is copied by the build with a hash of its bytes, because esbuild leaves the SDK's
+`new URL(…, import.meta.url)` untouched. The worker calls `initAsync(wasm)` before `initRustCrypto`, so
+the SDK's no-argument call reuses that promise, and the host must serve the file as `application/wasm`.
+
+**Pages** are generated from functions with the catalog and the manifest, then minified; the output is
+committed, and the audit regenerates it and fails on a byte of difference.
+
+**Audit.** Every page exists for every locale, carries `lang` and a title, has no inline CSS or JS,
+contains the region ids, has one `h1`, carries a `<noscript>` note and holds no placeholder `href`;
+every referenced asset exists; every manifest name is hashed.
+
+**Service worker.** Generated with the manifest inlined, so its bytes change exactly when the shell
+does. Install precaches the locale's pages and the hashed assets; navigation is cache-first with a
+background revalidate; `skipWaiting` and `clients.claim` keep one version live; registration happens
+only in a production build, with `updateViaCache: "none"` and an `update()` on load.
+
+**Dev.** esbuild watch plus a small static server: rebuild, regenerate pages, full reload. No HMR and
+no dev-time service worker, so the page a developer sees is the page the generator wrote.
 
 ## 3.10 Web platform ledger
 
@@ -444,6 +501,12 @@ positioning, `interpolate-size` and `calc-size()`, `interestfor`, and scroll-dri
 **Held, with reasons**: `::details-content` (sections open instantly by design), `@scope` (nesting
 already contains message markup), `sibling-index()` (nothing staggers by position), `<details name>`
 (sections open independently), invoker commands (`popovertarget` already opens and closes the surface).
+
+**The check is part of the change.** A new property or function is looked up with
+`npm run features -- <id> --require 2026` before it is written, and the answer is copied into the
+commit message when it is not obviously below the current engine versions. The dataset is the
+authority: an article, a blog post or a conference talk about a feature that is not in it is a claim,
+not a fact.
 
 **Four questions** before a feature is used: does the design need the behaviour at all; does what we
 have already do the job; is the feature larger than the need; does it replace code or add a second way
