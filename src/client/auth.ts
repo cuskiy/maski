@@ -96,7 +96,12 @@ function wireLogin(worker: WorkerClient, fail: (message: string, form: HTMLFormE
 function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLFormElement) => void): void {
   const form = document.querySelector<HTMLFormElement>('form[data-flow="unlock"]');
   const account = readAccount();
-  if (!form || account === null) return;
+  if (form === null) return;
+  if (account === null) {
+    // No account in this browser means there is nothing to unlock.
+    location.replace("../server/");
+    return;
+  }
 
   // The field is disabled until the check settles: otherwise a late answer navigates away under
   // the reader's hands, which is what a half-typed key felt like.
