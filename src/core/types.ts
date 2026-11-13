@@ -87,6 +87,12 @@ export interface Window {
   hasOlder: boolean;
 }
 
+export interface Discovery {
+  baseUrl: string;
+  password: boolean;
+  registration: boolean;
+}
+
 export interface Keys {
   ready: boolean;
 }

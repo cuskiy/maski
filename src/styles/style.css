@@ -416,6 +416,15 @@ textarea {
   }
 }
 
+/* a composer that cannot send says so before the reader types */
+.composer[data-readonly="true"] .composer-field {
+  opacity: 0.55;
+}
+
+.composer[data-readonly="true"] .composer-send {
+  opacity: 0.35;
+}
+
 .composer-bar {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
