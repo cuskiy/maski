@@ -12,7 +12,7 @@ import type { WorkerClient } from "./worker.ts";
 
 const DAY = new Intl.DateTimeFormat(undefined, { dateStyle: "full" });
 const TIME = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
-const EMOJI_ONLY = /^[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f\s]+$/u;
+
 
 interface Entry {
   key: string;
@@ -178,9 +178,9 @@ export class Timeline {
     const own = message.sender === state.session?.userId;
     row.className = `row${own ? " row-own" : ""}${groupStart ? " row-start" : ""}${mentionsMe(message) ? " row-mention" : ""}`;
     row.dataset["id"] = message.id;
-    const avatar = row.querySelector(".row-avatar");
+    const avatar = row.querySelector<HTMLElement>(".row-avatar");
     if (avatar !== null) avatar.textContent = groupStart ? message.name.slice(0, 1) : "";
-    const bubble = row.querySelector(".bubble");
+    const bubble = row.querySelector<HTMLElement>(".bubble");
     if (bubble === null) return;
     bubble.className = `bubble${message.media !== null ? " bubble-media" : ""}${emojiOnly(message) ? " is-emoji" : ""}`;
     bubble.replaceChildren();
@@ -244,7 +244,7 @@ export class Timeline {
       return;
     }
     if (message.kind === "audio") {
-      this.audio(media, bubble, message.kind !== "sticker");
+      this.audio(media, bubble);
       return;
     }
     this.picture(message, bubble, false);
@@ -295,7 +295,7 @@ export class Timeline {
     frame.append(button);
   }
 
-  private audio(media: Media, bubble: HTMLElement, wait: boolean): void {
+  private audio(media: Media, bubble: HTMLElement): void {
     const frame = el("div", { class: "media media-audio" });
     bubble.append(frame);
     const load = (): void => {
@@ -307,15 +307,11 @@ export class Timeline {
         })
         .catch(() => frame.replaceChildren(el("span", { class: "media-name", text: t("media.failed") })));
     };
-    if (wait) {
-      const button = el("button", { class: "media-show", attrs: { type: "button" } }, [
-        el("span", { class: "media-name", text: media.name || t("room.audio") }),
-      ]);
-      button.addEventListener("click", load);
-      frame.append(button);
-      return;
-    }
-    load();
+    const button = el("button", { class: "media-show", attrs: { type: "button" } }, [
+      el("span", { class: "media-name", text: media.name || t("room.audio") }),
+    ]);
+    button.addEventListener("click", load);
+    frame.append(button);
   }
 
   private file(message: Message, bubble: HTMLElement, media: Media): void {
@@ -423,7 +419,7 @@ function mentionsMe(message: Message): boolean {
 
 function emojiOnly(message: Message): boolean {
   const text = message.body.trim();
-  return text.length > 0 && message.kind === "text" && EMOJI_ONLY.test(text);
+  return message.kind === "text" && text.length > 0 && /\p{Extended_Pictographic}/u.test(text) && !/[\p{L}\p{N}]/u.test(text);
 }
 
 function membershipLine(message: Message): string {
