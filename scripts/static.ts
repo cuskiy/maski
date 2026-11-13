@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { config } from "../src/config.ts";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -82,7 +83,7 @@ export function serve(root: string, port: number, options: ServeOptions = {}): P
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = fileURLToPath(new URL("../dist", import.meta.url));
-  const port = Number(process.env["PORT"] ?? 5173);
+  const port = Number(process.env["PORT"] ?? config.serve.port);
   await serve(root, port);
-  process.stdout.write(`serving dist on http://localhost:${String(port)}/\n`);
+  process.stdout.write(`serving dist on http://${config.serve.host}:${String(port)}/\n`);
 }

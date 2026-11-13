@@ -1,12 +1,19 @@
-/** The one place app identity and defaults are written. Copy lives in the catalogs. */
+/** The one place project-wide values are written. Copy lives in the catalogs. */
 export const config = {
   app: {
     name: "maski",
     version: "0.1.0",
     source: "https://github.com/cuskiy/maski",
   },
+  site: {
+    origin: "",
+  },
+  serve: {
+    host: "localhost",
+    port: 5173,
+  },
   homeserver: {
-    example: "matrix.org",
+    default: "matrix.org",
   },
   limits: {
     timeline: 80,

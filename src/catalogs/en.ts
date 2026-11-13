@@ -12,7 +12,6 @@ export const en = {
   "auth.server.title": "Sign in",
   "auth.server.hint": "The server your account lives on.",
   "auth.server.label": "Homeserver",
-  "auth.server.placeholder": "For example matrix.org",
   "auth.server.invalid": "That does not look like an address.",
   "auth.server.unreachable": "That server did not answer.",
   "auth.login.failed": "The server refused the sign-in.",

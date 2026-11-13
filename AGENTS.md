@@ -72,6 +72,13 @@ Trust gates *loading*, not tool access: after start, tools run with the operatin
 of the Pi process. Declining trust is safe here — the skill only repeats section 3.15.1 — so a reader
 who does not want project resources loaded loses nothing but a shortcut.
 
+## 1.2.1c One configuration surface
+
+`src/config.ts` holds every project-wide value: app identity (name, version, source), the site
+origin, the dev server host and port, the default homeserver, and the limits the interface reads.
+The generator, the dev server and the client import it; nothing else writes a port or an address of
+its own. Copy is not configuration and stays in the catalogs.
+
 ## 1.2.2 Previewing
 
 | command | what it does |
@@ -178,7 +185,8 @@ ignored.
   等同于没有房间。
 - `/` 是加载页：上面 `maski` 标记，下面转圈，别无他物；没有 JS 时再加一句需要 JS 和入口链接。
   它读会话决定去处，用 `replace()` 跳转，同时决定语言：**没有登录就跳 `/server/`**，有会话跳 `/chat/`。
-- `/server/` 的地址输入框**默认为空**，`matrix.org` 只是占位符。可填 `unredacted.org`、
+- `/server/` 的地址输入框**预填配置里的默认地址**（`src/config.ts` 的 `homeserver.default`），没有占位符文字；
+  用户可以全选删掉换成别的。可填 `unredacted.org`、
   `https://unredacted.org`、`http://localhost:8008`、`matrix.unredacted.org:8448` 等；协议缺省按
   `https://` 处理，路径被丢弃，非 http(s) 协议与含空格的输入被拒绝。
 - `/login/` 与 `/register/` 依赖服务器地址，没有它业务功能不成立；地址只来自它们自己的 `?server=`。

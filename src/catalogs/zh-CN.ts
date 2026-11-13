@@ -12,7 +12,6 @@ export const zhCN = {
   "auth.server.title": "登录",
   "auth.server.hint": "账户所在的服务器。",
   "auth.server.label": "服务器地址",
-  "auth.server.placeholder": "例如 matrix.org",
   "auth.server.invalid": "这看起来不像一个地址。",
   "auth.server.unreachable": "没有收到该服务器的回应。",
   "auth.login.failed": "服务器拒绝了这次登录。",

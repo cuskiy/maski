@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { config } from "../src/config.ts";
 import { serve } from "./static.ts";
 
 const root = fileURLToPath(new URL("../dist", import.meta.url));
-const port = Number(process.env["PORT"] ?? 5173);
+const port = Number(process.env["PORT"] ?? config.serve.port);
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 /** The same gates `npm run check` uses, so a broken type or a stray marker shows up immediately. */
@@ -28,7 +29,7 @@ const child = (command: string, args: readonly string[]): ReturnType<typeof spaw
 const builder = child(npm, ["run", "build:only", "--", "--watch"]);
 const typecheck = child(npm, ["run", "code", "--", "--watch", "--preserveWatchOutput"]);
 const server = await serve(root, port, { reload: true });
-process.stdout.write(`dev on http://localhost:${String(port)}/ — types are checked on save, the page reloads after each build\n`);
+process.stdout.write(`dev on http://${config.serve.host}:${String(port)}/ — types are checked on save, the page reloads after each build\n`);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
