@@ -5,7 +5,7 @@ import { field, links, submit } from "../components/form.ts";
 import { languageSwitch } from "../components/language.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
-export function registerView({ locale, localePath, alternates }: PageContext): PageView {
+export function registerView({ locale, localePath, languages }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.register.title")} · ${t(c, "app.name")}`,
@@ -19,7 +19,7 @@ export function registerView({ locale, localePath, alternates }: PageContext): P
     ${submit(t(c, "auth.register.submit"))}
   </form>`,
       footer: links([{ label: t(c, "auth.register.existing"), href: `${localePath}login/` }]),
-      language: languageSwitch(locale.id, alternates),
+      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
       note: t(c, "noscript.auth"),
     }),
   };

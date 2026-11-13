@@ -38,10 +38,13 @@ function address(locale: Locale, path: string): string {
   return `${locale.path}${path.replace(/^\//u, "")}`;
 }
 
-function alternates(page: Page, locale: Locale): Alternate[] {
-  return locales
-    .filter((other) => other.id !== locale.id)
-    .map((other) => ({ lang: other.id, label: other.label, href: address(other, page.path) }));
+function languages(page: Page, locale: Locale): Alternate[] {
+  return locales.map((entry) => ({
+    lang: entry.id,
+    label: entry.label,
+    href: address(entry, page.path),
+    current: entry.id === locale.id,
+  }));
 }
 
 /** Every page, for every locale, composed with the same base layout. */
@@ -50,8 +53,9 @@ export function renderPages(assets: Assets): Emit[] {
   for (const locale of locales) {
     for (const page of PAGES) {
       const path = address(locale, page.path);
-      const siblings = alternates(page, locale);
-      const view = page.view({ locale, assets, path, localePath: locale.path, alternates: siblings });
+      const all = languages(page, locale);
+      const siblings = all.filter((entry) => !entry.current);
+      const view = page.view({ locale, assets, path, localePath: locale.path, languages: all, alternates: siblings });
       const document = base({
         c: locale.catalog,
         page: page.id,

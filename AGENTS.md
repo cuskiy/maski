@@ -716,3 +716,19 @@ no transpiler: `node scripts/build.ts`, `node --test "test/*.test.ts"`. That rem
 | `matrix-js-sdk`, `@matrix-org/matrix-sdk-crypto-wasm` | `esbuild`, `html-minifier-terser`, `typescript`, `oxlint`, `oxlint-tsgolint`, `stylelint`, `stylelint-config-standard`, `playwright`, `web-features`, `@types/node`, `@types/html-minifier-terser` |
 
 `dompurify` is added when the sanitizer lands; a dependency nothing imports is not a dependency.
+
+## 3.16 What is built, as of this commit
+
+| area | state |
+| --- | --- |
+| pipeline | esbuild + hashed assets + generated pages + audit + `past/spec` ledger; `npm run check` green |
+| worker | account database, forward and backward projection, room summaries, send with echo replace, media fetch and decrypt, unlock |
+| pages | router, chat, server, login, login-oauth, register, key, 404 — seven generated documents per language, complete with scripts off |
+| language | one button per page opening a native popover of the languages; the choice is stored and reused by the loader and by settings; English lives at `/` |
+| chat | room list in four sections with remembered state, timeline with day separators and grouped avatars, composer with draft in the field |
+| media | a picture is a button until the reader asks for it, then an image whose click opens the viewer; video uses native controls |
+| settings | account (name, MXID), language, about (version, source, privacy), log out with an inline confirmation |
+
+Next, in the order the design asks for: stickers and the picker (packs from room state and account
+data), search over the token index, sessions and verification in settings, then the service worker
+with its offline story.

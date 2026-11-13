@@ -5,6 +5,7 @@ import { useCatalog, t } from "../i18n.ts";
 import { el } from "../ui.ts";
 import { readAccount } from "./account.ts";
 import { Composer } from "./composer.ts";
+import { mountSettings } from "./settings.ts";
 import { Nav } from "./nav.ts";
 import { watchRoute } from "./router.ts";
 import { applySession, get, set, subscribe } from "./store.ts";
@@ -27,6 +28,8 @@ export function startChat(): void {
   new Nav(navRoot);
   const timeline = new Timeline(timelineRoot, worker);
   new Composer(composerRoot, worker);
+  const settingsBody = document.querySelector<HTMLElement>('[data-region="settings-body"]');
+  if (settingsBody) mountSettings(settingsBody, worker);
 
   const draw = (): void => {
     const state = get();

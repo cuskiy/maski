@@ -4,6 +4,8 @@ export const zhCN = {
   "app.description": "把你的消息留在自己设备上的 Matrix 客户端",
 
   "lang.name": "简体中文",
+  "lang.short": "中文",
+  "lang.label": "语言",
 
   "noscript.auth": "登录需要 JavaScript。",
   "noscript.key": "解锁需要 JavaScript。",
@@ -45,6 +47,10 @@ export const zhCN = {
 
   "noscript.router": "这个页面需要 JavaScript。",
   "noscript.chat": "消息需要 JavaScript。",
+  "viewer.close": "关闭",
+  "media.show": "查看图片",
+  "media.loading": "正在加载",
+  "media.failed": "无法加载这张图片",
   "room.undecryptable": "无法解密",
   "room.queued": "尚未发送",
   "room.sending": "发送中",
@@ -67,6 +73,16 @@ export const zhCN = {
   "sections.channels": "频道",
   "sections.empty": "加入或创建一个房间",
 
+  "settings.account": "账户",
+  "settings.language": "语言",
+  "settings.about": "关于",
+  "settings.version": "版本 {version}",
+  "settings.source": "源代码",
+  "settings.privacy": "没有统计，没有第三方请求。消息留在这个浏览器里。",
+  "settings.logout": "退出登录",
+  "settings.logoutConfirm": "退出登录，并从这个浏览器移除此账户？",
+  "settings.logoutYes": "退出登录",
+  "settings.cancel": "取消",
   "surface.settings": "设置",
   "surface.search": "搜索",
   "surface.newMessage": "新消息",

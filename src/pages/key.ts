@@ -5,7 +5,7 @@ import { field, submit } from "../components/form.ts";
 import { languageSwitch } from "../components/language.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
-export function keyView({ locale, alternates }: PageContext): PageView {
+export function keyView({ locale, languages }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.key.title")} · ${t(c, "app.name")}`,
@@ -23,7 +23,7 @@ export function keyView({ locale, alternates }: PageContext): PageView {
     <button class="button-quiet" type="submit">${t(c, "auth.key.reset")}</button>
   </form>
   <p class="key-out" data-region="key-out" hidden></p>`,
-      language: languageSwitch(locale.id, alternates),
+      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
       note: t(c, "noscript.key"),
     }),
   };

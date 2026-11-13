@@ -28,16 +28,16 @@ ${surfaces(c)}`;
 }
 
 function surfaces(c: Catalog): Html {
-  const list = [
+  const list: ReadonlyArray<{ id: string; key: string; body?: Html }> = [
     { id: SURFACE.search, key: "surface.search" },
     { id: SURFACE.newMessage, key: "surface.newMessage" },
     { id: SURFACE.invite, key: "surface.invite" },
     { id: SURFACE.join, key: "surface.join" },
     { id: SURFACE.create, key: "surface.create" },
-    { id: SURFACE.settings, key: "surface.settings" },
+    { id: SURFACE.settings, key: "surface.settings", body: html`<div data-region="settings-body"></div>` },
     { id: SURFACE.attach, key: "surface.attach" },
     { id: SURFACE.sticker, key: "surface.sticker" },
     { id: SURFACE.emoji, key: "surface.emoji" },
-  ] as const;
-  return html`${list.map((entry) => surface({ c, id: entry.id, titleKey: entry.key }))}`;
+  ];
+  return html`${list.map((entry) => surface({ c, id: entry.id, titleKey: entry.key, ...(entry.body === undefined ? {} : { body: entry.body }) }))}`;
 }

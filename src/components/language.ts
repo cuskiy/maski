@@ -1,10 +1,18 @@
 import { html, type Html } from "../lib/html.ts";
 import type { Alternate } from "../pages/kit.ts";
 
-/** The language switch is a set of real links, one per generated locale. */
-export function languageSwitch(current: string, alternates: readonly Alternate[]): Html {
-  return html`<nav class="lang">${alternates.map(
-    (alternate) =>
-      html`<a class="lang-item" href="${alternate.href}" hreflang="${alternate.lang}"${alternate.lang === current ? html` aria-current="page"` : html``}>${alternate.label}</a>`,
-  )}</nav>`;
+/**
+ * One control, not a row of links: a button naming the current language, a popover with the rest.
+ * Each choice is a real link to that locale's document, so a script is not needed to switch.
+ */
+export function languageSwitch(languages: readonly Alternate[], label: string, currentLabel: string): Html {
+  return html`<div class="lang">
+  <button class="lang-button" type="button" popovertarget="lang-menu" aria-label="${label}">${currentLabel}</button>
+  <nav class="lang-menu" id="lang-menu" popover="auto">
+${languages.map(
+  (language) => html`    <a class="lang-item" href="${language.href}" hreflang="${language.lang}"${language.current ? html` aria-current="page"` : html``}>${language.label}</a>
+`,
+)}
+  </nav>
+</div>`;
 }

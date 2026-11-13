@@ -9,6 +9,8 @@ export function useCatalog(next: Record<string, string>): void {
 }
 
 /** The catalog of the document the reader is on; the generator already chose the language. */
-export function t(key: Key): string {
-  return catalog[key] ?? en[key];
+export function t(key: Key, params?: Record<string, string>): string {
+  const template = catalog[key] ?? en[key];
+  if (params === undefined) return template;
+  return template.replace(/\{(\w+)\}/gu, (_match, name: string) => params[name] ?? `{${name}}`);
 }

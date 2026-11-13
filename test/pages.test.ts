@@ -28,7 +28,7 @@ const views = { chat: chatView, router: routerView, server: serverView, login: l
 function pages(): Array<{ name: string; html: string }> {
   return locales.flatMap((locale) =>
     Object.entries(views).map(([name, view]) => {
-      const context: PageContext = { locale, assets, path: `/${name}/`, localePath: "/", alternates: [] };
+      const context: PageContext = { locale, assets, path: `/${name}/`, localePath: "/", languages: [], alternates: [] };
       const page = view(context);
       const document = base({ c: locale.catalog, page: name, lang: locale.id, title: page.title, description: "x", canonical: "/", alternates: [], assets, body: page.body });
       return { name: `${locale.id}/${name}`, html: document.value };

@@ -5,7 +5,7 @@ import { languageSwitch } from "../components/language.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
 /** Only the server knows which flows it offers, so its buttons are the script's work. */
-export function oauthView({ locale, localePath, alternates }: PageContext): PageView {
+export function oauthView({ locale, localePath, languages }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.oauth.title")} · ${t(c, "app.name")}`,
@@ -15,7 +15,7 @@ export function oauthView({ locale, localePath, alternates }: PageContext): Page
       hint: t(c, "auth.oauth.hint"),
       body: html`<div class="auth-methods" data-flow="oauth"></div>`,
       footer: html`<nav class="auth-links"><a class="link" href="${localePath}login/">${t(c, "auth.login.submit")}</a></nav>`,
-      language: languageSwitch(locale.id, alternates),
+      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
       note: t(c, "noscript.auth"),
     }),
   };

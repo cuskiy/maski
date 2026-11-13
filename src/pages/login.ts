@@ -6,7 +6,7 @@ import { languageSwitch } from "../components/language.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
 /** The server comes from `?server=`, so this page names it only once the script has read it. */
-export function loginView({ locale, localePath, alternates }: PageContext): PageView {
+export function loginView({ locale, localePath, languages }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.login.title")} · ${t(c, "app.name")}`,
@@ -22,7 +22,7 @@ export function loginView({ locale, localePath, alternates }: PageContext): Page
         { label: t(c, "auth.login.register"), href: `${localePath}register/` },
         { label: t(c, "auth.login.other"), href: `${localePath}login-oauth/` },
       ]),
-      language: languageSwitch(locale.id, alternates),
+      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
       note: t(c, "noscript.auth"),
     }),
   };

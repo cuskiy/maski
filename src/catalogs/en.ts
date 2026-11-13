@@ -4,6 +4,8 @@ export const en = {
   "app.description": "A Matrix client that keeps your messages on your device",
 
   "lang.name": "English",
+  "lang.short": "EN",
+  "lang.label": "Language",
 
   "noscript.auth": "Signing in needs JavaScript.",
   "noscript.key": "Unlocking needs JavaScript.",
@@ -45,6 +47,10 @@ export const en = {
 
   "noscript.router": "This page needs JavaScript.",
   "noscript.chat": "Messages need JavaScript.",
+  "viewer.close": "Close",
+  "media.show": "Show picture",
+  "media.loading": "Loading",
+  "media.failed": "The picture could not be loaded",
   "room.undecryptable": "Cannot be decrypted",
   "room.queued": "Not sent yet",
   "room.sending": "Sending",
@@ -67,6 +73,16 @@ export const en = {
   "sections.channels": "Channels",
   "sections.empty": "Join or create a room",
 
+  "settings.account": "Account",
+  "settings.language": "Language",
+  "settings.about": "About",
+  "settings.version": "Version {version}",
+  "settings.source": "Source code",
+  "settings.privacy": "No analytics, no third-party requests. Messages stay in this browser.",
+  "settings.logout": "Log out",
+  "settings.logoutConfirm": "Log out and remove this account from this browser?",
+  "settings.logoutYes": "Log out",
+  "settings.cancel": "Cancel",
   "surface.settings": "Settings",
   "surface.search": "Search",
   "surface.newMessage": "New message",

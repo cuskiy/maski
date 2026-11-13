@@ -5,7 +5,7 @@ import { field, submit } from "../components/form.ts";
 import { languageSwitch } from "../components/language.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
-export function serverView({ locale, alternates }: PageContext): PageView {
+export function serverView({ locale, languages }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.server.title")} · ${t(c, "app.name")}`,
@@ -17,7 +17,7 @@ export function serverView({ locale, alternates }: PageContext): PageView {
     ${field({ id: "homeserver", label: t(c, "auth.server.label"), type: "text", autocomplete: "url", placeholder: t(c, "auth.server.placeholder") })}
     ${submit(t(c, "auth.server.submit"))}
   </form>`,
-      language: languageSwitch(locale.id, alternates),
+      language: languageSwitch(languages, t(c, "lang.label"), t(c, "lang.short")),
       note: t(c, "noscript.auth"),
     }),
   };

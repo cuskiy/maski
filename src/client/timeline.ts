@@ -1,6 +1,7 @@
 import type { Message } from "../core/types.ts";
 import { t } from "../i18n.ts";
 import { el } from "../ui.ts";
+import { openViewer } from "./viewer.ts";
 import { get, subscribe } from "./store.ts";
 import type { WorkerClient } from "./worker.ts";
 import { openRoom } from "./router.ts";
@@ -101,20 +102,40 @@ export class Timeline {
     return row;
   }
 
+  /** Nothing is fetched until the reader asks for it, and the frame already holds its space. */
   private picture(message: Message, bubble: HTMLElement): void {
     const media = message.media;
     if (!media) return;
     const frame = el("div", { class: "media" });
-    if (media.width !== null && media.height !== null) frame.style.setProperty("--media-ratio", `${String(media.width)} / ${String(media.height)}`);
+    if (media.width !== null && media.height !== null) {
+      frame.style.setProperty("--media-ratio", `${String(media.width)} / ${String(media.height)}`);
+    }
+    const button = el("button", { class: "media-show", attrs: { type: "button" } }, [
+      el("span", { class: "media-name", text: media.name || t("media.show") }),
+    ]);
+    frame.append(button);
     bubble.append(frame);
-    void this.worker
-      .send<{ blob: Blob }>({ type: "media", roomId: message.roomId, media, size: 640 })
-      .then(({ blob }) => {
-        frame.append(el("img", { class: "media-image", attrs: { src: URL.createObjectURL(blob), alt: media.name, decoding: "async" } }));
-      })
-      .catch(() => {
-        frame.append(el("span", { class: "media-name", text: media.name }));
-      });
+
+    button.addEventListener("click", () => {
+      button.replaceChildren(el("span", { class: "media-name", text: t("media.loading") }));
+      const size = media.file ? 0 : 640;
+      void this.worker
+        .send<{ blob: Blob }>({ type: "media", roomId: message.roomId, media, size })
+        .then(({ blob }) => {
+          const url = URL.createObjectURL(blob);
+          if (media.mime.startsWith("video/")) {
+            const video = el("video", { class: "media-image", attrs: { src: url, controls: "controls", preload: "metadata" } });
+            button.replaceWith(video);
+            return;
+          }
+          const image = el("img", { class: "media-image", attrs: { src: url, alt: media.name, decoding: "async" } });
+          image.addEventListener("click", () => openViewer(url, media.name), { once: true });
+          button.replaceWith(image);
+        })
+        .catch(() => {
+          button.replaceChildren(el("span", { class: "media-name", text: t("media.failed") }));
+        });
+    });
   }
 
   scrollToBottom(): void {
