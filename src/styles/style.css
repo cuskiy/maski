@@ -506,6 +506,20 @@ textarea {
 
 .room-row {
   min-inline-size: 0;
+  animation: room-row-in 140ms var(--ease);
+}
+
+@keyframes room-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-row {
+    animation: none;
+  }
 }
 
 .room-link {

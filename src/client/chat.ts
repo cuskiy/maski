@@ -49,8 +49,15 @@ export function startChat(): void {
 
   subscribe(["phase", "rooms", "roomId", "messages"], draw);
 
+  const account = readAccount();
+  // The router only lands here when the last check opened the gate; the stored rooms can paint
+  // before the worker finishes crypto, and the start reply corrects the gate if the keys are gone.
+  if (account?.keysReady === true) set({ phase: "ready" });
+  const started = worker.send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account?.hash ?? null, wasm: worker.wasm() });
+
   const openWindow = async (roomId: string): Promise<void> => {
     try {
+      await started;
       const window = await worker.send<Window>({ type: "open", roomId });
       if (window.roomId === get().roomId) set({ messages: window.messages, hasOlder: window.hasOlder });
     } catch {
@@ -96,11 +103,7 @@ export function startChat(): void {
     void openWindow(roomId);
   });
 
-  const account = readAccount();
-  void worker
-    .send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account?.hash ?? null, wasm: worker.wasm() })
-    .then((result) => applySession(result.session, result.keys))
-    .catch(() => applySession(null, null));
+  started.then((result) => applySession(result.session, result.keys)).catch(() => applySession(null, null));
 
   draw();
   void timeline;
@@ -120,7 +123,7 @@ function drawHeader(header: HTMLElement, room: Room | null): void {
 
 function drawNotice(root: HTMLElement, phase: string, timeline: Timeline): void {
   const existing = root.querySelector<HTMLElement>(".timeline-note");
-  if (phase === "ready") {
+  if (phase === "ready" || phase === "boot") {
     existing?.remove();
     return;
   }
