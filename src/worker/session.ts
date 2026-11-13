@@ -126,10 +126,20 @@ export class WorkerSession {
     return crypto;
   }
 
+  /**
+   * The gate asks whether this device belongs to the account's identity, which is what cross-signing
+   * signs. `isSecretStorageReady` answers a different question — whether a key is cached — and says
+   * yes on a device that has never been signed, which would let a new device past the gate.
+   */
   async keys(): Promise<Keys> {
     const crypto = this.client?.getCrypto();
-    if (!crypto) return { ready: false };
-    return { ready: await crypto.isSecretStorageReady() };
+    const client = this.client;
+    if (!crypto || !client) return { ready: false };
+    const self = client.getUserId() ?? "";
+    const deviceId = client.getDeviceId() ?? "";
+    if (self.length === 0 || deviceId.length === 0) return { ready: false };
+    const status = await crypto.getDeviceVerificationStatus(self, deviceId).catch(() => null);
+    return { ready: status?.crossSigningVerified === true };
   }
 
   async open(roomId: string): Promise<Window> {
@@ -255,7 +265,9 @@ export class WorkerSession {
       deviceId: stored.session.deviceId,
       logger: silentLogger(),
     });
-    await client.initRustCrypto({ cryptoDatabasePrefix: `maski-rust-${stored.session.accountHash}` });
+    // One account can have several devices in this browser; a new device must not inherit the
+    // previous device's secret-storage key, so the store is keyed by both.
+    await client.initRustCrypto({ cryptoDatabasePrefix: `maski-rust-${stored.session.accountHash}-${stored.session.deviceId}` });
     this.client = client;
     this.session = stored.session;
     this.watch(client);
