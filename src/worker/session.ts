@@ -267,9 +267,10 @@ export class WorkerSession {
   }
 }
 
+const quiet = (): void => undefined;
+
 /** The SDK's default logger writes every request to the console; the worker keeps its own record. */
 function silentLogger(): Logger {
-  const quiet = (): void => undefined;
   const logger: Logger = { trace: quiet, debug: quiet, info: quiet, warn: quiet, error: quiet, getChild: () => logger };
   return logger;
 }

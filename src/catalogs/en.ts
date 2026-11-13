@@ -8,7 +8,7 @@ export const en = {
   "noscript.auth": "Signing in needs JavaScript.",
   "noscript.key": "Unlocking needs JavaScript.",
   "auth.server.title": "Sign in",
-  "auth.server.hint": "Your account lives on a homeserver. Enter its address.",
+  "auth.server.hint": "The server your account lives on.",
   "auth.server.label": "Homeserver",
   "auth.server.submit": "Continue",
   "auth.login.title": "Sign in",

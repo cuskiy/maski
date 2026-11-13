@@ -6,6 +6,7 @@ export interface FieldInput {
   readonly type: "text" | "password" | "url";
   readonly autocomplete: string;
   readonly value?: string;
+  readonly placeholder?: string;
   readonly hint?: string;
 }
 
@@ -14,7 +15,7 @@ export function field(input: FieldInput): Html {
   const described = input.hint === undefined ? html`` : html` aria-describedby="${input.id}-hint"`;
   return html`<p class="field">
     <label class="field-label" for="${input.id}">${input.label}</label>
-    <input class="input" id="${input.id}" name="${input.id}" type="${input.type}" autocomplete="${input.autocomplete}" spellcheck="false" value="${input.value ?? ""}"${described}>
+    <input class="input" id="${input.id}" name="${input.id}" type="${input.type}" autocomplete="${input.autocomplete}" spellcheck="false" value="${input.value ?? ""}" placeholder="${input.placeholder ?? ""}"${described}>
     ${hint}
   </p>`;
 }

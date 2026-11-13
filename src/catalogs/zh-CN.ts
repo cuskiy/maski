@@ -8,7 +8,7 @@ export const zhCN = {
   "noscript.auth": "登录需要 JavaScript。",
   "noscript.key": "解锁需要 JavaScript。",
   "auth.server.title": "登录",
-  "auth.server.hint": "账户在某个 homeserver 上。填写它的地址。",
+  "auth.server.hint": "账户所在的服务器。",
   "auth.server.label": "服务器地址",
   "auth.server.submit": "继续",
   "auth.login.title": "登录",

@@ -6,7 +6,7 @@ export const config = {
     source: "https://github.com/cuskiy/maski",
   },
   homeserver: {
-    default: "matrix.org",
+    example: "matrix.org",
   },
   limits: {
     timeline: 80,
