@@ -4,6 +4,8 @@ import { locales } from "../catalogs/index.ts";
 import { useCatalog, t } from "../i18n.ts";
 import { el } from "../ui.ts";
 import { readAccount } from "./account.ts";
+import { copyText } from "./clipboard.ts";
+import { openMenu } from "./menu.ts";
 import { Composer } from "./composer.ts";
 import { Picker } from "./picker.ts";
 import { mountSettings } from "./settings.ts";
@@ -25,6 +27,23 @@ export function startChat(): void {
   const header = document.querySelector<HTMLElement>(".room-header");
   if (!shell || !timelineRoot || !composerRoot || !navRoot || !header) return;
 
+  const menu = header.querySelector<HTMLButtonElement>(".room-menu");
+  menu?.addEventListener("click", () => {
+    const roomId = get().roomId;
+    if (roomId === null) return;
+    const box = menu.getBoundingClientRect();
+    openMenu(
+      [
+        {
+          label: t("action.copyLink"),
+          run: () => copyText(`${location.origin}${location.pathname}#/room/${encodeURIComponent(roomId)}`, t("action.copyLink")),
+        },
+      ],
+      box.left,
+      box.bottom,
+    );
+  });
+
   const worker = new WorkerClient();
   new Nav(navRoot, worker);
   const composer = new Composer(composerRoot, worker);
@@ -35,11 +54,13 @@ export function startChat(): void {
   const settingsBody = document.querySelector<HTMLElement>('[data-region="settings-body"]');
   if (settingsBody) mountSettings(settingsBody, worker);
 
+  const avatars = new Map<string, string>();
+
   const draw = (): void => {
     const state = get();
     const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
     shell.dataset["room"] = room === null ? "false" : "true";
-    drawHeader(header, room);
+    drawHeader(header, room, worker, avatars);
     drawNotice(timelineRoot, state.phase, timeline);
     const newest = state.messages.at(-1) ?? null;
     if (state.phase === "ready" && room !== null && newest !== null && newest.roomId === state.roomId) {
@@ -109,16 +130,63 @@ export function startChat(): void {
   void timeline;
 }
 
-function drawHeader(header: HTMLElement, room: Room | null): void {
-  header.hidden = room === null;
+function drawHeader(header: HTMLElement, room: Room | null, worker: WorkerClient, avatars: Map<string, string>): void {
   const text = header.querySelector<HTMLElement>(".room-head-text");
+  const avatar = header.querySelector<HTMLElement>(".room-header-avatar");
+  const menu = header.querySelector<HTMLElement>(".room-menu");
+  if (menu) menu.hidden = room === null;
+  if (avatar) {
+    avatar.hidden = room === null;
+    if (room !== null) setAvatar(avatar, room, worker, avatars);
+  }
   if (!text) return;
-  text.replaceChildren();
-  if (room === null) return;
-  text.append(
+  if (room === null) {
+    text.replaceChildren();
+    return;
+  }
+  const title = text.querySelector<HTMLElement>(".room-title");
+  const topic = text.querySelector<HTMLElement>(".room-topic");
+  if (title && topic) {
+    if (title.textContent !== room.name) title.textContent = room.name;
+    if (topic.textContent !== room.topic) topic.textContent = room.topic;
+    return;
+  }
+  text.replaceChildren(
     el("h2", { class: "room-title", text: room.name }),
     el("p", { class: "room-topic", text: room.topic }),
   );
+}
+
+function setAvatar(node: HTMLElement, room: Room, worker: WorkerClient, avatars: Map<string, string>): void {
+  const initial = room.name.slice(0, 1);
+  const url = room.avatar;
+  const key = url ?? "";
+  if (node.dataset["avatar"] === key) {
+    if (url === null && node.textContent !== initial) node.textContent = initial;
+    return;
+  }
+  node.dataset["avatar"] = key;
+  node.textContent = initial;
+  if (url === null) return;
+  const cached = avatars.get(url);
+  if (cached !== undefined) {
+    node.replaceChildren(el("img", { class: "room-avatar-image", attrs: { src: cached, alt: room.name } }));
+    return;
+  }
+  void worker
+    .send<{ blob: Blob }>({
+      type: "media",
+      media: { url, mime: "image/png", size: 0, width: null, height: null, name: "", file: null },
+      size: 64,
+    })
+    .then(({ blob }) => {
+      const object = URL.createObjectURL(blob);
+      avatars.set(url, object);
+      if (node.dataset["avatar"] === url) {
+        node.replaceChildren(el("img", { class: "room-avatar-image", attrs: { src: object, alt: room.name } }));
+      }
+    })
+    .catch(() => undefined);
 }
 
 function drawNotice(root: HTMLElement, phase: string, timeline: Timeline): void {

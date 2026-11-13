@@ -121,6 +121,7 @@ export const en = {
   "chat.title": "Chat",
   "chat.loadOlder": "Load older messages",
   "chat.back": "Back to the room list",
+  "chat.roomMenu": "Room menu",
 
   "composer.label": "Message",
   "composer.placeholder": "Write a message",

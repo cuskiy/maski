@@ -6,8 +6,10 @@ import { icons } from "./surface.ts";
 
 /** Empty until a room is open: with no room there is no header, and no control that needs one. */
 export function header(c: Catalog, backHref: string): Html {
-  return html`<header class="room-header" data-region="${REGION.header}" hidden>
+  return html`<header class="room-header" data-region="${REGION.header}">
   <a class="room-back" href="${backHref}" aria-label="${t(c, "chat.back")}">${icons.back}</a>
+  <span class="room-header-avatar" aria-hidden="true" hidden></span>
   <div class="room-head-text"></div>
+  <button class="room-menu" type="button" aria-label="${t(c, "chat.roomMenu")}" hidden>${icons.more}</button>
 </header>`;
 }

@@ -121,6 +121,7 @@ export const zhCN = {
   "chat.title": "聊天",
   "chat.loadOlder": "加载更早的消息",
   "chat.back": "返回房间列表",
+  "chat.roomMenu": "房间菜单",
 
   "composer.label": "消息",
   "composer.placeholder": "输入消息",
