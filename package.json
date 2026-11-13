@@ -6,16 +6,17 @@
   "description": "A fast, local-first Matrix client",
   "scripts": {
     "dev": "node scripts/dev.ts",
-    "build": "node scripts/build.ts",
+    "build": "npm run code && npm run lint && node scripts/build.ts",
     "pages": "node scripts/pages.ts",
     "audit": "node scripts/audit.ts",
     "features": "node scripts/features.ts",
     "code": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" \"static/**/*.css\" --max-warnings=0",
     "test": "node --test \"test/*.test.ts\"",
-    "check": "npm run code && npm run lint && npm test && npm run build && npm run audit && npm run contracts",
+    "check": "npm run code && npm run lint && npm test && npm run build:only && npm run audit && npm run contracts",
     "serve": "node scripts/static.ts",
-    "contracts": "node scripts/contracts.ts"
+    "contracts": "node scripts/contracts.ts",
+    "build:only": "node scripts/build.ts"
   },
   "dependencies": {
     "@matrix-org/matrix-sdk-crypto-wasm": "18.9.2",

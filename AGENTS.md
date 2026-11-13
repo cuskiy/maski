@@ -54,13 +54,32 @@ A specification statement wins over a library behaviour; where the library devia
 what we have to work with, and it is recorded. `grep -rn` in that checkout is the normal first move:
 `grep -rn "well-known/matrix/client" past/spec/content | head`.
 
+## 1.2.1b Project trust in Pi
+
+Pi refuses to load project-supplied resources until the folder is trusted, because those resources
+can execute: `.pi/settings.json`, `.pi/mcp.json`, `.pi/extensions`, `.pi/skills`, `.pi/prompts`,
+`.pi/themes`, `.pi/SYSTEM.md`, `.pi/APPEND_SYSTEM.md`, and `<dir>/.agents/skills`.
+
+This repository has `.pi/skills/contracts/SKILL.md`, so Pi asks. The three ways to answer:
+
+| way | scope |
+| --- | --- |
+| `/trust` inside Pi | saves a decision for this directory in `~/.pi/agent/trust.json` |
+| `pi --approve` (`-a`) / `--no-approve` (`-na`) | one process |
+| `defaultProjectTrust` in user settings | every project: `"always"`, `"ask"` (default), `"never"` |
+
+Trust gates *loading*, not tool access: after start, tools run with the operating system permissions
+of the Pi process. Declining trust is safe here — the skill only repeats section 3.15.1 — so a reader
+who does not want project resources loaded loses nothing but a shortcut.
+
 ## 1.2.2 Previewing
 
 | command | what it does |
 | --- | --- |
-| `npm run dev` | build in watch mode, serve `dist/` on http://localhost:5173/, reload the page after each build |
+| `npm run dev` | types and lint once, then type-check on save, build in watch mode, serve `dist/` on http://localhost:5173/ and reload after each build |
 | `npm run serve` | serve the built `dist/` on the same port, without the reload |
-| `npm run build` | write `dist/` and the manifest once |
+| `npm run build` | `tsc` and the linters first, then write `dist/` and the manifest |
+| `npm run build:only` | the bundle and pages without the gates, for a watch loop that already ran them |
 
 The dev server injects one `<script>` into each HTML response and nothing into the files, so the
 audit still compares the generated output byte for byte. It answers `application/wasm`, falls back
