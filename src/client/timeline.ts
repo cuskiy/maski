@@ -33,6 +33,7 @@ export class Timeline {
   private readonly composer: Composer;
   private readonly picker: Picker;
   private readonly nodes = new Map<string, HTMLElement>();
+  private readonly avatars = new Map<string, string>();
   private order: string[] = [];
   private pinned = true;
   private loading = false;
@@ -179,7 +180,7 @@ export class Timeline {
     row.className = `row${own ? " row-own" : ""}${groupStart ? " row-start" : ""}${mentionsMe(message) ? " row-mention" : ""}`;
     row.dataset["id"] = message.id;
     const avatar = row.querySelector<HTMLElement>(".row-avatar");
-    if (avatar !== null) avatar.textContent = groupStart ? message.name.slice(0, 1) : "";
+    if (avatar !== null) this.setAvatar(avatar, message, groupStart);
     const bubble = row.querySelector<HTMLElement>(".bubble");
     if (bubble === null) return;
     bubble.className = `bubble${message.media !== null ? " bubble-media" : ""}${emojiOnly(message) ? " is-emoji" : ""}`;
@@ -194,6 +195,44 @@ export class Timeline {
     bubble.append(el("time", { class: "bubble-time", text: TIME.format(message.ts) }));
   }
 
+  /** A sender's avatar is fetched once per URL; a failed fetch keeps the initial. */
+  private setAvatar(node: HTMLElement, message: Message, groupStart: boolean): void {
+    if (!groupStart) {
+      node.replaceChildren();
+      node.dataset["avatar"] = "";
+      return;
+    }
+    const initial = message.name.slice(0, 1);
+    const url = message.avatar;
+    const key = url ?? "";
+    if (node.dataset["avatar"] === key) {
+      if (url === null && node.textContent !== initial) node.textContent = initial;
+      return;
+    }
+    node.dataset["avatar"] = key;
+    node.textContent = initial;
+    if (url === null) return;
+    const cached = this.avatars.get(url);
+    if (cached !== undefined) {
+      node.replaceChildren(el("img", { class: "row-avatar-image", attrs: { src: cached, alt: message.name } }));
+      return;
+    }
+    void this.worker
+      .send<{ blob: Blob }>({
+        type: "media",
+        media: { url, mime: "image/png", size: 0, width: null, height: null, name: "", file: null },
+        size: 64,
+      })
+      .then(({ blob }) => {
+        const object = URL.createObjectURL(blob);
+        this.avatars.set(url, object);
+        if (node.dataset["avatar"] === url) {
+          node.replaceChildren(el("img", { class: "row-avatar-image", attrs: { src: object, alt: message.name } }));
+        }
+      })
+      .catch(() => undefined);
+  }
+
   private quote(reply: Message["reply"]): HTMLElement {
     if (reply === null) return el("span");
     const quote = el("button", { class: "bubble-quote", attrs: { type: "button" } }, [
@@ -205,7 +244,7 @@ export class Timeline {
   }
 
   private text(message: Message, bubble: HTMLElement): void {
-    const holder = el("span", { class: "bubble-text" });
+    const holder = el("div", { class: "bubble-text" });
     if (message.html !== null && message.kind !== "error" && message.body.length > 0) {
       holder.classList.add("bubble-html");
       holder.append(sanitize(message.html));

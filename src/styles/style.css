@@ -9,28 +9,28 @@ composer, surfaces, pages, states, motion.
 :root {
   color-scheme: light dark;
 
-  --paper-light: #f6f5f2;
-  --paper-dark: #16191c;
-  --ink-light: #17191c;
-  --ink-dark: #e8e6e1;
+  --paper-light: #ffffff;
+  --paper-dark: #141414;
+  --ink-light: #000000;
+  --ink-dark: #ffffff;
 
   --page: light-dark(var(--paper-light), var(--paper-dark));
   --ink: light-dark(var(--ink-light), var(--ink-dark));
 
   --surface: light-dark(color-mix(in oklab, var(--ink) 4%, var(--page)), color-mix(in oklab, var(--ink) 7%, var(--page)));
   --surface-hover: light-dark(color-mix(in oklab, var(--ink) 8%, var(--page)), color-mix(in oklab, var(--ink) 12%, var(--page)));
-  --surface-active: light-dark(color-mix(in oklab, var(--ink) 11%, var(--page)), color-mix(in oklab, var(--ink) 16%, var(--page)));
+  --surface-active: color-mix(in oklab, var(--ink) 6%, var(--surface));
   --popover: light-dark(color-mix(in oklab, var(--page) 92%, var(--ink)), color-mix(in oklab, var(--page) 88%, var(--ink)));
 
   --page-text: color-mix(in oklab, var(--ink) 92%, var(--page));
-  --page-text-muted: color-mix(in oklab, var(--ink) 58%, var(--page));
+  --page-text-muted: color-mix(in oklab, var(--ink) 66%, var(--page));
   --surface-text: color-mix(in oklab, var(--ink) 92%, var(--page));
-  --surface-text-muted: color-mix(in oklab, var(--ink) 58%, var(--page));
+  --surface-text-muted: color-mix(in oklab, var(--ink) 66%, var(--page));
 
   --rule: 1px solid light-dark(color-mix(in oklab, var(--ink) 12%, var(--page)), color-mix(in oklab, var(--ink) 18%, var(--page)));
   --line: light-dark(color-mix(in oklab, var(--ink) 12%, var(--page)), color-mix(in oklab, var(--ink) 18%, var(--page)));
   --mark: light-dark(color-mix(in oklab, var(--ink) 14%, var(--page)), color-mix(in oklab, var(--ink) 22%, var(--page)));
-  --scrim: color-mix(in oklab, var(--ink) 34%, transparent);
+  --scrim: light-dark(rgb(0 0 0 / 34%), rgb(0 0 0 / 56%));
   --focus: color-mix(in oklab, var(--ink) 70%, var(--page));
   --chip: color-mix(in oklab, var(--ink) 62%, transparent);
 
@@ -517,9 +517,9 @@ textarea {
 
 .room-link {
   display: grid;
-  grid-template-columns: var(--avatar) minmax(0, 1fr);
+  grid-template-columns: var(--avatar) minmax(0, 1fr) auto;
   gap: var(--space-2);
-  align-items: center;
+  align-items: start;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
 
@@ -535,6 +535,7 @@ textarea {
 .room-avatar {
   display: grid;
   place-items: center;
+  overflow: hidden;
   inline-size: var(--avatar);
   block-size: var(--avatar);
   border-radius: 50%;
@@ -542,6 +543,12 @@ textarea {
   color: var(--surface-text-muted);
   font-size: var(--text-sm);
   font-weight: 600;
+}
+
+.room-avatar-image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
 }
 
 .room-text {
@@ -563,6 +570,63 @@ textarea {
   white-space: nowrap;
   color: var(--surface-text-muted);
   font-size: var(--text-xs);
+}
+
+.room-meta {
+  display: grid;
+  justify-items: end;
+  align-content: start;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.room-time {
+  color: var(--surface-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.badge {
+  display: grid;
+  place-items: center;
+  min-inline-size: 1.25rem;
+  block-size: 1.25rem;
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--mark);
+  color: var(--surface-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+
+  &[hidden] {
+    display: none;
+  }
+
+  &.is-mention {
+    background: var(--ink);
+    color: var(--page);
+  }
+}
+
+.room-muted {
+  display: grid;
+  place-items: center;
+  color: var(--surface-text-muted);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.room-muted-icon {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
 }
 
 /* message rows */
@@ -592,18 +656,32 @@ textarea {
 .row-avatar {
   display: grid;
   place-items: start center;
+  overflow: hidden;
   inline-size: var(--avatar);
+  block-size: var(--avatar);
+  border-radius: 50%;
   color: var(--surface-text-muted);
   font-size: var(--text-sm);
   font-weight: 600;
 }
 
+.row-avatar-image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.row-start {
+  margin-block-start: var(--space-4);
+}
+
 .bubble {
+  position: relative;
   display: grid;
   gap: 2px;
   justify-self: start;
   max-inline-size: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) calc(var(--space-3) + 5em) var(--space-2) var(--space-3);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--surface-text);
@@ -620,8 +698,96 @@ textarea {
   white-space: pre-wrap;
 }
 
+.bubble-html {
+  display: grid;
+  gap: var(--space-1);
+  white-space: normal;
+
+  & :is(p, ul, ol, blockquote, pre, table) {
+    margin: 0;
+  }
+
+  & :is(h1, h2, h3) {
+    margin: 0;
+    font-size: var(--text-lg);
+    line-height: var(--leading-tight);
+  }
+
+  & :is(ul, ol) {
+    padding-inline-start: 1.2em;
+    list-style: disc;
+  }
+
+  & ol {
+    list-style: decimal;
+  }
+
+  & li + li {
+    margin-block-start: 2px;
+  }
+
+  & blockquote {
+    padding-inline-start: var(--space-2);
+    border-inline-start: 2px solid var(--line);
+    color: var(--surface-text-muted);
+  }
+
+  & :is(code, kbd) {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  & :not(pre) > code {
+    padding: 0.1em 0.3em;
+    border-radius: 4px;
+    background: var(--surface-hover);
+  }
+
+  & pre {
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    overflow-x: auto;
+  }
+
+  & pre code {
+    padding: 0;
+    background: none;
+  }
+
+  & table {
+    inline-size: 100%;
+    border-collapse: collapse;
+  }
+
+  & :is(th, td) {
+    padding: var(--space-1) var(--space-2);
+    border-block-end: var(--rule);
+    text-align: start;
+  }
+
+  & a {
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+
+  & hr {
+    margin-block: var(--space-1);
+    border: 0;
+    border-block-start: var(--rule);
+  }
+
+  & img[data-mx-emoticon] {
+    inline-size: 1.4em;
+    block-size: 1.4em;
+    vertical-align: -0.3em;
+  }
+}
+
 .bubble-time {
-  justify-self: end;
+  position: absolute;
+  inset-block-end: var(--space-1);
+  inset-inline-end: var(--space-2);
   color: var(--surface-text-muted);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
@@ -629,10 +795,15 @@ textarea {
 }
 
 .bubble-quote {
-  padding-inline-start: var(--space-2);
+  display: grid;
+  gap: 1px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
   border-inline-start: 2px solid var(--line);
+  background: none;
   color: var(--surface-text-muted);
   font-size: var(--text-sm);
+  text-align: start;
 }
 
 .bubble-status {
@@ -640,9 +811,54 @@ textarea {
   font-size: var(--text-xs);
 }
 
+.bubble-edited {
+  color: var(--surface-text-muted);
+  font-size: var(--text-xs);
+}
+
+.bubble-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-block-start: 2px;
+}
+
+.reaction {
+  min-block-size: 1.5rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--surface-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+
+  &.is-mine {
+    background: var(--mark);
+    color: var(--surface-text);
+  }
+}
+
+.row-mention .bubble {
+  background: var(--mark);
+}
+
+.is-emoji .bubble-text {
+  font-size: var(--text-xl);
+  line-height: 1.2;
+}
+
 .bubble-media {
   padding: 0;
   background: none;
+
+  & .bubble-time {
+    inset-block-end: var(--space-2);
+    inset-inline-end: var(--space-2);
+    padding: 0.1rem var(--space-1);
+    border-radius: var(--radius-sm);
+    background: var(--popover);
+    color: var(--page-text);
+  }
 }
 
 .media {
@@ -664,12 +880,48 @@ textarea {
   font-size: var(--text-sm);
 }
 
+.media-audio,
+.media-file {
+  aspect-ratio: auto;
+}
+
+.audio {
+  inline-size: 100%;
+}
+
+.file-download {
+  display: block;
+  padding: var(--space-2);
+  color: var(--surface-text);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
 .row-day,
 .row-state {
   justify-self: center;
   padding-block: var(--space-2);
   color: var(--page-text-muted);
   font-size: var(--text-sm);
+}
+
+.row-new {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--page-text-muted);
+  font-size: var(--text-sm);
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    border-block-start: var(--rule);
+  }
+}
+
+.row-new-label {
+  white-space: nowrap;
 }
 
 .timeline-note {

@@ -29,8 +29,8 @@ export function base(input: BaseInput): Html {
 <meta http-equiv="Content-Security-Policy" content="${raw("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; connect-src *")}">
 <title>${input.title}</title>
 <meta name="description" content="${input.description}">
-<meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#16191c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="${input.assets.icon}" type="image/svg+xml">
 <link rel="canonical" href="${input.canonical}">
 ${alternates}<link rel="stylesheet" href="${input.assets.stylesheet}">

@@ -8,6 +8,7 @@ import DOMPurify from "dompurify";
 const TAGS = [
   "p", "br", "strong", "b", "em", "i", "u", "del", "s", "code", "pre", "blockquote",
   "ul", "ol", "li", "a", "hr", "table", "thead", "tbody", "tr", "th", "td", "img",
+  "h1", "h2", "h3",
 ];
 
 const ATTRS = ["href", "alt", "title", "height", "width", "src", "data-mx-emoticon"];

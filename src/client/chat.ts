@@ -26,7 +26,7 @@ export function startChat(): void {
   if (!shell || !timelineRoot || !composerRoot || !navRoot || !header) return;
 
   const worker = new WorkerClient();
-  new Nav(navRoot);
+  new Nav(navRoot, worker);
   const composer = new Composer(composerRoot, worker);
   const emojiSurface = document.querySelector<HTMLElement>('#surface-emoji');
   if (!emojiSurface) return;
@@ -114,7 +114,7 @@ function drawHeader(header: HTMLElement, room: Room | null): void {
   if (room === null) return;
   text.append(
     el("h2", { class: "room-title", text: room.name }),
-    el("p", { class: "room-subtitle", text: room.topic }),
+    el("p", { class: "room-topic", text: room.topic }),
   );
 }
 
