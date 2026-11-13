@@ -1,4 +1,5 @@
 import { createClient, ClientEvent, SyncState, type MatrixClient } from "matrix-js-sdk";
+import type { Logger } from "matrix-js-sdk/lib/logger.js";
 import { initAsync } from "@matrix-org/matrix-sdk-crypto-wasm";
 import type { Keys, Media, Message, Outbox, Room, Session, Status, Window } from "../core/types.ts";
 import { accountHash } from "../core/id.ts";
@@ -171,6 +172,7 @@ export class WorkerSession {
       accessToken: stored.token,
       userId: stored.session.userId,
       deviceId: stored.session.deviceId,
+      logger: silentLogger(),
     });
     await client.initRustCrypto({ cryptoDatabasePrefix: `maski-rust-${stored.session.accountHash}` });
     this.client = client;
@@ -202,7 +204,9 @@ export class WorkerSession {
     if (this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.pass();
+      this.pass().catch((error: unknown) => {
+        this.post({ event: "connection", state: "error", message: error instanceof Error ? error.message : String(error) });
+      });
     }, 60);
   }
 
@@ -261,4 +265,11 @@ export class WorkerSession {
     if (!this.session) throw new Error("not signed in");
     return this.session;
   }
+}
+
+/** The SDK's default logger writes every request to the console; the worker keeps its own record. */
+function silentLogger(): Logger {
+  const quiet = (): void => undefined;
+  const logger: Logger = { trace: quiet, debug: quiet, info: quiet, warn: quiet, error: quiet, getChild: () => logger };
+  return logger;
 }

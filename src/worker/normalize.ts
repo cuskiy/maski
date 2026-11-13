@@ -184,5 +184,6 @@ export function summarize(room: Room, direct: Map<string, string>, last: Message
     muted: muted(room),
     readUpTo: room.getEventReadUpTo(self),
     hasOlder: room.getLiveTimeline().getPaginationToken("b" as never) !== null,
+    canSend: room.maySendMessage(),
   };
 }

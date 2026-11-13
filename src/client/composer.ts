@@ -6,6 +6,7 @@ import { openRoom } from "./router.ts";
 export class Composer {
   private readonly field: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
+  private readonly root: HTMLElement;
   private readonly worker: WorkerClient;
   private typingTimer = 0;
   private typing = false;
@@ -17,10 +18,11 @@ export class Composer {
     if (!field || !send) throw new Error("the composer region is incomplete");
     this.field = field;
     this.send = send;
+    this.root = root;
     field.addEventListener("input", () => this.onInput());
     field.addEventListener("keydown", (event) => this.onKey(event));
     send.addEventListener("click", () => void this.commit());
-    subscribe(["roomId", "phase"], () => this.render());
+    subscribe(["roomId", "phase", "rooms"], () => this.render());
     this.render();
   }
 
@@ -66,7 +68,9 @@ export class Composer {
 
   private render(): void {
     const state = get();
-    const canWrite = state.roomId !== null && state.phase === "ready";
+    const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
+    const canWrite = state.phase === "ready" && room !== null && room.canSend;
+    this.root.dataset["readonly"] = canWrite ? "false" : "true";
     this.field.disabled = !canWrite;
     this.send.disabled = !canWrite || this.field.value.trim().length === 0;
   }

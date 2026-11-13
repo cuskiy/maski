@@ -78,6 +78,7 @@ export interface Room {
   muted: boolean;
   readUpTo: string | null;
   hasOlder: boolean;
+  canSend: boolean;
 }
 
 export interface Window {

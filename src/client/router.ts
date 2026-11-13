@@ -1,6 +1,8 @@
-import { get, set } from "./store.ts";
+import { set } from "./store.ts";
 
 const HASH = /^#\/room\/([^?]+)/u;
+
+let navigate: ((roomId: string | null) => void) | null = null;
 
 export function roomFromHash(): string | null {
   const match = HASH.exec(location.hash);
@@ -12,31 +14,24 @@ export function roomFromHash(): string | null {
   }
 }
 
-/** The room lives in the hash, so back and forward walk rooms without reloading the document. */
+/**
+ * The room lives in the hash, and every way in goes through here: a click, back and forward, or
+ * the first load. Without that, the hash would change while the pane keeps the old room.
+ */
 export function openRoom(roomId: string | null, replace = false): void {
-  const hash = roomId === null ? location.pathname : `#/room/${encodeURIComponent(roomId)}`;
-  if (roomId === null) {
-    if (replace) history.replaceState(null, "", hash);
-    else history.pushState(null, "", hash);
-  } else if (replace) {
-    history.replaceState(null, "", hash);
-  } else {
-    history.pushState(null, "", hash);
-  }
+  const url = roomId === null ? location.pathname : `#/room/${encodeURIComponent(roomId)}`;
+  if (replace) history.replaceState(null, "", url);
+  else history.pushState(null, "", url);
   set({ roomId });
+  navigate?.(roomId);
 }
 
 export function watchRoute(onRoom: (roomId: string | null) => void): void {
+  navigate = onRoom;
   window.addEventListener("popstate", () => {
     const roomId = roomFromHash();
     set({ roomId });
     onRoom(roomId);
   });
-  const initial = roomFromHash();
-  set({ roomId: initial });
-  onRoom(initial);
-}
-
-export function currentRoom(): string | null {
-  return get().roomId;
+  onRoom(roomFromHash());
 }

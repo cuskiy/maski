@@ -53,6 +53,8 @@ export class Nav {
       const rooms = state.rooms.filter(section.match).toSorted((a, b) => b.lastTs - a.lastTs);
       count.textContent = rooms.length === 0 ? "" : String(rooms.length);
       details.hidden = rooms.length === 0;
+      const empty = this.root.querySelector<HTMLElement>(`[data-empty="${section.id}"]`);
+      if (empty) empty.hidden = rooms.length > 0;
       list.replaceChildren(...rooms.map((room) => this.row(room, state.roomId)));
     }
   }

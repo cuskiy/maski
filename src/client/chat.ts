@@ -62,7 +62,7 @@ export function startChat(): void {
   });
 
   const markRead = (roomId: string | null, eventId: string): void => {
-    if (roomId === null || eventId.length === 0) return;
+    if (roomId === null || !eventId.startsWith("$")) return;
     void worker.send({ type: "markRead", roomId, eventId });
   };
 

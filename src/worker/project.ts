@@ -69,6 +69,7 @@ export async function projectRooms(db: AccountDb, client: MatrixClient, roomIds:
     const batch: Message[] = [];
     for (const event of fresh) {
       if (isLocalEcho(event)) continue;
+      if (event.isEncrypted()) await client.decryptEventIfNeeded(event).catch(() => undefined);
       const txn = transactionId(event);
       if (txn) await db.del("events", txn);
       const row = await normalize(event, room, self);
@@ -93,8 +94,8 @@ export async function projectRooms(db: AccountDb, client: MatrixClient, roomIds:
 }
 
 async function newestRow(db: AccountDb, roomId: string): Promise<Message | null> {
-  const rows = await db.window(roomId, 1);
-  return rows[0] ?? null;
+  const rows = await db.window(roomId, 8);
+  return rows.findLast((row) => row.kind !== "state") ?? null;
 }
 
 export function summaryOf(room: Room, direct: Map<string, string>, self: string, last: Message | null): RoomRow {

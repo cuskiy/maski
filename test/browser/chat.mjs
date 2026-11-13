@@ -52,10 +52,16 @@ const login = await page.evaluate(
 if (login.error !== undefined) throw new Error(login.error);
 
 await page.reload();
-await page.waitForSelector(".room-row", { timeout: 60000 });
+await page.waitForFunction(() => document.querySelectorAll(".room-row").length > 0, undefined, { timeout: 60000 });
+await page.evaluate(() => {
+  for (const section of document.querySelectorAll("details[data-section]")) section.open = true;
+});
+await page.waitForSelector(".room-row", { state: "visible", timeout: 10000 });
 const rooms = await page.locator(".room-row").count();
-await page.locator(".room-row .room-link").first().click();
-await page.waitForTimeout(4000);
+const writable = page.locator('.room-row:has-text("room 605") .room-link');
+const fallback = page.locator(".room-row .room-link").first();
+await ((await writable.count()) > 0 ? writable.click() : fallback.click());
+await page.waitForTimeout(6000);
 const bubbles = await page.locator(".bubble").count();
 const header = await page.locator(".room-title").innerText().catch(() => "");
 await page.screenshot({ path: "/tmp/p0/chat-data.png" });

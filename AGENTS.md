@@ -276,6 +276,9 @@ ignored.
 - TypeScript 7, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
   `verbatimModuleSyntax`, `erasableSyntaxOnly`, `noUnusedLocals`, `noUnusedParameters`. No `any`, no
   non-null assertion, no enum, no parameter property, no cast that silences the compiler.
+- `target` and `lib` are `ES2025`, not `ESNext`: with `noEmit` the compiler writes nothing, so
+  `target` only decides the default library, and a library past what the three engines ship would
+  type-check calls that cannot run. `ESNext` is a proposal list, not a platform ceiling.
 - esbuild bundles three entries — `src/client/main.ts`, `src/worker/worker.ts`, `src/styles/style.css` —
   minified, content-hashed, with a metafile the page generator reads.
 - `html-minifier-terser` minifies HTML: `collapseWhitespace: true`, `removeComments: true`.
