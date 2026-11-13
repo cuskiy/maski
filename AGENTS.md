@@ -46,7 +46,21 @@ A change that needs one of these contradicted is a discussion, not an edit.
 - No vendor prefix, no polyfill, no engine-specific feature, no compatibility shim.
 - Code, identifiers and commits are English. Part 2 is Chinese because it is the user's own voice.
 
-## 1.5 When to stop and redo
+## 1.5 Learning from experience
+
+Code inherits a body of engineering experience and real failure. The order is: the standard or the
+specification, then the reference implementation, then the documented failure modes of the pattern we
+are about to use. Inventing a mechanism before reading those is not originality, it is repeating
+someone else's mistake.
+
+- A mechanism that exists because of a known failure names that failure in one line, in the change and
+  in 3.14. A mechanism nobody can name a failure for is probably decoration.
+- When a decision contradicts established practice, say why it is right here. "We did not know" is not
+  a reason; look it up first.
+- Our own two attempts are part of that experience. A lesson learned from them is as binding as one
+  from a specification.
+
+## 1.6 When to stop and redo
 
 A plan is a hypothesis. These are exit conditions, not warnings:
 
@@ -558,7 +572,29 @@ Runtime: `protocol/messages.ts`, `client/{main,store,worker,router,nav,timeline,
 Each file has one job and one thing it may not do; a second implementation of the same boundary is a
 defect (1.4).
 
-## 3.13 Testing
+## 3.13 Lessons we build on
+
+Each line is a failure someone has already paid for, with the thing in this code that exists because
+of it. They are not decoration: removing one of these mechanisms re-opens its failure.
+
+| lesson | where it comes from | what it costs us |
+| --- | --- | --- |
+| One fact with two writers drifts; the second writer is always the bug | our second attempt, and every state bug in it | the worker owns the account database; the main thread owns `maski-ui` (3.2) |
+| A forward-only projection cannot grow history: clearing the cursor to page backwards drops every page after the first | our second attempt | two passes, forward and backward, decided together (3.3) |
+| Prepending to a scroll container moves the viewport | browser behaviour, every chat client | a recorded anchor restored in a frame after a backfill (3.5) |
+| A reader scrolled up has not read what arrived below | Telegram, Element | a receipt moves only while the newest row is on screen (3.5) |
+| The user agent paints its own button face, which no token can reach | Chrome's dark colour scheme, hit in P0 | `appearance: none` before any control styling (3.8) |
+| `instantiateStreaming` requires `application/wasm`; a wrong MIME type fails the whole crypto stack | the Fetch and WebAssembly specs | the hashed wasm is served and checked as such, and the test server does the same (3.9) |
+| `new URL(…, import.meta.url)` is rewritten by some bundlers and left alone by others | Vite versus esbuild, measured | the wasm URL is explicit and copied by the build (3.9) |
+| A new device cannot read history it holds no keys for | Olm and Megolm design | the mandatory gate, and a decryption failure that says why (2.5) |
+| A browser may evict origin storage; Safari does after seven days without interaction | WebKit's storage policy | `navigator.storage.persist()` is requested and a refusal is stated in the interface |
+| A service worker that activates immediately can mix an old page with new assets | documented service worker update problems | a precache stamped with the build, and one version live at a time (3.9) |
+| A scrollbar appearing moves the layout sideways | browser behaviour | `scrollbar-gutter: stable` on the scroller |
+| An IndexedDB transaction closes when the event loop yields | the IndexedDB spec | a read that spans an `await` opens its own transaction or a cursor |
+| Long unbroken strings, URLs and CJK text overflow a flex child | CSS box model | `min-inline-size: 0` and `overflow-wrap` on text holders |
+| A click can be lost when the element under the pointer is replaced mid-gesture | our second attempt's room list | a keyed list that updates rows in place, never rebuilds them (2.6) |
+
+## 3.14 Testing
 
 - Units: projection in both directions, store notification granularity, catalog key parity, page
   generation per page and locale (one `h1`, one note, region ids, no inline code, no placeholder link),
