@@ -2,10 +2,11 @@ export const zhCN = {
   "app.name": "maski",
   "app.tagline": "一个快速、以本地优先的 Matrix 客户端",
   "app.description": "把你的消息留在自己设备上的 Matrix 客户端",
-  "boot.starting": "正在启动",
 
-  "noscript.auth": "登录需要 JavaScript。你看到的是客户端使用的表单。",
-  "noscript.key": "解锁需要 JavaScript。在输入密钥之前，这台设备读不到消息。",
+  "lang.name": "简体中文",
+
+  "noscript.auth": "登录需要 JavaScript。",
+  "noscript.key": "解锁需要 JavaScript。",
   "auth.server.title": "登录",
   "auth.server.hint": "账户在某个 homeserver 上。填写它的地址。",
   "auth.server.label": "服务器地址",
@@ -26,16 +27,10 @@ export const zhCN = {
   "auth.key.hint": "消息是端到端加密的。这台设备需要密钥才能读取它们。",
   "auth.key.recovery": "恢复密钥或口令",
   "auth.key.unlock": "解锁",
-  "auth.flowBack": "返回选择服务器",
-  "lang.label": "语言",
-  "lang.switch": "语言",
-  "lang.en": "English",
-  "lang.zh-CN": "简体中文",
 
-  "noscript.router": "这个页面需要 JavaScript 才能打开客户端。",
-  "noscript.chat": "消息需要 JavaScript。你看到的就是客户端的框架。",
+  "noscript.router": "这个页面需要 JavaScript。",
+  "noscript.chat": "消息需要 JavaScript。",
   "noscript.surface": "这个面板需要 JavaScript。",
-  "js.required": "需要启用 JavaScript",
 
   "nav.search": "搜索",
   "nav.newMessage": "新消息",
@@ -64,14 +59,8 @@ export const zhCN = {
   "surface.close": "关闭",
 
   "chat.title": "聊天",
-  "chat.notSignedIn": "未登录",
-  "chat.keyMissing": "加密密钥尚未设置",
-  "chat.noRoom": "没有打开的房间",
   "chat.loadOlder": "加载更早的消息",
   "chat.back": "返回房间列表",
-  "room.topic": "话题",
-  "room.members": "{count} 位成员",
-  "room.membersOne": "1 位成员",
 
   "composer.label": "消息",
   "composer.placeholder": "输入消息",

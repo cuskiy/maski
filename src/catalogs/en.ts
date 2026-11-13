@@ -2,10 +2,11 @@ export const en = {
   "app.name": "maski",
   "app.tagline": "A fast, local-first Matrix client",
   "app.description": "A Matrix client that keeps your messages on your device",
-  "boot.starting": "Starting",
 
-  "noscript.auth": "Signing in needs JavaScript. The form is the one the client uses.",
-  "noscript.key": "Unlocking needs JavaScript. This device cannot read its messages until the key is entered.",
+  "lang.name": "English",
+
+  "noscript.auth": "Signing in needs JavaScript.",
+  "noscript.key": "Unlocking needs JavaScript.",
   "auth.server.title": "Sign in",
   "auth.server.hint": "Your account lives on a homeserver. Enter its address.",
   "auth.server.label": "Homeserver",
@@ -26,16 +27,10 @@ export const en = {
   "auth.key.hint": "Messages are end-to-end encrypted. This device needs a key before it can read them.",
   "auth.key.recovery": "Recovery key or passphrase",
   "auth.key.unlock": "Unlock",
-  "auth.flowBack": "Back to the server choice",
-  "lang.label": "Language",
-  "lang.switch": "Language",
-  "lang.en": "English",
-  "lang.zh-CN": "简体中文",
 
-  "noscript.router": "This page needs JavaScript to open the client.",
-  "noscript.chat": "Messages need JavaScript. The frame you see is the client.",
+  "noscript.router": "This page needs JavaScript.",
+  "noscript.chat": "Messages need JavaScript.",
   "noscript.surface": "This panel needs JavaScript.",
-  "js.required": "JavaScript is required",
 
   "nav.search": "Search",
   "nav.newMessage": "New message",
@@ -64,14 +59,8 @@ export const en = {
   "surface.close": "Close",
 
   "chat.title": "Chat",
-  "chat.notSignedIn": "Not signed in",
-  "chat.keyMissing": "The encryption keys are not set up",
-  "chat.noRoom": "No room is open",
   "chat.loadOlder": "Load older messages",
   "chat.back": "Back to the room list",
-  "room.topic": "Topic",
-  "room.members": "{count} members",
-  "room.membersOne": "1 member",
 
   "composer.label": "Message",
   "composer.placeholder": "Write a message",

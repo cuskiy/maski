@@ -55,7 +55,12 @@ A change that needs one of these contradicted is a discussion, not an edit.
   point does not cover extends that choke point, and is never worked around beside it.
 - No dead code, unused export, TODO, stub, placeholder or fake control. A missing feature is absent.
 - A comment only states what the code cannot: a protocol quirk, a security boundary, a browser
-  behaviour, an invariant. One line, English, no trailing punctuation.
+  behaviour, an invariant. One line, English, no trailing punctuation, no decorative rule or banner.
+  A conventional tag such as `@param` is allowed where a convention exists; decoration is not.
+- No Chinese in code, identifiers or comments. A language's own name is content and lives in the
+  catalog it names.
+- Nothing written and unused: no placeholder key, no helper waiting for a caller, no copy for a
+  feature that does not exist yet. It is deleted and written when it is needed.
 - No vendor prefix, no polyfill, no engine-specific feature, no compatibility shim.
 - Code, identifiers and commits are English. Part 2 is Chinese because it is the user's own voice.
 
@@ -241,6 +246,8 @@ ignored.
 ## 2.13 多语言
 
 - 界面语言可切换；英文是源语言与兜底。
+- 文案只陈述读者需要知道的事实，不解释他看得见的东西。不写「你看到的是客户端使用的表单」这类
+  同义重复，不写「请注意」「简单来说」这类空话，不用营销腔，不模仿 LLM 的句式。
 - 文案只存在于带类型的 catalog 里，缺键是编译错误；layout 与 component 里不出现任何字面文案，
   连标题与 `aria-label` 也不行。
 - 页面在构建时按语言提前渲染，客户端不做翻译；日期、数字、复数用 `Intl`。
@@ -625,6 +632,8 @@ of it. They are not decoration: removing one of these mechanisms re-opens its fa
 | A click can be lost when the element under the pointer is replaced mid-gesture | our second attempt's room list | a keyed list that updates rows in place, never rebuilds them (2.6) |
 | One file under two names is two facts that can disagree; a second name is only justified when the platform demands it | the favicon in this file's own first draft | one hashed icon, declared in `<head>`, and no `/favicon.ico` at all (3.9) |
 | A page paints the user agent's canvas before its stylesheet arrives; in a dark colour scheme that is a white flash in the face | every site that ships a link to a stylesheet and nothing else | `color-scheme` in the head of every page, and a static page's stylesheet written in system colours (3.9) |
+| Copy that explains what the reader can already see is noise, and reads like a machine wrote it | this file's own first pass at the `<noscript>` notes | one sentence per note, stating only what is missing (2.13) |
+| A string written for a feature that has not been built rots before it is used | every project with a catalogue full of keys nothing reads | the catalog test fails on a key the code does not read, so unused copy is deleted rather than kept for later |
 
 ## 3.14 Testing
 

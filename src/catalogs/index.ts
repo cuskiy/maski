@@ -1,4 +1,4 @@
-import type { Catalog } from "../lib/catalog.ts";
+import { t, type Catalog } from "../lib/catalog.ts";
 import { en } from "./en.ts";
 import { zhCN } from "./zh-CN.ts";
 
@@ -10,6 +10,6 @@ export interface Locale {
 }
 
 export const locales: readonly Locale[] = [
-  { id: "en", path: "/", label: "English", catalog: en },
-  { id: "zh-CN", path: "/zh-CN/", label: "简体中文", catalog: zhCN },
+  { id: "en", path: "/", label: t(en, "lang.name"), catalog: en },
+  { id: "zh-CN", path: "/zh-CN/", label: t(zhCN, "lang.name"), catalog: zhCN },
 ];
