@@ -102,15 +102,48 @@ The dev server injects one `<script>` into each HTML response and nothing into t
 audit still compares the generated output byte for byte. It answers `application/wasm`, falls back
 to `404.html`, and sends `no-store`, which is why a reload always shows the last build.
 
-## 1.3 How the work is done
+## 1.3 The loop
 
-- One module at a time, in the dependency order of 3.2.
-- `npm run code` after each module: a type error is a design mistake, not a nuisance to silence.
-- Run the thing the module belongs to: a page in a browser, a command through the protocol, a unit
-  test for a rule that can be pure.
-- `npm run check` is the gate before a phase is called done: types, lint, tests, build, audit.
-- A check that did not run is not a check that passed. Say plainly what was not verified.
-- One commit per coherent change, with the reason in the message body.
+The project moves in short, complete steps rather than long unverified stretches. One step is:
+
+1. **Read.** The module the change touches, the section of this file that governs it, and — for
+   anything protocol-shaped — `past/spec`. A plan against code nobody read is a guess.
+2. **Plan.** Name the approach, and the smaller one when two are plausible. A change that needs a
+   decision the user owns stops here and becomes a question.
+3. **Implement** to the shape Part 3 gives the file, leaving the tree coherent after each file.
+4. **Run it.** `npm run dev` for anything with a surface, the protocol test for the worker, a unit
+   test for a rule that can be pure. A change that was not run is not a change that works.
+5. **Verify at the level the change claims:** verified on the real homeserver, wired but unverified,
+   or not verified — and say which, with the evidence.
+6. **Record.** A defect found but not fixed goes to a numbered open-defect section with what is known
+   and what the next step is. A decision goes to Part 2 or Part 3, whichever owns it.
+7. **Commit** one coherent change, the reason in the body, and push.
+
+Before a step is called done, `npm run check` passes: types, lint, tests, bundle, output audit and
+the eight contracts. The gate is not advisory, and a budget is never raised to make it pass.
+
+### A bug report is its own loop
+
+When the user reports something, the loop is shorter and stricter: reproduce it in the browser, find
+the **root cause** rather than the symptom, fix that, re-run the same reproduction, and commit with
+the cause named in the message. Two failed fixes on one symptom mean the boundary is wrong (1.6), and
+the next step is a redesign of that boundary, not a third patch.
+
+### Changing the design
+
+- The user's words are Part 2, and they are not edited here: a change there is a question, never an
+  edit.
+- Engineering decisions live in Part 3 with their reason; a decision that replaces an older one
+  rewrites that paragraph instead of leaving two descriptions.
+- A rule without an enforcing check is a wish. Adding a rule adds its row to 3.15.1 and, when it can
+  be checked, the check itself.
+
+### What the loop forbids
+
+- Committing a tree that fails a gate, or leaving an unfinished change behind at the end of a turn.
+- Silently weakening a check, a budget or a test to get a green result.
+- Reporting a feature as working when it was only wired.
+- Carrying a second implementation beside an existing one because touching the first was awkward.
 
 ## 1.4 Writing floor
 
