@@ -10,7 +10,7 @@ export const config = {
   },
   serve: {
     host: "localhost",
-    port: 5173,
+    port: 5172,
   },
   homeserver: {
     default: "matrix.org",
