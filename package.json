@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@matrix-org/matrix-sdk-crypto-wasm": "18.9.2",
+    "dompurify": "^3.4.17",
     "matrix-js-sdk": "45.1.0"
   },
   "devDependencies": {
