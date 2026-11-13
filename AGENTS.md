@@ -636,7 +636,7 @@ because a reader who wrote `https://matrix.example.org` has already named the AP
 | P1 | worker: esbuild worker entry, hashed wasm, `initAsync`, login, sync, decrypt | done: `test/browser/worker.mjs` signs in, syncs ten rooms (eight encrypted), sends into one and reads the plaintext echo |
 | P2 | every page and the stylesheet in full | no control is dead, every page complete with scripts off |
 | P3 | data: database, both projection passes, store, sections, timeline, composer | a real account lists rooms, reads history, sends, and keeps its place through a backfill and a reload |
-| P4 | discovery, password and UIA registration, the gate, the router | a fresh account registers, sets a recovery key, and signs in again on a new device with it |
+| P4 | discovery, password login, the gate, the router — done except registration and reset | login lands on the gate, the recovery key opens secret storage, and the chat opens behind it; verified against the real server. Remaining: UIA registration, the reset path, SAS waiting |
 | P5 | media, stickers, search, settings, sessions and verification, channels | each item works |
 | P6 | service worker, reload-to-paint, notifications, language switch, accessibility pass | offline reload works and the measurements are reported |
 
@@ -678,6 +678,7 @@ of it. They are not decoration: removing one of these mechanisms re-opens its fa
 | Long unbroken strings, URLs and CJK text overflow a flex child | CSS box model | `min-inline-size: 0` and `overflow-wrap` on text holders |
 | A click can be lost when the element under the pointer is replaced mid-gesture | our second attempt's room list | a keyed list that updates rows in place, never rebuilds them (2.6) |
 | One file under two names is two facts that can disagree; a second name is only justified when the platform demands it | the favicon in this file's own first draft | one hashed icon, declared in `<head>`, and no `/favicon.ico` at all (3.9) |
+| A key that was never backed up cannot be restored later; a new device reading old messages as unreadable is the truth, not a bug | Megolm backup semantics, seen on the test account | the gate says the key is needed, the timeline says the message cannot be decrypted, and neither claims a restore fixed history |
 | A page paints the user agent's canvas before its stylesheet arrives; in a dark colour scheme that is a white flash in the face | every site that ships a link to a stylesheet and nothing else | `color-scheme` in the head of every page, and a static page's stylesheet written in system colours (3.9) |
 | Copy that explains what the reader can already see is noise, and reads like a machine wrote it | this file's own first pass at the `<noscript>` notes | one sentence per note, stating only what is missing (2.13) |
 | A string written for a feature that has not been built rots before it is used | every project with a catalogue full of keys nothing reads | the catalog test fails on a key the code does not read, so unused copy is deleted rather than kept for later |

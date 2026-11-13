@@ -10,7 +10,8 @@ const page = document.body.dataset["page"] ?? "";
  * and the destination from whether an account is remembered.
  */
 if (page === "router") {
-  const destination = readAccount() === null ? "server/" : "chat/";
+  const account = readAccount();
+  const destination = account === null ? "server/" : account.keysReady ? "chat/" : "key/";
   location.replace(`${pathOf(resolveLocale())}${destination}`);
 }
 

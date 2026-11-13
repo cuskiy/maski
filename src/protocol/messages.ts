@@ -6,6 +6,7 @@ export type Command =
   | { type: "login"; baseUrl: string; user: string; password: string }
   | { type: "logout" }
   | { type: "keyStatus" }
+  | { type: "unlock"; input: string }
   | { type: "open"; roomId: string }
   | { type: "older"; roomId: string; keep: number }
   | { type: "send"; roomId: string; txnId: string; body: string; html: string | null }

@@ -31,6 +31,9 @@ export const zhCN = {
   "auth.key.title": "设置加密密钥",
   "auth.key.hint": "消息是端到端加密的。这台设备需要密钥才能读取它们。",
   "auth.key.recovery": "恢复密钥或口令",
+  "auth.key.noKeys": "这个账户还没有保存恢复密钥。",
+  "auth.key.invalid": "这个密钥打不开该账户。",
+  "auth.key.failed": "无法恢复密钥。",
   "auth.key.unlock": "解锁",
 
   "noscript.router": "这个页面需要 JavaScript。",

@@ -3,7 +3,7 @@ import { readServer } from "../core/server.ts";
 import { locales } from "../catalogs/index.ts";
 import { useCatalog, t } from "../i18n.ts";
 import { el } from "../ui.ts";
-import { writeAccount } from "./account.ts";
+import { readAccount, writeAccount } from "./account.ts";
 import { WorkerClient } from "./worker.ts";
 
 /** The sign-in pages: one form per document, driven by the worker and nothing else. */
@@ -26,6 +26,7 @@ export function startAuth(): void {
 
   if (flow === "server") wireServer(worker, fail);
   if (flow === "login") wireLogin(worker, fail);
+  if (flow === "unlock") wireUnlock(worker, fail);
 }
 
 function value(id: string): string {
@@ -78,14 +79,53 @@ function wireLogin(worker: WorkerClient, fail: (message: string, form: HTMLFormE
     const button = form.querySelector("button");
     if (button) button.disabled = true;
     void worker
-      .send<{ session: Session }>({ type: "login", baseUrl, user: value("username"), password: value("password") })
-      .then(({ session }) => {
-        writeAccount({ hash: session.accountHash, userId: session.userId, name: session.name, baseUrl: session.baseUrl });
-        location.assign("../chat/");
+      .send<{ session: Session; keys: Keys | null }>({ type: "login", baseUrl, user: value("username"), password: value("password") })
+      .then(({ session, keys }) => {
+        writeAccount({ hash: session.accountHash, userId: session.userId, name: session.name, baseUrl: session.baseUrl, keysReady: keys?.ready === true });
+        location.assign(keys?.ready === true ? "../chat/" : "../key/");
       })
       .catch((cause: unknown) => {
         if (button) button.disabled = false;
         fail(cause instanceof Error ? cause.message : t("auth.login.failed"), form);
       });
   });
+}
+
+function wireUnlock(worker: WorkerClient, fail: (message: string, form: HTMLFormElement) => void): void {
+  const form = document.querySelector<HTMLFormElement>('form[data-flow="unlock"]');
+  const account = readAccount();
+  if (!form || account === null) return;
+  const start = worker.send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account.hash, wasm: worker.wasm() });
+  void start.then((state) => {
+    if (state.keys?.ready === true) location.replace("../chat/");
+  }).catch(() => undefined);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const button = form.querySelector("button");
+    if (button) button.disabled = true;
+    void worker
+      .send<Keys>({ type: "unlock", input: value("recovery") })
+      .then((keys) => {
+        if (!keys.ready) {
+          if (button) button.disabled = false;
+          fail(t("auth.key.failed"), form);
+          return;
+        }
+        writeAccount({ ...account, keysReady: true });
+        location.assign("../chat/");
+      })
+      .catch((cause: unknown) => {
+        if (button) button.disabled = false;
+        fail(messageOf(cause), form);
+      });
+  });
+}
+
+/** The gate's failures are the reader's business: each one says what to do next. */
+function messageOf(cause: unknown): string {
+  const text = cause instanceof Error ? cause.message : "";
+  if (text === "no-keys") return t("auth.key.noKeys");
+  if (text === "invalid") return t("auth.key.invalid");
+  return t("auth.key.failed");
 }

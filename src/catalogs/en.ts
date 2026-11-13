@@ -31,6 +31,9 @@ export const en = {
   "auth.key.title": "Set up encryption",
   "auth.key.hint": "Messages are end-to-end encrypted. This device needs a key before it can read them.",
   "auth.key.recovery": "Recovery key or passphrase",
+  "auth.key.noKeys": "This account has no recovery key stored yet.",
+  "auth.key.invalid": "That key does not open this account.",
+  "auth.key.failed": "The keys could not be restored.",
   "auth.key.unlock": "Unlock",
 
   "noscript.router": "This page needs JavaScript.",

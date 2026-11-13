@@ -5,6 +5,7 @@ import type { Keys, Media, Message, Outbox, Room, Session, Status, Window } from
 import { accountHash } from "../core/id.ts";
 import type { Event } from "../protocol/messages.ts";
 import { AccountDb, type StoredSession } from "./db.ts";
+import { unlockWith } from "./keys.ts";
 import { fetchMedia } from "./media.ts";
 import { projectRooms } from "./project.ts";
 
@@ -68,6 +69,13 @@ export class WorkerSession {
     this.db = null;
     if (db) await db.delete();
     this.post({ event: "ready", session: null, keys: null });
+  }
+
+  /** One path out of the gate: the recovery key or passphrase that opens secret storage. */
+  async unlock(input: string): Promise<Keys> {
+    const keys = await unlockWith(this.requireClient(), input);
+    this.post({ event: "keys", keys });
+    return keys;
   }
 
   async keys(): Promise<Keys> {
@@ -178,6 +186,18 @@ export class WorkerSession {
     this.client = client;
     this.session = stored.session;
     this.watch(client);
+    // A device that already holds its keys reopens the backup at start, so history decrypts
+    // without asking the reader to unlock again.
+    const crypto = client.getCrypto();
+    if (crypto) {
+      void crypto
+        .isSecretStorageReady()
+        .then(async (ready) => {
+          if (ready) await crypto.checkKeyBackupAndEnable();
+        })
+        .then(() => this.schedule())
+        .catch(() => undefined);
+    }
     client.startClient({ initialSyncLimit: 20 }).catch((error: unknown) => {
       this.post({ event: "connection", state: "error", message: error instanceof Error ? error.message : "" });
     });

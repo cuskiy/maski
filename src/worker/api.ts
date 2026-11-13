@@ -36,6 +36,8 @@ export class WorkerApi {
         const keys: Keys = await this.session.keys();
         return keys;
       }
+      case "unlock":
+        return this.session.unlock(command.input);
       case "open":
         return this.session.open(command.roomId);
       case "older":

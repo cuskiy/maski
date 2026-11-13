@@ -4,6 +4,7 @@ export interface LastAccount {
   userId: string;
   name: string;
   baseUrl: string;
+  keysReady: boolean;
 }
 
 const KEY = "maski:account";
@@ -21,6 +22,7 @@ export function readAccount(): LastAccount | null {
       userId: record["userId"],
       name: typeof record["name"] === "string" ? record["name"] : record["userId"],
       baseUrl: typeof record["baseUrl"] === "string" ? record["baseUrl"] : "",
+      keysReady: record["keysReady"] === true,
     };
   } catch {
     return null;
