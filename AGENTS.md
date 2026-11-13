@@ -54,6 +54,18 @@ A specification statement wins over a library behaviour; where the library devia
 what we have to work with, and it is recorded. `grep -rn` in that checkout is the normal first move:
 `grep -rn "well-known/matrix/client" past/spec/content | head`.
 
+## 1.2.2 Previewing
+
+| command | what it does |
+| --- | --- |
+| `npm run dev` | build in watch mode, serve `dist/` on http://localhost:5173/, reload the page after each build |
+| `npm run serve` | serve the built `dist/` on the same port, without the reload |
+| `npm run build` | write `dist/` and the manifest once |
+
+The dev server injects one `<script>` into each HTML response and nothing into the files, so the
+audit still compares the generated output byte for byte. It answers `application/wasm`, falls back
+to `404.html`, and sends `no-store`, which is why a reload always shows the last build.
+
 ## 1.3 How the work is done
 
 - One module at a time, in the dependency order of 3.2.
