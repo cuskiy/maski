@@ -94,7 +94,6 @@ export const en = {
   "sections.rooms": "Rooms",
   "sections.direct": "Direct messages",
   "sections.channels": "Channels",
-  "sections.empty": "Join or create a room",
 
   "settings.account": "Account",
   "settings.language": "Language",

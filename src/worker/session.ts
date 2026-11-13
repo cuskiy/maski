@@ -35,6 +35,7 @@ export class WorkerSession {
     this.db = db;
     const stored = await db.meta<StoredSession | null>("session", null);
     if (!stored) return { session: null, keys: null };
+    this.post({ event: "rooms", rooms: await db.rooms<Room>() });
     await this.begin(stored, wasm);
     return { session: this.session, keys: await this.keys() };
   }

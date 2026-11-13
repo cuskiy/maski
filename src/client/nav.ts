@@ -88,12 +88,13 @@ export class Nav {
       section.open = open[id] === true;
       section.addEventListener("toggle", () => remember(id, section.open));
     }
-    subscribe(["rooms", "roomId"], () => this.render());
+    subscribe(["phase", "rooms", "roomId"], () => this.render());
     this.render();
   }
 
   private render(): void {
     const state = get();
+    const ready = state.phase === "ready";
     for (const section of SECTIONS) {
       const rooms = state.rooms.filter(section.match).toSorted((a, b) => b.lastTs - a.lastTs);
       const details = this.root.querySelector<HTMLElement>(`[data-section="${section.id}"]`);
@@ -101,8 +102,8 @@ export class Nav {
       const list = this.root.querySelector<HTMLElement>(`[data-rows="${section.id}"]`);
       if (!details || !count || !list) continue;
 
-      // The rooms section is the skeleton and stays; the others appear when they have something.
-      details.hidden = section.id !== "rooms" && rooms.length === 0;
+      // Nothing below the menu until the account is ready and a section has rows.
+      details.hidden = !ready || rooms.length === 0;
       count.textContent = rooms.length === 0 ? "" : String(rooms.length);
 
       const order = rooms.map((room) => room.roomId);
@@ -115,8 +116,6 @@ export class Nav {
         for (const room of rooms) this.update(this.rows.get(room.roomId) ?? null, room, state.roomId);
       }
     }
-    const empty = this.root.querySelector<HTMLElement>('[data-empty="rooms"]');
-    if (empty) empty.hidden = state.rooms.length > 0;
   }
 
   private row(room: Room, active: string | null): HTMLElement {

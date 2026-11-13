@@ -94,7 +94,6 @@ export const zhCN = {
   "sections.rooms": "房间",
   "sections.direct": "私聊",
   "sections.channels": "频道",
-  "sections.empty": "加入或创建一个房间",
 
   "settings.account": "账户",
   "settings.language": "语言",

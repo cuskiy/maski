@@ -30,14 +30,13 @@ ${ACTIONS.map((action) => surfaceTrigger(action.surface, t(c, action.key), actio
 export function navSections(c: Catalog): Html {
   return html`<div class="nav-sections" data-region="${REGION.sections}" aria-label="${t(c, "nav.roomsLabel")}">
 ${SECTIONS.map(
-  (section) => html`<details class="section" data-section="${section.id}">
+  (section) => html`<details class="section" data-section="${section.id}" hidden>
   <summary class="section-head">
     <span class="section-name">${t(c, section.key)}</span>
     <span class="section-count" data-count="${section.id}"></span>
     <span class="section-chevron">${icons.chevron}</span>
   </summary>
   <ul class="section-rows" data-rows="${section.id}"></ul>
-  ${section.id === "rooms" ? html`<p class="section-empty" data-empty="${section.id}">${t(c, "sections.empty")}</p>` : html``}
 </details>`,
 )}
 </div>`;
