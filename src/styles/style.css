@@ -35,8 +35,6 @@
     --scrim: rgb(0 0 0 / 46%);
     --scrollbar: light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%));
     --code: light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%));
-    --media-ink: rgb(255 255 255);
-    --media-bg: rgb(0 0 0 / 55%);
 
     --font:
       system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
@@ -876,7 +874,7 @@
     margin-block-start: var(--space-2);
     padding: 5px var(--space-2);
     border-radius: var(--radius-md);
-    background: light-dark(var(--bg-1), var(--bg-4));
+    background: var(--bg-2);
     color: var(--ink);
     text-align: start;
     anchor-name: --nav-account;
@@ -884,11 +882,11 @@
   }
 
   .nav-account:hover {
-    background: var(--bg-2);
+    background: var(--bg-4);
   }
 
   .nav-account:active {
-    background: light-dark(var(--bg-4), var(--bg-1));
+    background: var(--bg-1);
   }
 
   .nav-avatar {
@@ -898,15 +896,11 @@
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--bg-2);
+    background: var(--bg-1);
     color: var(--ink-2);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
-  }
-
-  .nav-account:hover .nav-avatar {
-    background: var(--bg-4);
   }
 
   .nav-account:active .nav-avatar {
