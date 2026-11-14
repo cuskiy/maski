@@ -876,7 +876,7 @@
     margin-block-start: var(--space-2);
     padding: 5px var(--space-2);
     border-radius: var(--radius-md);
-    background: transparent;
+    background: light-dark(var(--bg-1), var(--bg-4));
     color: var(--ink);
     text-align: start;
     anchor-name: --nav-account;
@@ -888,7 +888,7 @@
   }
 
   .nav-account:active {
-    background: var(--bg-4);
+    background: light-dark(var(--bg-4), var(--bg-1));
   }
 
   .nav-avatar {
@@ -898,11 +898,19 @@
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--surface-active);
+    background: var(--bg-2);
     color: var(--ink-2);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
+  }
+
+  .nav-account:hover .nav-avatar {
+    background: var(--bg-4);
+  }
+
+  .nav-account:active .nav-avatar {
+    background: var(--bg-2);
   }
 
   .nav-account-text {
