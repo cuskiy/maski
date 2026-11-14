@@ -211,7 +211,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           command="show-modal"
           aria-label="${label}: ${media.name}"
         >
-          <span class="media-pattern" aria-hidden="true"></span>${MEDIA_ICONS[media.kind]}
+          ${MEDIA_ICONS[media.kind]}${caption}
         </button>`
       : media.kind === "video"
         ? html`<video class="media-element" controls preload="metadata" src="${media.url}" aria-label="${media.name}"></video>`
@@ -228,7 +228,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   return html`<figure class="message-media is-${media.kind}">
     <div class="media-frame">
       ${content}
-      <div class="media-footer">${caption}${meta}</div>
+      <div class="media-footer">${meta}</div>
     </div>
   </figure>`;
 }
