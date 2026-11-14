@@ -97,7 +97,6 @@ function messageRow(
       : html`<blockquote class="bubble-reply">
           <strong>${message.reply.senderName}</strong><span>${message.reply.body}</span>
         </blockquote>`;
-  const meta = messageMeta(message, c, time);
   const pending = message.status !== "sent";
   const failure = `${t(c, "message.failed")}${message.error === null ? "" : `: ${message.error}`}`;
   const status = pending
@@ -113,6 +112,7 @@ function messageRow(
         }
       </span>`
     : html``;
+  const meta = messageMeta(message, c, time, status);
   const content =
     message.encryption.state === "undecryptable"
       ? html`<div class="bubble is-unreadable">${sender}${reply}<p class="message-unreadable">
@@ -132,7 +132,7 @@ function messageRow(
       >
         ${avatar}
         <div class="message-body">
-          <div class="message-line">${status}${content}</div>
+          <div class="message-line">${content}</div>
           ${reactionsView(message, c)}
         </div>
       </article>
@@ -144,13 +144,13 @@ function messageText(message: MessageRow): Html {
   return html`<div class="message-text${message.html === null ? "" : " is-rich"}">${message.html === null ? message.body : raw(message.html)}</div>`;
 }
 
-function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat): Html {
+function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat, status: Html): Html {
   const edited = message.edited ? html`<span>${t(c, "message.edited")}</span>` : html``;
   const stamp = html`<span class="bubble-stamp">
     <time datetime="${new Date(message.ts).toISOString()}">${time.format(message.ts)}</time>
     ${edited}
   </span>`;
-  return html`<span class="bubble-meta">${stamp}</span>`;
+  return html`<span class="bubble-meta">${status}${stamp}</span>`;
 }
 
 function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
