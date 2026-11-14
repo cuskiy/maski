@@ -121,10 +121,6 @@ for (const [key, value] of Object.entries(manifest)) {
 }
 
 const assets = readdirSync(join(root, "dist/assets"));
-const stylesheet = assets.find((name) => name.startsWith("style-")) ?? "";
-const styleSize = stylesheet.length === 0 ? 0 : statSync(join(root, "dist/assets", stylesheet)).size;
-if (styleSize > 41_000) fail("C6", `stylesheet is ${String(styleSize)} bytes, over the 41 kB budget`);
-
 const client = assets.find((name) => name.startsWith("client-")) ?? "";
 const clientSize = client.length === 0 ? 0 : statSync(join(root, "dist/assets", client)).size;
 if (clientSize > 181_000) fail("C6", `client bundle is ${String(clientSize)} bytes, over the 181 kB budget`);

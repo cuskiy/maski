@@ -51,7 +51,7 @@ One step is short and complete:
 7. **Commit and push** one coherent change, the reason in the body.
 
 Before a step is done, `npm run check` passes: types, Prettier, lint, tests, build, audit, contracts.
-A budget is never raised to make it pass.
+A budget is never raised to hide a defect. The stylesheet budget is deferred during UI reconstruction by explicit user decision; it returns when the UI is complete.
 
 ### A bug report is its own loop
 
@@ -141,16 +141,15 @@ and the paragraph that owns it.
 | C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | contracts — waits for the worker |
 | C4 | every page has a language, one `h1`, a scriptless note, and the chat page carries its `data-region` regions | page tests and contracts |
 | C5 | every manifest name is hashed and present in the output | audit and contracts |
-| C6 | client bundle and stylesheet budgets | contracts |
+| C6 | client bundle budget; stylesheet budget deferred until the UI is complete | contracts |
 | C7 | no TODO marker, no console output, no Chinese outside the Chinese catalog | contracts |
 | C8 | every screen exists in every language; English at `/en/`, the root is the language entry | contracts |
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
 | C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
 | C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
 
-Current budgets: 181 kB client bundle, 41 kB stylesheet. A budget is a decision, not a target.
-Raising one is a change to this file with the reason. The 1 kB increase is for the settings tab
-navigation and the visible settings header; approved by the user.
+Current budgets: 181 kB client bundle. The stylesheet budget is deferred until the UI is complete; C6 enforces only the client budget in this phase. A budget is a decision, not a target.
+Raising one is a change to this file with the reason.
 
 ## 1.9 Review, commits, sessions
 
