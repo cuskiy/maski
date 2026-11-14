@@ -278,7 +278,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           commandfor="${SURFACE.viewer}"
           command="show-modal"
         >
-          <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
+          <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" decoding="async" />
         </button>`;
   return html`<figure class="message-media is-${media.kind}">
     <div class="media-frame">

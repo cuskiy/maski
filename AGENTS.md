@@ -233,8 +233,8 @@ Raising one is a change to this file with the reason.
 - **左导航**：菜单区是一张 raised surface 卡片（搜索、新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、频道四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。频道是 space，点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
 - **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
 - **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
-- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
-- **输入框**：附件、贴纸、输入框、表情、发送。附件支持多选和粘贴，同一缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。
+- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。图片进入视口附近才加载；视频显示为较小的预览卡片，点击后在居中弹窗播放；图片点击后居中显示，可缩放，点击背景或关闭按钮退出。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。向上翻自动加载旧消息后保留当前位置，可以继续向上。当前房间在下方出现新未读消息且视口不在底部时，显示带计数的跳转按钮；到达底部或点击后标记已读。其他房间用导航未读徽章，不额外弹 toast。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
+- **输入框**：附件、贴纸、输入框、表情、发送。附件支持多选和粘贴，同一缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。贴纸选择器从客户端载入；回应选项打开一个紧凑的表情选择器，提供多种反应。
 - 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。
 
 ## 2.6 登录、密钥门、设置
@@ -411,7 +411,12 @@ top-left and bottom-left, and the last bubble's top-left use `--bubble-inner`; e
 normal radius, mirrored on the right for own messages. Every timestamp uses the `--text-xs` tier. A queued or sending row
 places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge
 there, whose title carries the error. The timestamp, edited mark and status are not selectable; copying a
-message reads its body, not the meta.
+message reads its body, not the meta. Images use native lazy loading and async decoding; the video row is a
+compact preview that opens a centered player. The image viewer centers the image, toggles a zoomed reading
+state on click, and closes on backdrop or the close control. A new message in the active room does not raise
+a toast: when the viewport is away from the bottom, the jump control names the unread count; reaching the
+bottom or using it marks the room read. Other rooms use the navigation badge. Backfill prepends a page and
+restores the recorded row, so the reader stays in place and can continue upward.
 
 **Composer** owns its draft, its tray, its height and its selection. The send button's long-press or
 context menu offers normal text and Markdown; choosing an option sends immediately, with no visible
@@ -435,6 +440,10 @@ it; the overlays never steal its caret. The bar fills the content column.
   measured with visibility hidden, positioned at the pointer (a touch long-press opens after release,
   centered on the touch point), and then revealed without an entrance transition; a non-empty selection
   keeps the native menu, and a touch long-press suppresses the contextmenu only when no text is selected.
+
+The reaction picker is a compact manual popover anchored at the message. It follows the context-menu
+positioning and cleanup rules: outside pointer or Escape closes it, and keyboard focus returns to the
+message.
 
 The dialogs and floating menus share one translucent glass style; dialogs use the weaker
 `--dialog-blur`, while the topbar, navigation and menus use `--float-blur`. There is no second glass
@@ -699,7 +708,7 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
   `renderPages()` or the production audit. The stylesheet has no visible borders or dividers; the navigation
   action block is a menu surface and section labels are bold. The frontend-design skill owns the visual
   review; do not add a second convention.
-- The client is a mock: `Load older` emits an empty older window and `Copy link` points at addresses the
+- The client is a mock: `Load older` loads one local page of older rows; `Copy link` points at addresses the
   build does not serve. They are kept as review artifacts, not shipped behavior.
 
 ## Generated and reference-only

@@ -77,6 +77,11 @@
     block-size: min(30rem, 80dvh);
   }
 
+  #surface-room-settings {
+    block-size: fit-content;
+    max-block-size: min(30rem, 80dvh);
+  }
+
   #surface-settings .surface-body,
   #surface-room-settings .surface-body {
     display: block;
@@ -84,6 +89,17 @@
     padding: 0;
     overflow: hidden;
     container-type: inline-size;
+  }
+
+  #surface-room-settings .surface-body {
+    flex: none;
+    block-size: auto;
+    max-block-size: inherit;
+    overflow-y: auto;
+  }
+
+  #surface-room-settings .settings-layout {
+    block-size: auto;
   }
 
   .settings-layout {
@@ -121,6 +137,7 @@
   :root:not(:has(.surface-section:target)) .settings-tabs a:first-child {
     background: var(--dialog-active-bg);
     color: var(--dialog-ink);
+    font-weight: var(--weight-strong);
   }
 
   .settings-tabs a:hover,
@@ -138,23 +155,50 @@
 
   .settings-panels > .surface-section {
     display: none;
-    gap: var(--space-2);
+    gap: var(--space-1);
     max-inline-size: 34rem;
-    padding: 0;
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--card-bg);
+    color: var(--card-ink);
   }
 
   .settings-panels .surface-section > h3 {
-    margin-block-end: var(--space-1);
+    margin-block-end: var(--space-2);
+    font-size: var(--text-xl);
   }
 
   .settings-panels .surface-section > h3:not(:first-child) {
     margin-block-start: var(--space-4);
   }
 
+  .settings-panels .surface-section .note {
+    color: var(--card-muted);
+  }
+
+  .settings-panels .surface-section .setting-line {
+    color: var(--card-ink);
+  }
+
+  .settings-panels .surface-section .setting-line > :last-child {
+    color: var(--card-muted);
+  }
+
+  .settings-panels .surface-section .button-quiet {
+    min-block-size: 2rem;
+  }
+
+  .settings-panels .surface-section .button-quiet.is-danger {
+    justify-self: start;
+    padding-inline: var(--space-3);
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
   .settings-panels .profile-line {
     padding: var(--space-3);
     border-radius: var(--radius-md);
-    background: var(--card-bg);
+    background: var(--dialog-hover-bg);
     color: var(--card-ink);
   }
 
@@ -245,7 +289,8 @@
   }
 
   #surface-room-menu.is-context,
-  #surface-message-menu.is-context {
+  #surface-message-menu.is-context,
+  #surface-reaction.is-context {
     position-area: none;
     position-try-fallbacks: none;
     inset: auto;
@@ -256,7 +301,8 @@
   }
 
   #surface-room-menu.is-measuring,
-  #surface-message-menu.is-measuring {
+  #surface-message-menu.is-measuring,
+  #surface-reaction.is-measuring {
     visibility: hidden;
   }
 
@@ -280,6 +326,31 @@
     inline-size: min(100% - 2 * var(--space-4), 16rem);
     block-size: min(52dvh, 22rem);
     overflow: hidden;
+  }
+
+  #surface-reaction {
+    inline-size: max-content;
+  }
+
+  #surface-reaction .surface-body {
+    padding: var(--space-1);
+  }
+
+  .reaction-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(2rem, 1fr));
+    gap: 2px;
+  }
+
+  .reaction-choice {
+    display: grid;
+    min-inline-size: 2rem;
+    min-block-size: 2rem;
+    place-items: center;
+    padding: 0;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    font-size: var(--text-lg);
+    line-height: 1;
   }
 
   #surface-emoji:popover-open {
@@ -448,6 +519,14 @@
   .surface .note {
     color: var(--dialog-muted);
     font-size: var(--text-sm);
+  }
+
+  .surface .field-label {
+    color: var(--dialog-muted);
+  }
+
+  .surface .field-hint {
+    color: var(--dialog-muted);
   }
 
   .surface-section {
@@ -647,7 +726,7 @@
     overscroll-behavior: contain;
     padding: var(--space-1);
     border-radius: var(--radius-md);
-    background: var(--card-bg);
+    background: var(--dialog-hover-bg);
     color: var(--card-ink);
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar) transparent;
@@ -846,7 +925,7 @@
   .key-out {
     padding: var(--space-2);
     border-radius: var(--radius-sm);
-    background: var(--card-bg);
+    background: var(--dialog-hover-bg);
     color: var(--card-ink);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
@@ -861,6 +940,10 @@
     gap: var(--space-2);
   }
 
+  #surface-viewer .surface-body {
+    overflow: auto;
+  }
+
   .viewer-preview {
     display: grid;
     min-block-size: 12rem;
@@ -868,12 +951,32 @@
     gap: var(--space-3);
   }
 
+  .viewer-zoom {
+    display: block;
+    max-inline-size: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+  }
+
   .viewer-preview img,
-  .viewer-preview video {
+  .viewer-preview video,
+  .viewer-zoom img {
     max-inline-size: 100%;
     max-block-size: calc(100dvh - 12rem);
     object-fit: contain;
     border-radius: var(--radius-md);
+  }
+
+  .viewer-zoom.is-zoomed {
+    max-inline-size: none;
+    cursor: zoom-out;
+  }
+
+  .viewer-zoom.is-zoomed img {
+    max-inline-size: none;
+    max-block-size: none;
   }
 
   .viewer-name {

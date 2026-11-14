@@ -445,7 +445,7 @@
   }
 
   .message-media.is-video {
-    inline-size: 32rem;
+    inline-size: var(--media-video-width);
     max-inline-size: 100%;
     gap: var(--space-2);
   }

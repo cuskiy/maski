@@ -27,6 +27,7 @@ export const SURFACE = {
   attach: "surface-attach",
   sticker: "surface-sticker",
   emoji: "surface-emoji",
+  reaction: "surface-reaction",
   sendMenu: "surface-send-menu",
   viewer: "surface-viewer",
   confirm: "surface-confirm",

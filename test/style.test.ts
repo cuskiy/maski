@@ -165,3 +165,8 @@ void test("the switch knob starts left and the dialog has a weaker blur", () => 
   );
   assert.match(css, /\.surface\.modal\s*\{[^}]*backdrop-filter:\s*blur\(var\(--dialog-blur\)\)/u);
 });
+
+void test("media previews stay compact and the viewer can zoom", () => {
+  assert.match(css, /\.message-media\.is-video\s*\{[^}]*var\(--media-video-width\)/u);
+  assert.match(css, /\.viewer-zoom\.is-zoomed\s*\{/u);
+});

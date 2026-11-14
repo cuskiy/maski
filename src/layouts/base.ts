@@ -17,7 +17,7 @@ export interface BaseInput {
 }
 
 const csp = raw(
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https:; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'",
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'",
 );
 
 export function base(input: BaseInput): Html {

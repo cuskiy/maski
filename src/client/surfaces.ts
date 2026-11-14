@@ -73,7 +73,15 @@ function showViewer(name: string, kind: string, url: string | null, c: Catalog):
   }
   if (url !== null && kind === "image") {
     body.innerHTML = html`<div class="viewer-preview">
-      <img class="viewer-media" src="${url}" alt="${name}" />
+      <button
+        class="viewer-zoom"
+        type="button"
+        data-viewer-zoom
+        aria-label="${t(c, "surface.viewer.zoom")}"
+        aria-pressed="false"
+      >
+        <img class="viewer-media" src="${url}" alt="${name}" />
+      </button>
     </div>`.value;
     return;
   }
@@ -400,8 +408,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = message(activeMessageId);
     if (target === null) return;
     if (action === "messageMenu.reply") composer.showReply(target);
-    else if (action === "messageMenu.react") actions.react(target.id, "👍");
-    else if (action === "messageMenu.edit") composer.showEditing(target);
+    else if (action === "messageMenu.react") {
+      const source = lastMenuSource;
+      hide(SURFACE.messageMenu);
+      if (source !== null) {
+        openContextMenu(SURFACE.reaction, source, sourcePoint(source), false, lastMenuWasKeyboard);
+      }
+      return;
+    } else if (action === "messageMenu.edit") composer.showEditing(target);
     else if (action === "messageMenu.delete") actions.redact(target.id);
     else if (action === "messageMenu.cancel") actions.discardMessage(target.id);
     else if (action === "messageMenu.retry") actions.retryMessage(target.id);
@@ -450,6 +464,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     }
     if (composer.handleClick(target)) {
       event.preventDefault();
+      return;
+    }
+
+    const zoom = target.closest<HTMLElement>("[data-viewer-zoom]");
+    if (zoom !== null) {
+      const pressed = zoom.getAttribute("aria-pressed") === "true";
+      zoom.setAttribute("aria-pressed", String(!pressed));
+      zoom.classList.toggle("is-zoomed", !pressed);
       return;
     }
 
@@ -556,6 +578,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         actions.leaveRoom(activeRoomId ?? state().roomId ?? "");
         hide(SURFACE.roomSettings);
       }
+      return;
+    }
+
+    const reactionChoice = target.closest<HTMLElement>("[data-react-choice]");
+    if (reactionChoice !== null) {
+      event.preventDefault();
+      if (activeMessageId !== null) actions.react(activeMessageId, reactionChoice.dataset["reactChoice"] ?? "");
+      hide(SURFACE.reaction);
       return;
     }
 
@@ -668,7 +698,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (!target.closest(".surface.floating") && target.closest("[popovertarget]") === null) closePopovers();
-    if (!target.closest(`#${SURFACE.roomMenu}, #${SURFACE.messageMenu}, #${SURFACE.sendMenu}`)) closeContextMenus();
+    if (!target.closest(`#${SURFACE.roomMenu}, #${SURFACE.messageMenu}, #${SURFACE.reaction}, #${SURFACE.sendMenu}`)) {
+      closeContextMenus();
+    }
     if (event.pointerType === "mouse") return;
     const roomControl = target.closest<HTMLElement>("button[data-room], [data-space-toggle]");
     const messageRow = target.closest<HTMLElement>("li.message");
@@ -733,6 +765,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (event.newState !== "open") return;
     if (target.id === SURFACE.emoji) {
       refreshBody(SURFACE.emoji);
+      return;
+    }
+    if (target.id === SURFACE.sticker) {
+      refreshBody(SURFACE.sticker);
       return;
     }
     if (target.id === SURFACE.roomMenu) {

@@ -30,3 +30,13 @@ void test("the avatar sits on the last message of a group", () => {
 void test("a single message still carries its avatar", () => {
   assert.match(message("d3"), /<button\s+class="message-avatar"/);
 });
+
+void test("remote image media is lazy and decoded off the main path", () => {
+  const state = mockChatState();
+  const messages = state.messages.map((row) =>
+    row.media?.kind === "image" ? { ...row, media: { ...row.media, url: "/media/image.png" } } : row,
+  );
+  const imageMarkup = timeline({ ...state, messages }, en, "en").value;
+  assert.match(imageMarkup, /loading="lazy"/u);
+  assert.match(imageMarkup, /decoding="async"/u);
+});

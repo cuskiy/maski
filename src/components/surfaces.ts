@@ -15,6 +15,7 @@ function textForm(c: Catalog, id: string, labelKey: CatalogKey, submitKey: Catal
 }
 
 const STICKERS = ["👋", "🎉", "🐱", "🌿", "✨", "🫡"] as const;
+const REACTIONS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥", "👀", "🙏", "💯", "🤔", "💔"] as const;
 const MENU_ICONS = {
   "roomMenu.settings": icons.settings,
   "roomMenu.markRead": icons.check,
@@ -131,6 +132,22 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
       </div>`;
     case SURFACE.emoji:
       return html`<div class="emoji-picker" data-emoji-picker></div>`;
+    case SURFACE.reaction:
+      return html`<div class="reaction-picker">
+        <div class="reaction-grid">
+          ${REACTIONS.map(
+            (reaction) =>
+              html`<button
+                class="surface-item reaction-choice"
+                type="button"
+                data-react-choice="${reaction}"
+                aria-label="${reaction}"
+              >
+                ${reaction}
+              </button>`,
+          )}
+        </div>
+      </div>`;
     case SURFACE.sendMenu:
       return html`<div class="surface-menu">
         <button class="surface-item" type="button" data-send="text">
@@ -325,8 +342,12 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
     <div class="settings-panels">
     <section class="surface-section" id="room-settings-overview">
       <h3>${t(c, "roomSettings.overview")}</h3>
-      <p class="note" data-room-topic>${t(c, "roomSettings.topic")}: ${room?.topic ?? ""}</p>
-      <p class="note" data-room-encryption>${t(c, "roomSettings.encryption")}: ${t(c, encryption)}</p>
+      <p class="setting-line">
+        <span>${t(c, "roomSettings.topic")}</span><span data-room-topic>${room?.topic ?? ""}</span>
+      </p>
+      <p class="setting-line">
+        <span>${t(c, "roomSettings.encryption")}</span><span data-room-encryption>${t(c, encryption)}</span>
+      </p>
       ${
         capabilities !== null && !capabilities.manage
           ? html`<p class="note">${t(c, "roomSettings.readOnly")}</p>`

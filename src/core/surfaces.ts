@@ -28,5 +28,6 @@ export const CHAT_SURFACES: readonly SurfaceDefinition[] = [
   { id: SURFACE.attach, titleKey: "surface.attach", kind: "floating" },
   { id: SURFACE.sticker, titleKey: "surface.sticker", kind: "floating" },
   { id: SURFACE.emoji, titleKey: "surface.emoji", kind: "floating" },
+  { id: SURFACE.reaction, titleKey: "surface.reaction", kind: "floating", popover: "manual" },
   { id: SURFACE.sendMenu, titleKey: "surface.sendMenu", kind: "floating", popover: "manual" },
 ];

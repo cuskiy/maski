@@ -1,7 +1,8 @@
 import { timeline } from "../../components/timeline.ts";
+import { t } from "../../lib/catalog.ts";
 import type { Catalog } from "../../lib/catalog.ts";
 import { REGION } from "../../core/regions.ts";
-import type { MessageRow } from "../../core/types.ts";
+import type { ChatState, MessageRow, RoomSummary } from "../../core/types.ts";
 import type { Actions } from "../actions.ts";
 import type { LocaleId } from "../../core/locales.ts";
 import type { Store } from "../store.ts";
@@ -37,6 +38,10 @@ function isNearBottom(wrap: HTMLElement): boolean {
   return wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 24;
 }
 
+function stateRoom(state: ChatState): RoomSummary | null {
+  return state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
+}
+
 const RUNTIME_CLASSES = ["is-multiline", "is-active", "is-holding", "is-unread-reveal"] as const;
 
 function stableMarkup(element: HTMLElement): string {
@@ -67,7 +72,18 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
 
   const updateJump = (): void => {
     const jump = region.querySelector<HTMLButtonElement>(".jump-newest");
-    if (jump !== null) jump.hidden = isNearBottom(wrap);
+    if (jump === null) return;
+    const room = stateRoom(store.snapshot());
+    const count = room === null ? 0 : Math.max(room.unread, room.highlight);
+    jump.textContent = t(c, count > 0 ? "chat.newMessages" : "chat.jump", { count: String(count) });
+    jump.hidden = count === 0 || isNearBottom(wrap);
+  };
+
+  const markAtBottom = (): void => {
+    const room = stateRoom(store.snapshot());
+    if (room !== null && (room.unread > 0 || room.highlight > 0) && isNearBottom(wrap)) {
+      actions.markRead(room.roomId);
+    }
   };
 
   const captureAnchor = (): Anchor | null => {
@@ -207,6 +223,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       }
     } else if (pinned) {
       wrap.scrollTop = wrap.scrollHeight;
+      markAtBottom();
     } else if (anchor !== null) {
       restoreAnchor(anchor);
     }
@@ -215,6 +232,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
 
   const onScroll = (): void => {
     pinned = isNearBottom(wrap);
+    if (pinned) markAtBottom();
     if (wrap.scrollTop < 96 && store.read("hasOlder") && !store.read("olderLoading")) {
       pinned = false;
       actions.loadOlder();
@@ -236,6 +254,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       event.preventDefault();
       wrap.scrollTop = wrap.scrollHeight;
       pinned = true;
+      const room = stateRoom(store.snapshot());
+      if (room !== null) actions.markRead(room.roomId);
       updateJump();
     }
   };
