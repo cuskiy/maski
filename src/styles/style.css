@@ -9,6 +9,7 @@
     --bg-2: light-dark(rgb(236 236 236), rgb(41 39 37));
     --bg-3: light-dark(rgb(253 253 253 / 88%), rgb(32 31 29 / 88%));
     --bg-4: light-dark(rgb(226 226 226), rgb(49 47 44));
+    --bg-5: light-dark(rgb(214 214 214), rgb(58 55 51));
     --bg-popover: light-dark(rgb(253 253 253 / 88%), rgb(41 39 37));
     --page: var(--bg-0);
     --ink: light-dark(rgb(20 20 20), rgb(228 225 220));
@@ -886,7 +887,12 @@
   }
 
   .nav-account:active {
-    background: var(--bg-1);
+    background: var(--bg-5);
+  }
+
+  #surface-nav-menu:popover-open + .nav-account,
+  body:has(#surface-language:popover-open) .nav-account {
+    background: var(--bg-5);
   }
 
   .nav-avatar {
@@ -901,10 +907,6 @@
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
-  }
-
-  .nav-account:active .nav-avatar {
-    background: var(--bg-2);
   }
 
   .nav-account-text {
@@ -2482,7 +2484,7 @@
 
   @starting-style {
     .surface.modal[open],
-    .surface.floating:popover-open {
+    .surface.floating:popover-open:not(#surface-language) {
       opacity: 0;
     }
 
