@@ -97,7 +97,7 @@
     --outline-offset: 2px;
     --hairline-width: 1px;
     --float-blur: 8px;
-    --scrim-blur: 5px;
+    --scrim-blur: 6px;
     --spin-duration: 800ms;
 
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1848,8 +1848,7 @@
     overflow: hidden;
     border: 0;
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--page) 94%, transparent);
-    backdrop-filter: blur(3px);
+    background: var(--page);
   }
 
   .surface.modal[open] {
