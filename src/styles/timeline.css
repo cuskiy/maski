@@ -136,10 +136,9 @@
     display: grid;
     grid-column: 1;
     grid-row: 1;
-    align-self: start;
+    align-self: end;
     inline-size: var(--avatar);
     block-size: var(--avatar);
-    margin-block-start: calc((1.3em - var(--avatar)) / 2);
     place-items: center;
     overflow: hidden;
     border-radius: 50%;

@@ -108,6 +108,7 @@ void test("grouped bubbles chain their inner corners and keep the avatars on the
     /\.message\.is-own\.is-group-end:not\(\.is-group-start\)\s*\{[^}]*--bubble-start-end:\s*var\(--bubble-inner\);[^}]*\}/u,
   );
   assert.match(css, /\.message:not\(\.is-group-end\)\s+\.message-avatar\s*\{[^}]*visibility:\s*hidden;/u);
+  assert.match(css, /\.message-avatar\s*\{[^}]*align-self:\s*end;/u);
 });
 
 void test("each paper declares its own text and state roles", () => {

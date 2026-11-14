@@ -233,7 +233,7 @@ Raising one is a change to this file with the reason.
 - **左导航**：菜单区是一张 raised surface 卡片（搜索、新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、频道四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。频道是 space，点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
 - **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
 - **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
-- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
+- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
 - **输入框**：附件、贴纸、输入框、表情、发送。附件支持多选和粘贴，同一缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。
 - 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。
 
@@ -403,11 +403,11 @@ rows share one message body column between the two avatar gutters; other bubbles
 every bubble's right edge lines up, and own bubbles align to the same right edge. Text bubbles fit their
 content up to `--bubble-max` and break at any character rather than leaving a ragged right edge; message
 spacing is `space-3`; media timestamps sit inside the media at the bottom right as a span. The first unread message gets a full-row reveal background that clears after the
-reveal. The message avatar is a complete circle on the last message of a sender group, while the sender
-name is on the first, never clipped by `content-visibility` paint containment. A group chains its inner
-bubble corners: the first bubble's bottom-left, the middle bubbles' top-left and bottom-left, and the last
-bubble's top-left use `--bubble-inner`; every other corner is the normal radius, mirrored on the right for
-own messages. Every timestamp uses the `--text-xs` tier. A queued or sending row
+reveal. The message avatar is a complete circle on the last message of a sender group, aligned to the
+group's bottom while the sender name is on the first, never clipped by `content-visibility` paint
+containment. A group chains its inner bubble corners: the first bubble's bottom-left, the middle bubbles'
+top-left and bottom-left, and the last bubble's top-left use `--bubble-inner`; every other corner is the
+normal radius, mirrored on the right for own messages. Every timestamp uses the `--text-xs` tier. A queued or sending row
 places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge
 there, whose title carries the error. The timestamp, edited mark and status are not selectable; copying a
 message reads its body, not the meta.
