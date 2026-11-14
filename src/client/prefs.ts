@@ -69,3 +69,13 @@ export function readNotifications(account: string): NotificationPrefs | null {
 export function saveNotifications(account: string, prefs: NotificationPrefs): void {
   storage.writeJson(storage.STORAGE.notifications(account), prefs);
 }
+
+export function readRecentEmoji(account: string): readonly string[] | null {
+  const stored = storage.readJson(storage.STORAGE.recentEmoji(account));
+  if (!Array.isArray(stored)) return null;
+  return stored.filter((value): value is string => typeof value === "string" && value !== "").slice(0, 18);
+}
+
+export function saveRecentEmoji(account: string, emoji: readonly string[]): void {
+  storage.writeJson(storage.STORAGE.recentEmoji(account), emoji.slice(0, 18));
+}

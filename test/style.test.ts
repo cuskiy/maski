@@ -13,9 +13,16 @@ void test("every declared custom property is used", () => {
   );
 });
 
+void test("color tokens are semantic roles, not numbered or component aliases", () => {
+  assert.doesNotMatch(css, /--(?:bg|text)-\d+\s*:/u);
+  assert.doesNotMatch(css, /var\(--(?:bg|text)-\d+\)/u);
+  assert.doesNotMatch(css, /^\s*--[a-z0-9-]+-text\s*:/gmu);
+});
+
 void test("there is no vendor-prefixed selector or literal text colour", () => {
   assert.doesNotMatch(css, /::-webkit-/u);
   assert.doesNotMatch(css, /color:\s*(?:#[0-9a-f]{3,8}|rgba?\()/iu);
+  assert.doesNotMatch(css, /background(?:-color)?:\s*(?:#[0-9a-f]{3,8}|rgba?\()/iu);
   assert.doesNotMatch(css, /text-wrap:\s*pretty/u);
   assert.match(css, /\.composer-input:focus-visible\s*\{\s*outline:\s*none;\s*\}/u);
   assert.equal([...css.matchAll(/outline:\s*none/gu)].length, 1);
@@ -23,4 +30,50 @@ void test("there is no vendor-prefixed selector or literal text colour", () => {
 
 void test("layout responds to containers, not viewport width media queries", () => {
   assert.doesNotMatch(css, /@media\s*\([^)]*(?:min-|max-)?width/u);
+});
+
+void test("the color palette keeps the backup values", () => {
+  const definitions = new Map(
+    [...css.matchAll(/^\s*(--[a-z0-9-]+):\s*(.+);$/gmu)].map((match) => [match[1], match[2]]),
+  );
+  const palette = {
+    "--page": "light-dark(rgb(255 255 255), rgb(24 23 21))",
+    "--ink": "light-dark(rgb(20 20 20), rgb(228 225 220))",
+    "--ink-2": "light-dark(rgb(77 77 77), rgb(169 166 161))",
+    "--ink-3": "light-dark(rgb(102 102 102), rgb(137 134 129))",
+    "--ink-4": "light-dark(rgb(130 130 130), rgb(105 102 98))",
+    "--surface": "light-dark(rgb(244 244 244), rgb(32 31 29))",
+    "--surface-hover": "light-dark(rgb(236 236 236), rgb(41 39 37))",
+    "--surface-active": "light-dark(rgb(226 226 226), rgb(49 47 44))",
+    "--bubble": "light-dark(rgb(241 241 241), rgb(34 33 31))",
+    "--bubble-hover": "light-dark(rgb(233 233 233), rgb(42 40 38))",
+    "--bubble-ink": "light-dark(rgb(20 20 20), rgb(222 218 210))",
+    "--menu-hover": "light-dark(rgb(238 238 238), rgb(41 39 37))",
+    "--menu-active": "light-dark(rgb(228 228 228), rgb(49 47 44))",
+    "--float": "light-dark(rgb(253 253 253 / 88%), rgb(32 31 29 / 88%))",
+    "--chrome": "light-dark(rgb(251 251 251 / 82%), rgb(29 28 26 / 82%))",
+    "--nav": "light-dark(rgb(241 241 241 / 94%), rgb(30 29 27 / 94%))",
+    "--focus": "light-dark(rgb(102 102 102), rgb(137 134 129))",
+    "--danger": "light-dark(rgb(150 97 92), rgb(217 167 161))",
+    "--danger-soft": "light-dark(rgb(150 97 92 / 10%), rgb(217 167 161 / 14%))",
+    "--mark": "light-dark(rgb(232 232 232), rgb(64 62 59))",
+    "--selection": "light-dark(rgb(20 20 20 / 14%), rgb(228 225 220 / 16%))",
+    "--scrim": "rgb(0 0 0 / 46%)",
+    "--scrollbar": "light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%))",
+    "--code": "light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%))",
+    "--media-ink": "rgb(255 255 255)",
+    "--media-bg": "rgb(0 0 0 / 55%)",
+  };
+  for (const [name, value] of Object.entries(palette)) {
+    assert.equal(definitions.get(name), value, name);
+  }
+});
+
+void test("the topbar and navigation keep their papers and floating surfaces share one blur", () => {
+  assert.match(css, /\.nav\s*\{[^}]*background:\s*var\(--nav\)/su);
+  assert.match(css, /\.room-header\s*\{[^}]*background:\s*var\(--chrome\)/su);
+  assert.match(
+    css,
+    /\.surface\.floating\s*\{[^}]*background:\s*var\(--float\)[^}]*backdrop-filter:\s*blur\(var\(--float-blur\)\)/su,
+  );
 });

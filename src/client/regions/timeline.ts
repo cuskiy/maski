@@ -62,6 +62,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
   let revealTimer: number | null = null;
+  let revealUnread = false;
 
   const updateJump = (): void => {
     const jump = region.querySelector<HTMLButtonElement>(".jump-newest");
@@ -158,6 +159,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       activeRoomId = state.roomId;
       pendingRoomId = state.roomId;
       pinned = true;
+      revealUnread = true;
     }
     if (state.messages.length === 0 && state.roomId !== null) pendingRoomId = state.roomId;
     const anchor = pinned ? null : captureAnchor();
@@ -170,7 +172,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       markMultilineBubbles(list);
     });
 
-    if (pendingRoomId !== null && state.messages.length > 0) {
+    if (pendingRoomId !== null && state.messages.length > 0 && state.messages[0]?.roomId === pendingRoomId) {
       const roomId = pendingRoomId;
       pendingRoomId = null;
       const receipt = room?.readReceipt ?? null;
@@ -185,18 +187,21 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(first.id)}"]`);
         if (row !== null) {
           wrap.scrollTop = Math.max(0, row.offsetTop - wrap.clientHeight / 2 + row.offsetHeight / 2);
-          if (revealTimer !== null) window.clearTimeout(revealTimer);
-          row.classList.add("is-unread-reveal");
-          revealTimer = window.setTimeout(() => {
-            row.classList.remove("is-unread-reveal");
-            revealTimer = null;
-          }, 900);
+          if (revealUnread) {
+            if (revealTimer !== null) window.clearTimeout(revealTimer);
+            row.classList.add("is-unread-reveal");
+            revealTimer = window.setTimeout(() => {
+              row.classList.remove("is-unread-reveal");
+              revealTimer = null;
+            }, 900);
+          }
         }
         pinned = false;
       } else {
         wrap.scrollTop = wrap.scrollHeight;
         pinned = true;
       }
+      revealUnread = false;
       actions.markRead(roomId);
     } else if (pinned) {
       wrap.scrollTop = wrap.scrollHeight;
@@ -208,6 +213,10 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
 
   const onScroll = (): void => {
     pinned = isNearBottom(wrap);
+    if (wrap.scrollTop < 96 && store.read("hasOlder") && !store.read("olderLoading")) {
+      pinned = false;
+      actions.loadOlder();
+    }
     updateJump();
   };
 
@@ -216,6 +225,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     if (!(target instanceof Element)) return;
     if (target.closest(".load-older") !== null) {
       event.preventDefault();
+      if (store.read("olderLoading")) return;
+      pinned = false;
       actions.loadOlder();
       return;
     }
@@ -233,7 +244,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     markMultilineBubbles(list);
   });
   resizeObserver.observe(wrap);
-  const unsubscribe = store.watch(["phase", "roomId", "rooms", "messages", "hasOlder"], render);
+  const unsubscribe = store.watch(["phase", "roomId", "rooms", "messages", "hasOlder", "olderLoading"], render);
   render();
   return () => {
     unsubscribe();

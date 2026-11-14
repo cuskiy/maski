@@ -23,7 +23,7 @@ export function composer(state: ChatState, c: Catalog): Html {
     ></div>
     <div class="composer-bar">
       <button
-        class="composer-action"
+        class="composer-action composer-attach"
         type="button"
         popovertarget="${SURFACE.attach}"
         aria-label="${t(c, "composer.attach")}"
@@ -31,7 +31,7 @@ export function composer(state: ChatState, c: Catalog): Html {
         ${icons.attach}
       </button>
       <button
-        class="composer-action"
+        class="composer-action composer-sticker"
         type="button"
         popovertarget="${SURFACE.sticker}"
         aria-label="${t(c, "composer.sticker")}"

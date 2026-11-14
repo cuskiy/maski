@@ -29,6 +29,7 @@ export function initChat(c: Catalog, locale: LocaleId, review = false): void {
     sections,
     openSpaces: prefs.readSpaces(account) ?? base.openSpaces,
     notifications: prefs.readNotifications(account) ?? base.notifications,
+    recentEmoji: prefs.readRecentEmoji(account) ?? base.recentEmoji,
   };
 
   const store = createStore(initial);

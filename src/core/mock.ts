@@ -589,14 +589,21 @@ export const mockMembers = [
 
 export function mockChatState(): ChatState {
   const roomId = "design";
+  const messages = mockMessagesFor(roomId);
+  const readReceipt = messages.at(-1)?.id;
+  const readRooms = rooms.map((room) =>
+    room.roomId === roomId && readReceipt !== undefined
+      ? Object.assign({}, room, { readReceipt, unread: 0, highlight: 0 })
+      : room,
+  );
   return {
     ...emptyChatState(),
     phase: "ready",
     connection: "online",
     session: mockSession,
-    rooms,
+    rooms: readRooms,
     roomId,
-    messages: mockMessagesFor(roomId),
+    messages,
     hasOlder: true,
     openSpaces: ["product"],
     devices: mockDevices,

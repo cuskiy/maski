@@ -25,6 +25,7 @@ export class Composer {
   private readonly trayRegion: HTMLElement | null;
   private readonly replyRegion: HTMLElement | null;
   private tray: File[] = [];
+  private readonly previews = new Map<File, string>();
   private replyTo: MessageRow | null = null;
   private editing: MessageRow | null = null;
   private preDraft: string | null = null;
@@ -52,6 +53,7 @@ export class Composer {
     this.unsubscribe();
     this.abort.abort();
     this.clearDraftTimer();
+    this.releasePreviews();
   }
 
   private mount(): void {
@@ -79,10 +81,17 @@ export class Composer {
     this.textarea?.addEventListener(
       "paste",
       (event) => {
-        const files = event.clipboardData?.files;
-        if (files === undefined || files.length === 0) return;
+        const clipboard = event.clipboardData;
+        if (clipboard === null) return;
+        const files: File[] = [];
+        for (const item of clipboard.items) {
+          if (item.kind !== "file") continue;
+          const file = item.getAsFile();
+          if (file !== null) files.push(file);
+        }
+        if (files.length === 0) return;
         event.preventDefault();
-        this.addFiles(Array.from(files));
+        this.addFiles(files);
       },
       { signal },
     );
@@ -97,8 +106,7 @@ export class Composer {
         this.saveDraft();
       }
       this.roomId = state.roomId;
-      this.tray = [];
-      this.renderTray();
+      this.clearTray();
       this.clearReplyState();
       this.draftRoom = null;
     }
@@ -207,9 +215,13 @@ export class Composer {
       this.trayRegion.replaceChildren();
       return;
     }
-    this.trayRegion.innerHTML = html`${this.tray.map(
-      (file, index) => html`<div class="tray-item">
-        ${icons.file}<span class="tray-name">${file.name}</span>
+    this.trayRegion.innerHTML = html`${this.tray.map((file, index) => {
+      const preview = this.previews.get(file);
+      return html`<div class="tray-item${preview === undefined ? "" : " has-thumb"}">
+        ${preview === undefined ? icons.file : html`<img class="tray-thumb" src="${preview}" alt="" />`}
+        <span class="tray-text"
+          ><span class="tray-name">${file.name}</span><span class="tray-size">${formatBytes(file.size)}</span></span
+        >
         <button
           class="tray-remove"
           type="button"
@@ -218,12 +230,17 @@ export class Composer {
         >
           ${icons.close}
         </button>
-      </div>`,
-    )}`.value;
+      </div>`;
+    })}`.value;
   }
 
   addFiles(files: readonly File[]): void {
     if (files.length === 0) return;
+    for (const file of files) {
+      if (!this.previews.has(file) && file.type.startsWith("image/")) {
+        this.previews.set(file, URL.createObjectURL(file));
+      }
+    }
     this.tray = [...this.tray, ...files];
     this.renderTray();
     this.textarea?.focus();
@@ -232,6 +249,8 @@ export class Composer {
   removeTray(index: number): void {
     const removeButton = this.trayRegion?.querySelector<HTMLElement>(`[data-tray-index="${String(index)}"]`);
     const hadFocus = removeButton !== null && removeButton !== undefined && document.activeElement === removeButton;
+    const removed = this.tray[index];
+    if (removed !== undefined) this.releasePreview(removed);
     this.tray = this.tray.filter((_file, position) => position !== index);
     this.renderTray();
     if (hadFocus) {
@@ -245,6 +264,7 @@ export class Composer {
     const textarea = this.textarea;
     if (textarea === null || emoji === "") return;
     textarea.setRangeText(emoji, textarea.selectionStart, textarea.selectionEnd, "end");
+    this.actions.recordEmoji(emoji);
     this.saveDraft();
     textarea.focus();
     this.hide(SURFACE.emoji);
@@ -364,10 +384,28 @@ export class Composer {
     if (textarea !== null) textarea.value = "";
     if (this.roomId !== null) prefs.saveDraft(this.account, this.roomId, "");
     this.draftRoom = this.roomId;
-    this.tray = [];
-    this.renderTray();
+    this.clearTray();
     this.clearReplyState();
     textarea?.focus();
+  }
+
+  private releasePreview(file: File): void {
+    const url = this.previews.get(file);
+    if (url !== undefined) {
+      URL.revokeObjectURL(url);
+      this.previews.delete(file);
+    }
+  }
+
+  private releasePreviews(): void {
+    for (const url of this.previews.values()) URL.revokeObjectURL(url);
+    this.previews.clear();
+  }
+
+  private clearTray(): void {
+    this.releasePreviews();
+    this.tray = [];
+    this.renderTray();
   }
 
   private hide(id: string): void {
@@ -384,8 +422,14 @@ export class Composer {
   }
 
   handleClick(target: Element): boolean {
-    if (target.closest("[data-attach]") !== null) {
-      document.querySelector<HTMLInputElement>("#surface-attach-input")?.click();
+    const attach = target.closest<HTMLElement>("[data-attach]");
+    if (attach !== null) {
+      const input = document.querySelector<HTMLInputElement>("#surface-attach-input");
+      if (input !== null) {
+        const kind = attach.dataset["attach"];
+        input.accept = kind === "image" ? "image/*" : kind === "video" ? "video/*" : "";
+        input.click();
+      }
       return true;
     }
     const tray = target.closest<HTMLElement>("[data-tray-index]");
@@ -416,4 +460,10 @@ export class Composer {
     }
     return false;
   }
+}
+
+function formatBytes(size: number): string {
+  if (size < 1000) return `${String(size)} B`;
+  if (size >= 1_000_000) return `${Math.round(size / 100_000) / 10} MB`;
+  return `${Math.round(size / 1000)} kB`;
 }

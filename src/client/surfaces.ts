@@ -4,6 +4,7 @@ import { html } from "../lib/html.ts";
 import type { ChatState, MessageRow, RoomSummary } from "../core/types.ts";
 import { SURFACE } from "../core/regions.ts";
 import { surfaceBodyFor } from "../components/surfaces.ts";
+import { emojiPickerBody } from "../components/emoji.ts";
 import { icons } from "../components/icons.ts";
 import { CHAT_SURFACES } from "../core/surfaces.ts";
 import type { Actions } from "./actions.ts";
@@ -57,19 +58,41 @@ function closeContextMenus(): void {
   clearPosition("--context-y");
 }
 
-function showViewer(name: string, kind: string): void {
+function closeRestoredPopovers(): void {
+  closePopovers();
+}
+
+function showViewer(name: string, kind: string, url: string | null, c: Catalog): void {
   const body = document.querySelector<HTMLElement>(`[data-region="${SURFACE.viewer}-body"]`);
   if (body === null) return;
+  if (url !== null && kind === "video") {
+    body.innerHTML = html`<div class="viewer-preview">
+      <video class="viewer-media" controls autoplay playsinline src="${url}" aria-label="${name}"></video>
+    </div>`.value;
+    return;
+  }
+  if (url !== null && kind === "image") {
+    body.innerHTML = html`<div class="viewer-preview">
+      <img class="viewer-media" src="${url}" alt="${name}" />
+    </div>`.value;
+    return;
+  }
+  if (url !== null && kind === "audio") {
+    body.innerHTML = html`<div class="viewer-preview">
+      <audio class="viewer-media" controls src="${url}" aria-label="${name}"></audio>
+      <span class="viewer-name">${name}</span>
+    </div>`.value;
+    return;
+  }
+  if (kind === "video") {
+    body.innerHTML = html`<div class="viewer-preview">
+      ${icons.video}<span class="viewer-name">${name}</span>
+      <p class="note">${t(c, "surface.viewer.missingMedia")}</p>
+    </div>`.value;
+    return;
+  }
   const icon =
-    kind === "image"
-      ? icons.image
-      : kind === "video"
-        ? icons.video
-        : kind === "audio"
-          ? icons.audio
-          : kind === "sticker"
-            ? icons.sticker
-            : icons.file;
+    kind === "image" ? icons.image : kind === "audio" ? icons.audio : kind === "sticker" ? icons.sticker : icons.file;
   body.innerHTML = html`<div class="viewer-preview">${icon}<span class="viewer-name">${name}</span></div>`.value;
 }
 
@@ -88,7 +111,10 @@ let lastInput: "pointer" | "keyboard" = "pointer";
 
 function onKeyDown(event: KeyboardEvent): void {
   lastInput = "keyboard";
-  if (event.key === "Escape") closeContextMenus();
+  if (event.key === "Escape") {
+    closeContextMenus();
+    closePopovers();
+  }
 }
 
 function sourcePoint(element: HTMLElement): { readonly x: number; readonly y: number } {
@@ -105,11 +131,37 @@ function syncSettingsTabs(): void {
     if (link === current) link.setAttribute("aria-current", "true");
     else link.removeAttribute("aria-current");
   }
+  const activeId = current?.hash.slice(1) ?? "";
+  for (const panel of dialog.querySelectorAll<HTMLElement>(".settings-panels > .surface-section")) {
+    panel.hidden = panel.id !== activeId;
+  }
 }
 
 function activeInComposer(): boolean {
   const active = document.activeElement;
   return active instanceof HTMLElement && active.closest(".composer") !== null;
+}
+
+function jumpToEmojiSection(button: HTMLElement): void {
+  const picker = button.closest<HTMLElement>("[data-emoji-picker]");
+  const scroll = picker?.querySelector<HTMLElement>("[data-emoji-scroll]");
+  const key = button.dataset["emojiJump"];
+  const section =
+    key === undefined
+      ? undefined
+      : [...(scroll?.querySelectorAll<HTMLElement>("[data-emoji-section]") ?? [])].find(
+          (entry) => entry.dataset["emojiSection"] === key,
+        );
+  if (scroll === null || scroll === undefined || section === undefined) return;
+  for (const jump of picker?.querySelectorAll<HTMLElement>("[data-emoji-jump]") ?? []) {
+    if (jump === button) jump.setAttribute("aria-current", "true");
+    else jump.removeAttribute("aria-current");
+  }
+  const top = section.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
+  scroll.scrollTo({
+    top,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
 }
 
 function clearSettingsHash(): void {
@@ -145,6 +197,17 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (id === SURFACE.profile || id === SURFACE.viewer) return;
     const body = document.querySelector<HTMLElement>(`[data-region="${id}-body"]`);
     if (body === null) return;
+    if (id === SURFACE.emoji) {
+      body.innerHTML = emojiPickerBody(c, state().recentEmoji).value;
+      body.scrollTop = 0;
+      for (const jump of body.querySelectorAll<HTMLElement>("[data-emoji-jump]")) {
+        jump.addEventListener("click", (event) => {
+          event.preventDefault();
+          jumpToEmojiSection(jump);
+        });
+      }
+      return;
+    }
     const active = document.activeElement;
     const focus =
       active instanceof HTMLElement && body.contains(active)
@@ -199,6 +262,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         if (capabilities.copy) allowed.add("messageMenu.copy");
         if (capabilities.copyLink) allowed.add("messageMenu.copyLink");
         if (target !== null && target.own && target.status !== "sent") allowed.add("messageMenu.cancel");
+        if (target !== null && target.own && target.status === "failed") allowed.add("messageMenu.retry");
       }
       for (const item of body.querySelectorAll<HTMLElement>("[data-action]")) {
         item.hidden = !allowed.has(item.dataset["action"] ?? "");
@@ -340,6 +404,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     else if (action === "messageMenu.edit") composer.showEditing(target);
     else if (action === "messageMenu.delete") actions.redact(target.id);
     else if (action === "messageMenu.cancel") actions.discardMessage(target.id);
+    else if (action === "messageMenu.retry") actions.retryMessage(target.id);
     else if (action === "messageMenu.copy") copy(target.body);
     else if (action === "messageMenu.copyLink")
       copy(`${location.origin}${location.pathname}#${target.roomId}/${target.id}`);
@@ -402,7 +467,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       return;
     }
 
-    if (target.closest('[popovertarget="surface-language"]') !== null) hide(SURFACE.navMenu);
+    if (target.closest('[popovertarget="surface-language"]') !== null) {
+      const menu = document.getElementById(SURFACE.navMenu);
+      if (menu instanceof HTMLElement && menu.matches(":popover-open")) {
+        menu.classList.add("is-switching");
+        menu.hidePopover();
+        queueMicrotask(() => menu.classList.remove("is-switching"));
+      }
+    }
 
     const invoker = target.closest<HTMLElement>("[commandfor]");
     if (invoker !== null) {
@@ -439,7 +511,12 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
     const media = target.closest<HTMLElement>("[data-media-open]");
     if (media !== null) {
-      showViewer(media.dataset["mediaOpen"] ?? "", media.dataset["mediaKind"] ?? "file");
+      showViewer(
+        media.dataset["mediaOpen"] ?? "",
+        media.dataset["mediaKind"] ?? "file",
+        media.dataset["mediaUrl"] ?? null,
+        c,
+      );
       return;
     }
 
@@ -590,6 +667,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     suppressNextContext = false;
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (!target.closest(".surface.floating") && target.closest("[popovertarget]") === null) closePopovers();
     if (!target.closest(`#${SURFACE.roomMenu}, #${SURFACE.messageMenu}, #${SURFACE.sendMenu}`)) closeContextMenus();
     if (event.pointerType === "mouse") return;
     const roomControl = target.closest<HTMLElement>("button[data-room], [data-space-toggle]");
@@ -653,6 +731,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = event.target;
     if (!(target instanceof HTMLElement) || !(event instanceof ToggleEvent)) return;
     if (event.newState !== "open") return;
+    if (target.id === SURFACE.emoji) {
+      refreshBody(SURFACE.emoji);
+      return;
+    }
     if (target.id === SURFACE.roomMenu) {
       if (!target.classList.contains("is-context")) {
         activeRoomId = state().roomId;
@@ -695,7 +777,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (state().recoveryKey !== null) actions.clearRecoveryKey();
     clearSettingsHash();
   };
-  for (const dialog of settingsDialogs) dialog.addEventListener("close", onSettingsClose);
+  for (const dialog of settingsDialogs) {
+    dialog.addEventListener("close", onSettingsClose);
+    dialog.addEventListener("toggle", syncSettingsTabs);
+  }
 
   document.addEventListener("click", onClick);
   document.addEventListener("submit", onSubmit);
@@ -708,6 +793,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   document.addEventListener("toggle", onDocumentToggle, true);
   document.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("hashchange", syncSettingsTabs);
+  window.addEventListener("pageshow", closeRestoredPopovers);
+  requestAnimationFrame(closeRestoredPopovers);
 
   return () => {
     document.removeEventListener("click", onClick);
@@ -721,7 +808,11 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     document.removeEventListener("toggle", onDocumentToggle, true);
     document.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("hashchange", syncSettingsTabs);
+    window.removeEventListener("pageshow", closeRestoredPopovers);
     confirmDialog?.removeEventListener("close", onConfirmClose);
-    for (const dialog of settingsDialogs) dialog.removeEventListener("close", onSettingsClose);
+    for (const dialog of settingsDialogs) {
+      dialog.removeEventListener("close", onSettingsClose);
+      dialog.removeEventListener("toggle", syncSettingsTabs);
+    }
   };
 }

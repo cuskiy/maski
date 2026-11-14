@@ -44,6 +44,8 @@ export interface Actions {
   edit(messageId: string, body: string, html: string | null): void;
   redact(messageId: string): void;
   discardMessage(messageId: string): void;
+  retryMessage(messageId: string): void;
+  recordEmoji(emoji: string): void;
   acceptInvite(roomId: string): void;
   declineInvite(roomId: string): void;
   setPref(key: keyof NotificationPrefs, value: boolean): void;
@@ -112,7 +114,9 @@ export function createActions({ store, source, c, account }: Context): Actions {
     markRead,
     loadOlder() {
       const roomId = store.read("roomId");
-      if (roomId !== null) source.older(roomId);
+      if (roomId === null || store.read("olderLoading")) return;
+      store.write("olderLoading", true);
+      source.older(roomId);
     },
     appendRows(roomId, rawRows) {
       if (rawRows.length === 0) return;
@@ -270,6 +274,22 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.read("messages").filter((message) => message.id !== messageId),
       );
     },
+    retryMessage(messageId) {
+      const message = store.read("messages").find((entry) => entry.id === messageId);
+      if (message === undefined || message.status !== "failed") return;
+      const retried = Object.assign({}, message, { status: "sending" as const, error: null });
+      store.write(
+        "messages",
+        store.read("messages").map((entry) => (entry.id === messageId ? retried : entry)),
+      );
+      source.send(message.roomId, retried);
+    },
+    recordEmoji(emoji) {
+      if (emoji === "") return;
+      const next = [emoji, ...store.read("recentEmoji").filter((entry) => entry !== emoji)].slice(0, 18);
+      store.write("recentEmoji", next);
+      prefs.saveRecentEmoji(account, next);
+    },
     acceptInvite(roomId) {
       const invite = store.read("invites").find((entry) => entry.roomId === roomId);
       if (invite === undefined || !invite.capabilities.accept) return;
@@ -348,6 +368,7 @@ export function wireSources(store: Store, source: ChatSource): () => void {
           if (olderRows.length > 0) store.write("messages", [...olderRows, ...current]);
         }
         store.write("hasOlder", hasOlder);
+        store.write("olderLoading", false);
       });
     }),
     source.on("devices", (devices) => store.write("devices", devices)),

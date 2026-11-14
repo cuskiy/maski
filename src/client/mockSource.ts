@@ -4,12 +4,49 @@ import { mockChatState, mockDevices, mockInvites, mockMessagesFor, mockRecoveryK
 
 type Listener = (payload: unknown) => void;
 
+const OLDER_BODIES = [
+  "The first pass kept the room list still.",
+  "I checked the narrow layout before the sidebar changed.",
+  "The timeline anchor is the part that matters here.",
+  "Earlier, the first row was measured after the list grew.",
+  "This part of the conversation is older than the live window.",
+  "The quiet shell should keep its place while history loads.",
+] as const;
+
+function olderRows(roomId: string): readonly MessageRow[] {
+  const first = mockMessagesFor(roomId)[0];
+  if (first === undefined) return [];
+  return OLDER_BODIES.map((body, index) =>
+    Object.assign({}, first, {
+      id: `older-${roomId}-${String(index)}`,
+      sender: "@alice:matrix.org",
+      senderName: "Alice",
+      senderAvatar: null,
+      ts: first.ts - (OLDER_BODIES.length - index) * 60_000,
+      own: false,
+      kind: "text" as const,
+      body,
+      html: null,
+      media: null,
+      reactions: [],
+      reply: null,
+      edited: false,
+      status: "sent" as const,
+      error: null,
+      system: false,
+      encryption: { state: "ok" as const },
+      capabilities: { reply: true, react: true, edit: false, redact: false, copy: true, copyLink: true },
+    }),
+  );
+}
+
 export class MockSource implements ChatSource {
   private readonly listeners = new Map<SourceEvent, Set<Listener>>();
   private readonly timers = new Set<number>();
+  private readonly olderLoaded = new Set<string>();
+  private readonly state = mockChatState();
   private devices: readonly DeviceSession[] = [...mockDevices];
   private invites: readonly Invite[] = [...mockInvites];
-  private readonly state = mockChatState();
   private readonly withData: boolean;
 
   constructor(withData = true) {
@@ -55,7 +92,17 @@ export class MockSource implements ChatSource {
   }
 
   older(roomId: string): void {
-    this.emit("window", { roomId, messages: [], hasOlder: false, older: true });
+    const rows = olderRows(roomId);
+    if (!this.withData || rows.length === 0 || this.olderLoaded.has(roomId)) {
+      this.emit("window", { roomId, messages: [], hasOlder: false, older: true });
+      return;
+    }
+    this.olderLoaded.add(roomId);
+    const timer = window.setTimeout(() => {
+      this.timers.delete(timer);
+      this.emit("window", { roomId, messages: rows, hasOlder: false, older: true });
+    }, 650);
+    this.timers.add(timer);
   }
 
   send(roomId: string, row: MessageRow): void {

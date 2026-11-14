@@ -15,8 +15,6 @@ function textForm(c: Catalog, id: string, labelKey: CatalogKey, submitKey: Catal
 }
 
 const STICKERS = ["👋", "🎉", "🐱", "🌿", "✨", "🫡"] as const;
-const EMOJI = ["😀", "👍", "🎉", "❤️", "🔥", "😄", "🙌", "👀", "✨", "🌿", "🫡", "🤝"] as const;
-
 const MENU_ICONS = {
   "roomMenu.settings": icons.settings,
   "roomMenu.markRead": icons.check,
@@ -29,6 +27,7 @@ const MENU_ICONS = {
   "messageMenu.edit": icons.compose,
   "messageMenu.delete": icons.trash,
   "messageMenu.cancel": icons.close,
+  "messageMenu.retry": icons.send,
   "messageMenu.copy": icons.copy,
   "messageMenu.copyLink": icons.link,
 } as const satisfies Record<string, Html>;
@@ -80,6 +79,7 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
         "messageMenu.edit",
         "messageMenu.delete",
         "messageMenu.cancel",
+        "messageMenu.retry",
         "messageMenu.copy",
         "messageMenu.copyLink",
       ]);
@@ -94,8 +94,18 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
     case SURFACE.viewer:
       return html`<p class="note">${t(c, "surface.viewer.empty")}</p>`;
     case SURFACE.attach:
-      return html`<button class="button-primary" type="button" data-attach>${t(c, "surface.attach.label")}</button
-        ><input
+      return html`<div class="surface-menu">
+          <button class="surface-item" type="button" data-attach="image">
+            ${icons.image}<span>${t(c, "surface.attach.image")}</span>
+          </button>
+          <button class="surface-item" type="button" data-attach="video">
+            ${icons.video}<span>${t(c, "surface.attach.video")}</span>
+          </button>
+          <button class="surface-item" type="button" data-attach="file">
+            ${icons.file}<span>${t(c, "surface.attach.file")}</span>
+          </button>
+        </div>
+        <input
           id="surface-attach-input"
           class="visually-hidden"
           type="file"
@@ -104,23 +114,19 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
           aria-label="${t(c, "composer.attach")}"
         />`;
     case SURFACE.sticker:
-      return html`<div class="pack-grid">
-        ${STICKERS.map(
-          (sticker) =>
-            html`<button class="pack-item" type="button" data-sticker="${sticker}" aria-label="${sticker}">
-              ${sticker}
-            </button>`,
-        )}
+      return html`<div class="picker">
+        <p class="pack-head">${t(c, "surface.sticker")}</p>
+        <div class="pack-grid">
+          ${STICKERS.map(
+            (sticker) =>
+              html`<button class="pack-item" type="button" data-sticker="${sticker}" aria-label="${sticker}">
+                ${sticker}
+              </button>`,
+          )}
+        </div>
       </div>`;
     case SURFACE.emoji:
-      return html`<div class="pack-grid">
-        ${EMOJI.map(
-          (emoji) =>
-            html`<button class="pack-item" type="button" data-emoji="${emoji}" aria-label="${emoji}">
-              ${emoji}
-            </button>`,
-        )}
-      </div>`;
+      return html`<div class="emoji-picker" data-emoji-picker></div>`;
     case SURFACE.sendMenu:
       return html`<div class="surface-menu">
         <button class="surface-item" type="button" data-send="text">
@@ -146,13 +152,16 @@ function settingsTabs(
 function settingsBody(c: Catalog, state: ChatState): Html {
   const session = state.session;
   const capabilities = session?.capabilities ?? null;
-  return html`${settingsTabs(c, "surface.settings", [
-    { href: "#settings-account", key: "settings.account" },
-    { href: "#settings-notifications", key: "settings.notifications" },
-    { href: "#settings-security", key: "settings.security" },
-    { href: "#settings-about", key: "settings.about" },
-  ])}
+  return html`<div class="settings-layout">
+    ${settingsTabs(c, "surface.settings", [
+      { href: "#settings-account", key: "settings.account" },
+      { href: "#settings-notifications", key: "settings.notifications" },
+      { href: "#settings-security", key: "settings.security" },
+      { href: "#settings-about", key: "settings.about" },
+    ])}
+    <div class="settings-panels">
     <section class="surface-section" id="settings-account">
+      <h3>${t(c, "settings.account")}</h3>
       ${
         session === null
           ? html`<p class="note">${t(c, "settings.signedOut")}</p>`
@@ -289,7 +298,9 @@ function settingsBody(c: Catalog, state: ChatState): Html {
       <p class="setting-line"><a class="link" href="${config.app.source}">${t(c, "settings.source")}</a></p>
       <p class="setting-line"><span>${t(c, "settings.license")}</span><span>${t(c, "settings.licenseValue")}</span></p>
       <p class="note">${t(c, "settings.privacy")}</p>
-    </section>`;
+    </section>
+    </div>
+  </div>`;
 }
 
 function roomSettingsBody(c: Catalog, state: ChatState): Html {
@@ -301,12 +312,15 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
       : room?.encryption === "none"
         ? "roomSettings.encryptionNone"
         : "roomSettings.encryptionUnknown";
-  return html`${settingsTabs(c, "surface.roomSettings", [
-    { href: "#room-settings-overview", key: "roomSettings.overview" },
-    { href: "#room-settings-members", key: "roomSettings.members" },
-    { href: "#room-settings-notifications", key: "roomSettings.notifications" },
-  ])}
+  return html`<div class="settings-layout">
+    ${settingsTabs(c, "surface.roomSettings", [
+      { href: "#room-settings-overview", key: "roomSettings.overview" },
+      { href: "#room-settings-members", key: "roomSettings.members" },
+      { href: "#room-settings-notifications", key: "roomSettings.notifications" },
+    ])}
+    <div class="settings-panels">
     <section class="surface-section" id="room-settings-overview">
+      <h3>${t(c, "roomSettings.overview")}</h3>
       <p class="note" data-room-topic>${t(c, "roomSettings.topic")}: ${room?.topic ?? ""}</p>
       <p class="note" data-room-encryption>${t(c, "roomSettings.encryption")}: ${t(c, encryption)}</p>
       ${
@@ -362,7 +376,9 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
           </option>
         </select>
       </label>
-    </section>`;
+    </section>
+    </div>
+  </div>`;
 }
 
 function inviteBody(c: Catalog, state: ChatState): Html {

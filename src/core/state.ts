@@ -11,7 +11,9 @@ export function emptyChatState(): ChatState {
     roomId: null,
     messages: [],
     hasOlder: false,
+    olderLoading: false,
     typing: [],
+    recentEmoji: [],
     openSpaces: [],
     sections: {
       favorites: { open: false },

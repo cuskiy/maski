@@ -178,7 +178,9 @@ export interface ChatState {
   readonly roomId: string | null;
   readonly messages: readonly MessageRow[];
   readonly hasOlder: boolean;
+  readonly olderLoading: boolean;
   readonly typing: readonly string[];
+  readonly recentEmoji: readonly string[];
   readonly openSpaces: readonly string[];
   readonly sections: Readonly<Record<SectionId, SectionState>>;
   readonly notifications: NotificationPrefs;

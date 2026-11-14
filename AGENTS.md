@@ -474,26 +474,45 @@ revalidate; `skipWaiting` and `clients.claim` keep one version live; registratio
 
 ## 3.8 CSS
 
-Tokens in `:root`: `--page`; the non-text ink scale `--ink`, `--ink-3`, `--ink-4` for strokes, focus and
-status marks; component paper tokens `--surface`, `--surface-hover`, `--surface-active`, `--bg-modal`,
-`--bg-menu`, `--bg-popup`, `--bg-account`, `--bg-media`, `--bg-time`, `--bg-action`, `--bg-close`,
-`--chrome`, `--nav`; and paired text tokens such as `--surface-text`, `--bg-modal-text`, `--bg-account-text`,
-`--nav-text`, `--topbar-text`, `--timeline-text`, `--bubble-text`, `--composer-text`, `--bg-media-text`,
-`--bg-time-text`, `--bg-action-text` and `--bg-close-text`. `--danger` is the only semantic state color,
-reserved for the failed-send mark, the mention badge and destructive actions.
+Color tokens in `:root` are semantic roles, copied from the frozen backup palette: `--page`; the non-text
+ink scale `--ink`, `--ink-2`, `--ink-3`, `--ink-4`; surfaces `--surface`, `--surface-hover`,
+`--surface-active`; bubbles `--bubble`, `--bubble-hover`, `--bubble-ink`; menu states `--menu-hover`,
+`--menu-active`; glass roles `--float`, `--chrome`, `--nav`; state roles `--focus`, `--danger`,
+`--danger-soft`, `--mark`, `--selection`; and the media and scrim roles. `--danger` is the only semantic
+state color, reserved for the failed-send mark, the mention badge and destructive actions. A role names
+its use, never a shade: there is no `--bg-1` and no paired `--surface-text`; components reference these
+roles directly. The values are the backup palette and a refactor never rewrites them through an alias. Do
+not add a near-paper role; the account card is the surface paper and the account menu is the float paper.
 
-Surfaces: the page uses `--page`; the topbar and navigation share the same translucent `--chrome`/`--nav`
-paper; the dialog uses `--bg-modal`; menus and pickers use `--bg-menu`/`--bg-popup`; the account card,
-media frame, timestamp chip and action/close controls have their own paper. Each paper carries its own
-text pair, so hover and active states keep an ink that belongs to that paper instead of a global gray.
-Section labels are bold. Dialogs have a title and a close control; floating surfaces have no header. The
-dialog is 24rem wide, settings 46rem, the SAS 22rem, the floating surface 14rem, the send menu 11rem, and
-the accessible name is the surface title. Context menus fit their content within that cap and use SVG
-icons for their actions.
+Surfaces: the page uses `--page`; the topbar uses `--chrome` and the navigation uses `--nav`; dialogs,
+pickers, the account menu and context menus use the single `--float` glass; the account card, media frame
+and controls use the `--surface` family. Text comes from the ink scale, bubble text from `--bubble-ink`,
+and text over media from `--media-ink`. A surface does not declare its own text pair. Hover and active move
+through the surface or menu role steps. Section labels are bold. Dialogs have a title and a close control;
+floating surfaces have no header. The dialog is 24rem wide, settings 46rem, the SAS 22rem, the floating
+surface 14rem, the send menu 11rem, and the accessible name is the surface title. Context menus fit their
+content within that cap and use SVG icons for their actions.
 
-The topbar and navigation use the same 88% glass and 8px blur; dialogs use a 94% paper plus the same blur;
-popovers and context menus use the menu paper; the dialog backdrop uses the scrim plus a 6px blur. No
-shadow, no gradient, no second glass style, no visible border.
+The topbar uses the 82% chrome, the navigation the 94% navigation paper, and dialogs and popovers the 88%
+float paper; all share the same 8px blur. The dialog backdrop uses the scrim plus a 6px blur. No shadow, no
+gradient, no second glass style, no visible border.
+
+Rules for future CSS:
+
+1. A token names a role, not a level. Numbered color tokens and component text aliases are forbidden; a
+   component uses `--ink`, `--surface`, `--bubble` and their documented states directly.
+2. Palette values are fixed. Changing one is a user decision, never a side effect of a refactor; the CSS
+   test enforces semantic names and token-only colors.
+3. Literal colors live only in the token layer. Component rules use roles; `color-mix` may combine roles,
+   never a literal.
+4. Hover and active reuse existing role steps. A new state color needs a new named role and a check.
+5. One stylesheet, one layer order: tokens, reset, base, layout, components, surfaces, motion. Local custom
+   properties are for geometry or motion, never for a color.
+6. No width media query. Layout is fluid with `clamp()`, `minmax()`, `auto-fit` and container queries;
+   every control gets `appearance: none` before styling and a visible focus outline.
+7. Every new rule must pass `test/style.test.ts`: all declared properties used, no numbered color tokens,
+   no `-text` aliases, no literal `color` or `background` outside tokens, no vendor prefixes or viewport
+   width queries.
 
 Fluid layout: navigation `clamp(15rem, 22vw, 19rem)`, chat full content width, bubbles and media `36rem`,
 fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell and `data-view` on the

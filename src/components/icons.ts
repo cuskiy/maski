@@ -44,6 +44,28 @@ export const icons = {
   emoji: icon(
     `<circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" x2="9.01" y1="9" y2="9"></line><line x1="15" x2="15.01" y1="9" y2="9"></line>`,
   ),
+  clock: icon(`<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>`),
+  paw: icon(
+    `<circle cx="11" cy="4" r="2"></circle><circle cx="18" cy="8" r="2"></circle><circle cx="20" cy="16" r="2"></circle><path d="M9 10a5 5 0 0 1 5 5v3.5a3.5 3.5 0 0 1-6.84 1.045Q6.52 17.48 4.46 16.84A3.5 3.5 0 0 1 5.5 10Z"></path>`,
+  ),
+  food: icon(
+    `<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>`,
+  ),
+  ball: icon(
+    `<circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path>`,
+  ),
+  plane: icon(
+    `<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.8-.2-1.6.1-2.1.7l-1.2 1.4c-.4.5-.2 1.2.4 1.5L8 12l-2 3H3l-1 2 5 1 1 5 2-1v-3l3-2 2.4 6.1c.3.6 1 .8 1.5.4l1.4-1.2c.6-.5.9-1.3.7-2.1Z"></path>`,
+  ),
+  bulb: icon(
+    `<path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"></path>`,
+  ),
+  heart: icon(
+    `<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>`,
+  ),
+  flag: icon(
+    `<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" x2="4" y1="22" y2="15"></line>`,
+  ),
   send: icon(
     `<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path>`,
   ),
@@ -53,6 +75,7 @@ export const icons = {
   ),
   chevron: icon(`<path d="m9 18 6-6-6-6"></path>`),
   older: icon(`<path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path>`),
+  play: icon(`<polygon points="6 3 20 12 6 21 6 3"></polygon>`),
   close: icon(`<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>`),
   check: icon(`<path d="M20 6 9 17l-5-5"></path>`),
   star: icon(

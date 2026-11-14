@@ -39,14 +39,22 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
   const ready = state.phase === "ready" && room !== null;
   const positions = messagePositions(state.messages);
-  return html`<section class="timeline-region" data-region="${REGION.timeline}" aria-label="${t(c, "chat.title")}">
+  return html`<section class="timeline-region" data-region="${REGION.timeline}" data-read-receipt="${room?.readReceipt ?? ""}" aria-label="${t(c, "chat.title")}">
     <div class="timeline-wrap">
       <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state">
         ${stateNote(state, c)}
       </div>
       ${
         ready
-          ? html`<button class="load-older" type="button" ${state.hasOlder ? html`` : html` hidden`}>${icons.older}<span>${t(c, "chat.loadOlder")}</span></button>`
+          ? html`<button
+              class="load-older${state.olderLoading ? " is-loading" : ""}"
+              type="button"
+              aria-busy="${state.olderLoading ? "true" : "false"}"
+              ${state.olderLoading ? html` disabled` : html``}
+              ${state.hasOlder || state.olderLoading ? html`` : html` hidden`}
+            >
+              ${icons.older}<span>${t(c, state.olderLoading ? "chat.loadingOlder" : "chat.loadOlder")}</span>
+            </button>`
           : html``
       }
       <ol class="timeline" role="list" aria-live="polite" aria-relevant="additions text">
@@ -203,6 +211,27 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
       </div>
     </figure>`;
   }
+  if (media.kind === "video") {
+    const title = message.body === "" ? media.name : message.body;
+    return html`<figure class="message-media is-video">
+      <div class="media-frame">
+        <button
+          class="video-preview media-open"
+          type="button"
+          data-media-open="${media.name}"
+          data-media-kind="video"
+          ${media.url === null ? html`` : html` data-media-url="${media.url}"`}
+          commandfor="${SURFACE.viewer}"
+          command="show-modal"
+          aria-label="${label}: ${title}"
+        >
+          <span class="video-play" aria-hidden="true">${icons.play}</span>
+          <span class="video-title">${title}</span>
+        </button>
+        <div class="media-footer">${meta}</div>
+      </div>
+    </figure>`;
+  }
   if (media.kind === "file" || media.kind === "audio") {
     const details = html`${MEDIA_ICONS[media.kind]}
       <span class="attachment-text">
@@ -233,24 +262,24 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           type="button"
           data-media-open="${media.name}"
           data-media-kind="${media.kind}"
+          ${media.url === null ? html`` : html` data-media-url="${media.url}"`}
           commandfor="${SURFACE.viewer}"
           command="show-modal"
           aria-label="${label}: ${media.name}"
         >
           ${MEDIA_ICONS[media.kind]}${caption}
         </button>`
-      : media.kind === "video"
-        ? html`<video class="media-element" controls preload="metadata" src="${media.url}" aria-label="${media.name}"></video>`
-        : html`<button
-            class="media-open"
-            type="button"
-            data-media-open="${media.name}"
-            data-media-kind="${media.kind}"
-            commandfor="${SURFACE.viewer}"
-            command="show-modal"
-          >
-            <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
-          </button>`;
+      : html`<button
+          class="media-open"
+          type="button"
+          data-media-open="${media.name}"
+          data-media-kind="${media.kind}"
+          data-media-url="${media.url}"
+          commandfor="${SURFACE.viewer}"
+          command="show-modal"
+        >
+          <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
+        </button>`;
   return html`<figure class="message-media is-${media.kind}">
     <div class="media-frame">
       ${content}
