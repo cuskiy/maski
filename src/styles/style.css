@@ -1360,7 +1360,8 @@
 
   .tip {
     position: absolute;
-    inset-block-end: calc(100% + 0.25rem);
+    z-index: 2;
+    inset-block-start: calc(100% + 0.25rem);
     inset-inline-end: 0;
     display: none;
   }
