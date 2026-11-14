@@ -150,7 +150,7 @@ function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat,
     <time datetime="${new Date(message.ts).toISOString()}">${time.format(message.ts)}</time>
     ${edited}
   </span>`;
-  return html`<span class="bubble-meta">${status}${stamp}</span>`;
+  return html`<span class="bubble-meta">${stamp}${status}</span>`;
 }
 
 function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
