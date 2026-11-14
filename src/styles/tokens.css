@@ -73,6 +73,7 @@
     --field-ink: var(--ink);
     --field-placeholder: var(--ink-3);
     --field-focus: var(--ink-4);
+    --dialog-blur: 4px;
     --composer-ink: var(--ink);
     --composer-muted: var(--ink-2);
     --composer-hover-bg: var(--surface-hover);

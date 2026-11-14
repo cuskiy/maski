@@ -271,6 +271,7 @@ Raising one is a change to this file with the reason.
 - 所有图标换成一套新的、统一的图标；现在的图标不好看。
 - 所有弹窗和右侧顶栏都用背景高斯模糊；具体强度由实现规划。
 - 组件的背景与文字颜色独立：导航、账号卡、顶栏、气泡、菜单、对话框、输入框和卡片各自声明纸与文字角色；卡片不必共用同一个 ink，文字颜色根据它所在的背景推导。
+- 设置开关关闭时圆点在左，开启时圆点在右；开启轨道使用纸面墨色。弹窗卡片的模糊弱于悬浮菜单和顶栏。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
 - 聊天区域的头像要完整圆形，并与昵称中心对齐；其他区域的圆形头像保持现状。
@@ -435,9 +436,10 @@ it; the overlays never steal its caret. The bar fills the content column.
   centered on the touch point), and then revealed without an entrance transition; a non-empty selection
   keeps the native menu, and a touch long-press suppresses the contextmenu only when no text is selected.
 
-All overlays and the topbar/navigation share one restrained backdrop blur and translucent surface; no
-second glass style. The entrance of either uses `@starting-style` and `transition-behavior:
-allow-discrete`, never a skeleton and never a fade on the initial page load.
+The dialogs and floating menus share one translucent glass style; dialogs use the weaker
+`--dialog-blur`, while the topbar, navigation and menus use `--float-blur`. There is no second glass
+style. The entrance of either uses `@starting-style` and `transition-behavior: allow-discrete`, never a
+skeleton and never a fade on the initial page load.
 
 ## 3.6 First paint
 
@@ -510,9 +512,9 @@ badge and destructive actions.
 Surfaces: the page uses `--page`; the topbar uses `--chrome`; the navigation uses `--nav`; the account card
 uses `--account-bg`; raised cards use `--card-bg`; bubbles use `--bubble-bg`; floating menus use
 `--menu-bg`; dialogs use `--dialog-bg`; fields use `--field-bg`. Text, muted text and hover/active states
-come from that paper's own roles. The topbar and navigation share the 8px glass blur; dialogs and popovers
-share the same blur without a second glass style. The dialog backdrop uses the scrim plus a 6px blur. No
-shadow, no gradient, no visible border.
+come from that paper's own roles. The topbar, navigation and floating menus share the 8px glass blur;
+dialogs use a weaker `--dialog-blur` of 4px so the card stays readable. The dialog backdrop uses the scrim
+plus a 6px blur. No shadow, no gradient, no visible border.
 
 Dialogs have a title and a close control; floating surfaces have no header. The dialog is 24rem wide,
 settings 46rem, the SAS 22rem, the floating surface 14rem, the send menu 11rem, and the accessible name is
@@ -620,6 +622,7 @@ transitions, and Temporal, because at least one of the three engines does not sh
 | active and hover at adjacent ink steps are indistinguishable | active is a deeper step; nested space rows use a middle step |
 | a static review frame showed unread badges and media chrome boot removes | data-free shell, one final injection and C12 |
 | a grouped message avatar moved to the first row and lost its corner chain | avatar on the group end; inner corners use `--bubble-inner`; C13 |
+| a switch knob positioned from the inline end ran outside its track | start at the track's leading inset and translate one knob width; the style test locks it |
 
 ## 3.12 Phases
 

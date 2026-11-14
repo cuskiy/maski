@@ -157,3 +157,11 @@ void test("the scriptless shell lays out both frames", () => {
   assert.match(css, /\.app\[data-view="shell"\] > \.nav\s*\{/u);
   assert.match(css, /\.app\[data-view="shell"\] > \.content\s*\{/u);
 });
+
+void test("the switch knob starts left and the dialog has a weaker blur", () => {
+  assert.match(
+    css,
+    /\.setting-row:has\(> input\[type="checkbox"\]\)::after\s*\{[^}]*inset-inline-end:\s*calc\(var\(--space-2\) \+ 2rem - 0\.875rem - 0\.125rem\);[^}]*\}/u,
+  );
+  assert.match(css, /\.surface\.modal\s*\{[^}]*backdrop-filter:\s*blur\(var\(--dialog-blur\)\)/u);
+});

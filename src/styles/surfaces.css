@@ -19,7 +19,7 @@
     border: 0;
     border-radius: var(--radius-lg);
     background: var(--dialog-bg);
-    backdrop-filter: blur(var(--float-blur));
+    backdrop-filter: blur(var(--dialog-blur));
   }
 
   .surface.modal[open] {
@@ -511,7 +511,7 @@
   }
 
   .setting-row:has(> input[type="checkbox"])::after {
-    inset-inline-end: calc(var(--space-2) + 0.125rem);
+    inset-inline-end: calc(var(--space-2) + 2rem - 0.875rem - 0.125rem);
     inline-size: 0.875rem;
     block-size: 0.875rem;
     border-radius: 50%;
