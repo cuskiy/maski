@@ -1639,7 +1639,6 @@
     gap: 6px;
     padding: var(--space-2) var(--timeline-pad) var(--space-3);
     background: transparent;
-    backdrop-filter: blur(6px);
   }
 
   .tray {
