@@ -1,39 +1,118 @@
+import bcd from "@mdn/browser-compat-data" with { type: "json" };
 import data from "web-features/data.json" with { type: "json" };
 
 interface Feature {
-  readonly name: string;
+  readonly name?: string;
   readonly status: {
-    readonly baseline: "high" | "low" | false;
+    readonly baseline: string | false;
     readonly baseline_low_date?: string;
     readonly support?: Record<string, string>;
   };
 }
 
-const features = (data as unknown as { features: Record<string, Feature> }).features;
+function isFeature(value: unknown): value is Feature {
+  if (typeof value !== "object" || value === null || !("status" in value)) return false;
+  const status = value.status;
+  return typeof status === "object" && status !== null && "baseline" in status;
+}
+
+const features: Record<string, Feature> = {};
+for (const [id, value] of Object.entries(data.features)) {
+  if (isFeature(value)) features[id] = value;
+}
 const args = process.argv.slice(2);
+const BCD_ALIASES: Record<string, string> = {
+  "crypto.randomUUID": "api.Crypto.randomUUID",
+};
+
+const BCD_COMPAT = "__compat";
+
+function bcdFeature(query: string): Feature | null {
+  const path = BCD_ALIASES[query];
+  if (path === undefined) return null;
+  let node: unknown = bcd;
+  for (const part of path.split(".")) {
+    if (typeof node !== "object" || node === null || !(part in node)) return null;
+    node = (node as Record<string, unknown>)[part];
+  }
+  if (typeof node !== "object" || node === null || !(BCD_COMPAT in node)) return null;
+  const compat = (node as Record<string, unknown>)[BCD_COMPAT];
+  if (typeof compat !== "object" || compat === null || !("support" in compat)) return null;
+  const support = (compat as { readonly support?: unknown }).support;
+  if (typeof support !== "object" || support === null) return null;
+  const versions: Record<string, string> = {};
+  for (const engine of ["chrome", "firefox", "safari"]) {
+    const rawEntry = (support as Record<string, unknown>)[engine];
+    const entries = Array.isArray(rawEntry) ? rawEntry : [rawEntry];
+    const first = entries[0] as { readonly version_added?: unknown } | undefined;
+    if (typeof first?.version_added === "string") versions[engine] = first.version_added;
+    else if (first?.version_added === true) versions[engine] = "0";
+  }
+  return { name: query, status: { baseline: false, support: versions } };
+}
 
 function find(query: string): Array<[string, Feature]> {
   const exact = features[query];
   if (exact) return [[query, exact]];
-  return Object.entries(features).filter(([id, feature]) => id.includes(query) || feature.name.toLowerCase().includes(query.toLowerCase()));
+  const fallback = bcdFeature(query);
+  if (fallback !== null) return [[query, fallback]];
+  return Object.entries(features).filter(([id, feature]) => {
+    const name = feature.name ?? id;
+    return id.includes(query) || name.toLowerCase().includes(query.toLowerCase());
+  });
 }
 
 function line(id: string, feature: Feature): string {
   const support = feature.status.support ?? {};
   const engines = ["chrome", "firefox", "safari"].map((engine) => `${engine} ${support[engine] ?? "-"}`);
-  const baseline = feature.status.baseline === false ? "not baseline" : `baseline ${feature.status.baseline_low_date ?? "?"}`;
+  const baseline =
+    feature.status.baseline === false ? "not baseline" : `baseline ${feature.status.baseline_low_date ?? "?"}`;
   return `${id.padEnd(34)} ${baseline.padEnd(24)} ${engines.join(" · ")}`;
 }
 
 if (args.length === 0) {
-  process.stdout.write("usage: npm run features -- <id|substring> [--require 2026]\n");
+  process.stdout.write(
+    "usage: npm run features -- <id|substring> [--require YEAR] [--floor chrome=156,firefox=157,safari=27]\n",
+  );
   process.exit(1);
 }
 
 const requireIndex = args.indexOf("--require");
 const requireYear = requireIndex >= 0 ? (args[requireIndex + 1] ?? "") : null;
-const queries = args.filter((_argument, index) => index !== requireIndex && index !== requireIndex + 1);
+const floorIndex = args.indexOf("--floor");
+const floorArgument = floorIndex >= 0 ? (args[floorIndex + 1] ?? "") : null;
+const floor: Record<string, string> = {};
+for (const part of floorArgument?.split(",") ?? []) {
+  const [engine, version] = part.split("=");
+  if (engine !== undefined && version !== undefined && engine !== "" && version !== "") floor[engine] = version;
+}
+const optionIndexes = new Set<number>();
+if (requireIndex >= 0) {
+  optionIndexes.add(requireIndex);
+  optionIndexes.add(requireIndex + 1);
+}
+if (floorIndex >= 0) {
+  optionIndexes.add(floorIndex);
+  optionIndexes.add(floorIndex + 1);
+}
+const queries = args.filter((_argument, index) => !optionIndexes.has(index));
 let missing = 0;
+
+function versionParts(value: string): number[] {
+  const numeric = value.replace(/^[≤<≥>]=?/u, "").trim();
+  return numeric.split(".").map(Number);
+}
+
+function shippedBy(support: string, minimum: string): boolean {
+  const current = versionParts(support);
+  const target = versionParts(minimum);
+  for (let index = 0; index < Math.max(current.length, target.length); index += 1) {
+    const left = current[index] ?? 0;
+    const right = target[index] ?? 0;
+    if (left !== right) return left < right;
+  }
+  return true;
+}
 
 for (const query of queries) {
   const hits = find(query);
@@ -46,7 +125,13 @@ for (const query of queries) {
     process.stdout.write(`${line(id, feature)}\n`);
     const low = feature.status.baseline_low_date ?? "";
     if (requireYear !== null && (feature.status.baseline === false || !low.startsWith(requireYear))) missing += 1;
+    for (const [engine, minimum] of Object.entries(floor)) {
+      const support = feature.status.support?.[engine];
+      if (support === undefined || !shippedBy(support, minimum)) {
+        process.stdout.write(`${"".padEnd(34)} ${engine} ${support ?? "missing"} is not in ${minimum}\n`);
+        missing += 1;
+      }
+    }
   }
 }
-
-if (missing > 0) process.exit(1);
+process.exit(missing > 0 ? 1 : 0);

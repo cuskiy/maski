@@ -1,91 +1,91 @@
-import { createServer } from "node:http";
+import { createServer, type ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { config } from "../src/config.ts";
 
-const TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
+const root = fileURLToPath(new URL("../dist", import.meta.url));
+const types: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
-  ".wasm": "application/wasm",
+  ".html": "text/html; charset=utf-8",
   ".svg": "image/svg+xml",
-  ".json": "application/json",
-  ".txt": "text/plain; charset=utf-8",
-  ".webmanifest": "application/manifest+json",
-  ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".json": "application/json; charset=utf-8",
 };
 
 export interface ServeOptions {
   readonly reload?: boolean;
 }
 
-export function serve(root: string, port: number, options: ServeOptions = {}): Promise<{ close: () => void }> {
-  let version = 0;
-  const clients = new Set<{ write: (chunk: string) => void }>();
+export interface Served {
+  readonly notify: () => void;
+}
+
+export function serve(options: ServeOptions = {}): Served {
+  const clients = new Set<ServerResponse>();
+  const notify = (): void => {
+    for (const client of clients) client.write("data: reload\n\n");
+  };
 
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? "/", "http://localhost");
-
-    if (url.pathname === "/__reload") {
-      response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store" });
-      response.write(": connected\n\n");
-      clients.add(response);
-      request.on("close", () => clients.delete(response));
-      return;
-    }
-
-    if (url.pathname === "/__reload.js" && options.reload === true) {
-      response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
-      response.end('new EventSource("/__reload").onmessage = () => location.reload();');
-      return;
-    }
-
-    if (url.pathname === "/__version") {
-      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-      response.end(JSON.stringify({ version }));
-      return;
-    }
-
-    let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/u, "");
-    if (path.endsWith("/")) path += "index.html";
+    let pathname: string;
     try {
-      let body = await readFile(join(root, path));
-      if (options.reload === true && path.endsWith(".html")) {
-        // Same-origin, so the page CSP allows it; a built site never sees it.
-        body = Buffer.from(body.toString("utf8").replace("</body>", `<script src="/__reload.js"></script></body>`));
+      pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
+    } catch {
+      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Bad Request");
+      return;
+    }
+
+    if (options.reload === true && pathname === "/__dev-reload.js") {
+      response.writeHead(200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      response.end('const source = new EventSource("/__dev-reload"); source.onmessage = () => location.reload();\n');
+      return;
+    }
+
+    if (options.reload === true && pathname === "/__dev-reload") {
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      response.write("retry: 1000\n\n");
+      clients.add(response);
+      request.on("close", () => {
+        clients.delete(response);
+      });
+      return;
+    }
+
+    let file = join(root, normalize(pathname).replace(/^(\.\.(\/|\\|$))+/u, ""));
+    try {
+      if ((await stat(file)).isDirectory()) file = join(file, "index.html");
+      let body = await readFile(file);
+      if (options.reload === true && extname(file) === ".html") {
+        body = Buffer.from(body.toString("utf8").replace("</body>", '<script src="/__dev-reload.js"></script></body>'));
       }
-      response.writeHead(200, { "content-type": TYPES[extname(path)] ?? "application/octet-stream", "cache-control": "no-store" });
+      const asset = file.startsWith(join(root, "assets") + sep);
+      response.writeHead(200, {
+        "content-type": types[extname(file)] ?? "application/octet-stream",
+        "cache-control": asset ? "public, max-age=31536000, immutable" : "no-store",
+      });
       response.end(body);
     } catch {
-      const fallback = await readFile(join(root, "404.html")).catch(() => null);
-      const body = fallback ?? Buffer.from("not found");
-      response.writeHead(404, { "content-type": fallback === null ? "text/plain" : "text/html; charset=utf-8" });
-      response.end(body);
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Not found");
     }
   });
 
-  return new Promise((resolve) => {
-    server.listen(port, () => {
-      const timer = options.reload === true ? setInterval(async () => {
-        const stamp = await stat(join(root, "index.html")).then((info) => info.mtimeMs).catch(() => 0);
-        if (stamp === version) return;
-        version = stamp;
-        for (const client of clients) client.write(`data: ${String(version)}\n\n`);
-      }, 400) : null;
-      resolve({
-        close: () => {
-          if (timer !== null) clearInterval(timer);
-          server.close();
-        },
-      });
-    });
+  server.listen(Number(process.env["PORT"] ?? "5172"), process.env["HOST"] ?? "127.0.0.1", () => {
+    process.stdout.write(
+      `maski static → http://${process.env["HOST"] ?? "127.0.0.1"}:${process.env["PORT"] ?? "5172"}/\n`,
+    );
   });
+
+  return { notify };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const root = fileURLToPath(new URL("../dist", import.meta.url));
-  const port = Number(process.env["PORT"] ?? config.serve.port);
-  await serve(root, port);
-  process.stdout.write(`serving dist on http://${config.serve.host}:${String(port)}/\n`);
-}
+if (import.meta.main) serve();

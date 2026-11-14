@@ -1,36 +1,51 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { minify } from "html-minifier-terser";
-import { en } from "../src/catalogs/en.ts";
-import { zhCN } from "../src/catalogs/zh-CN.ts";
 import { locales } from "../src/catalogs/index.ts";
 import { base } from "../src/layouts/base.ts";
 import { chatView } from "../src/pages/chat.ts";
 import { keyView } from "../src/pages/key.ts";
 import { loginView } from "../src/pages/login.ts";
-import { oauthView } from "../src/pages/oauth.ts";
 import { registerView } from "../src/pages/register.ts";
 import { routerView } from "../src/pages/router.ts";
 import { serverView } from "../src/pages/server.ts";
-import { REGION, SURFACE } from "../src/pages/regions.ts";
+import { REGION, SURFACE } from "../src/core/regions.ts";
+import { renderPages } from "../scripts/pages.ts";
 import type { PageContext } from "../src/pages/kit.ts";
 
 const assets = {
   stylesheet: "/assets/style-x.css",
-  script: "/assets/client-x.js",
-  worker: "/assets/worker-x.js",
-  wasm: "/assets/crypto-x.wasm",
   icon: "/assets/icon-x.svg",
+  guard: "/assets/guard-x.js",
+  prepaint: "/assets/prepaint-x.js",
+  client: "/assets/client-x.js",
 };
 
-const views = { chat: chatView, router: routerView, server: serverView, login: loginView, oauth: oauthView, register: registerView, key: keyView };
+const views = {
+  router: routerView,
+  chat: chatView,
+  server: serverView,
+  login: loginView,
+  register: registerView,
+  key: keyView,
+};
 
 function pages(): Array<{ name: string; html: string }> {
   return locales.flatMap((locale) =>
     Object.entries(views).map(([name, view]) => {
-      const context: PageContext = { locale, assets, path: `/${name}/`, localePath: "/", languages: [], alternates: [] };
+      const context: PageContext = { locale, assets, path: `/${name}/`, localePath: "/", alternates: [] };
       const page = view(context);
-      const document = base({ c: locale.catalog, page: name, lang: locale.id, title: page.title, description: "x", canonical: "/", alternates: [], assets, body: page.body });
+      const document = base({
+        c: locale.catalog,
+        page: name,
+        lang: locale.id,
+        title: page.title,
+        description: "x",
+        canonical: "/",
+        alternates: [],
+        assets,
+        body: page.body,
+      });
       return { name: `${locale.id}/${name}`, html: document.value };
     }),
   );
@@ -43,20 +58,48 @@ for (const page of pages()) {
     assert.doesNotMatch(page.html, /<style[\s>]/u);
     assert.doesNotMatch(page.html, /<script(?![^>]*\ssrc=)[^>]*>/u);
     assert.doesNotMatch(page.html, /\sstyle="/u);
+    assert.doesNotMatch(page.html, /\son[a-z]+=/u);
+    assert.doesNotMatch(page.html, /javascript:/u);
     assert.match(page.html, /<noscript>/u);
   });
 }
 
-void test("the chat page carries every region and surface", () => {
+void test("chat carries every region and surface", () => {
   const chat = pages().find((page) => page.name === "en/chat")?.html ?? "";
-  for (const id of Object.values(REGION)) assert.ok(chat.includes(id), id);
+  for (const id of Object.values(REGION)) assert.ok(chat.includes(`data-region="${id}"`), id);
   for (const id of Object.values(SURFACE)) assert.ok(chat.includes(`id="${id}"`), id);
 });
 
-void test("copy comes from the catalog, not the component", () => {
-  const zh = pages().find((page) => page.name === "zh-CN/chat")?.html ?? "";
-  assert.ok(zh.includes(zhCN["composer.placeholder"]));
-  assert.ok(!zh.includes(en["composer.placeholder"]));
+void test("chat context menus are manual popovers", () => {
+  const chat = pages().find((page) => page.name === "en/chat")?.html ?? "";
+  for (const id of [SURFACE.roomMenu, SURFACE.messageMenu, SURFACE.sendMenu]) {
+    const section = new RegExp(`<section[^>]*id="${id}"[^>]*>`, "u").exec(chat)?.[0] ?? "";
+    assert.match(section, /popover="manual"/u, id);
+  }
+});
+
+void test("generated locale pages carry their real addresses", () => {
+  const emitted = renderPages(assets);
+  const register = emitted.find((page) => page.file === "zh-CN/register/index.html");
+  assert.ok(register !== undefined);
+  assert.match(register.content, /<link rel="canonical" href="\/zh-CN\/register\/"/u);
+  assert.match(register.content, /<link rel="alternate" hreflang="en" href="\/en\/register\/"/u);
+});
+
+void test("surfaces have a close control and an accessible title", () => {
+  for (const page of pages()) {
+    if (page.html.includes('class="surface modal')) {
+      assert.match(page.html, /class="surface-head"/u, page.name);
+      assert.match(page.html, /class="surface-close"/u, page.name);
+      assert.match(page.html, /class="surface modal[^"]*"[^>]*aria-labelledby="/u, page.name);
+    }
+  }
+});
+
+void test("chat rows have no ellipsis menu trigger", () => {
+  const chat = pages().find((page) => page.name === "en/chat")?.html ?? "";
+  assert.doesNotMatch(chat, /class="(?:message-more|room-more)"/u);
+  assert.match(chat, /aria-haspopup="menu"/u);
 });
 
 for (const page of pages()) {

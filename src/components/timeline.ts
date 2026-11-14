@@ -1,13 +1,262 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
-import { html, type Html } from "../lib/html.ts";
-import { REGION } from "../pages/regions.ts";
-import { icons } from "./surface.ts";
+import { html, raw, type Html } from "../lib/html.ts";
+import type { ChatState, Media, MessageRow } from "../core/types.ts";
+import { messagePosition } from "../core/messageGroups.ts";
+import { REGION, SURFACE } from "../core/regions.ts";
+import { icons } from "./icons.ts";
 
-export function timeline(c: Catalog): Html {
-  return html`<div class="timeline-wrap" data-region="${REGION.timeline}">
-  <button class="load-older" type="button" hidden>${icons.older}<span>${t(c, "chat.loadOlder")}</span></button>
-  <noscript><p class="note">${t(c, "noscript.chat")}</p></noscript>
-  <ol class="timeline" aria-label="${t(c, "chat.title")}"></ol>
-</div>`;
+const MEDIA_LABELS = {
+  image: "chat.media.image",
+  video: "chat.media.video",
+  file: "chat.media.file",
+  audio: "chat.media.audio",
+  sticker: "chat.media.sticker",
+} as const;
+
+const MEDIA_ICONS: Readonly<Record<Media["kind"], Html>> = {
+  image: icons.image,
+  video: icons.video,
+  file: icons.file,
+  audio: icons.audio,
+  sticker: icons.sticker,
+};
+
+const STATUS_LABELS = {
+  queued: "message.queued",
+  sending: "message.sending",
+  failed: "message.failed",
+} as const;
+
+const UNREADABLE_KEYS = {
+  "missing-key": "chat.undecryptable.missingKey",
+  corrupt: "chat.undecryptable.corrupt",
+} as const;
+
+export function timeline(state: ChatState, c: Catalog, locale: string): Html {
+  const time = new Intl.DateTimeFormat(locale, { timeStyle: "short" });
+  const day = new Intl.DateTimeFormat(locale, { dateStyle: "full" });
+  const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
+  const ready = state.phase === "ready" && room !== null;
+  return html`<section class="timeline-region" data-region="${REGION.timeline}" aria-label="${t(c, "chat.title")}">
+    <div class="timeline-wrap">
+      <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state">
+        ${stateNote(state, c)}
+      </div>
+      ${
+        ready
+          ? html`<button class="load-older" type="button" ${state.hasOlder ? html`` : html` hidden`}>${icons.older}<span>${t(c, "chat.loadOlder")}</span></button>`
+          : html``
+      }
+      <ol class="timeline" role="log" aria-live="polite" aria-relevant="additions text">
+        ${ready ? state.messages.map((message, index) => messageRow(state, c, message, index, time, day)) : html``}
+      </ol>
+    </div>
+    ${ready ? html`<button class="jump-newest" type="button" hidden>${t(c, "chat.jump")}</button>` : html``}
+  </section>`;
+}
+
+function stateNote(state: ChatState, c: Catalog): Html {
+  if (state.phase === "signedOut") return html`<p class="note">${t(c, "chat.signedOut")}</p>`;
+  if (state.phase === "locked") return html`<p class="note">${t(c, "chat.locked")}</p>`;
+  return html``;
+}
+
+function messageRow(
+  state: ChatState,
+  c: Catalog,
+  message: MessageRow,
+  index: number,
+  time: Intl.DateTimeFormat,
+  day: Intl.DateTimeFormat,
+): Html {
+  const { dayStart, groupStart, groupEnd, showSender } = messagePosition(state.messages, index);
+  const system = message.system === true;
+  const sender = showSender
+    ? html`<h3 class="message-sender" id="${message.id}-sender">${message.senderName}</h3>`
+    : html``;
+  const avatar = groupEnd
+    ? html`<button
+        class="message-avatar"
+        type="button"
+        popovertarget="${SURFACE.profile}"
+        data-profile="${message.senderName}"
+        data-profile-id="${message.sender}"
+        aria-label="${t(c, "surface.profile")}: ${message.senderName}"
+      >
+        ${
+          message.senderAvatar === null
+            ? message.senderName.slice(0, 1)
+            : html`<img src="${message.senderAvatar}" alt="" />`
+        }
+      </button>`
+    : html`<span class="message-avatar" aria-hidden="true"></span>`;
+  const reply =
+    message.reply === null
+      ? html``
+      : html`<blockquote class="bubble-reply">
+          <strong>${message.reply.senderName}</strong><span>${message.reply.body}</span>
+        </blockquote>`;
+  const meta = messageMeta(message, c, time);
+  const pending = message.status !== "sent";
+  const failure = `${t(c, "message.failed")}${message.error === null ? "" : `: ${message.error}`}`;
+  const status = pending
+    ? html`<span class="message-status" data-status="${message.status}">
+        ${
+          message.status === "failed"
+            ? html`<span class="message-failed" role="img" aria-label="${failure}" title="${failure}">!</span>`
+            : html`<span
+                class="message-spinner"
+                role="status"
+                aria-label="${t(c, STATUS_LABELS[message.status === "queued" ? "queued" : "sending"])}"
+              ></span>`
+        }
+      </span>`
+    : html``;
+  const content =
+    message.encryption.state === "undecryptable"
+      ? html`<div class="bubble is-unreadable">${sender}${reply}<p class="message-unreadable">
+          ${t(c, UNREADABLE_KEYS[message.encryption.reason])}
+        </p>${meta}</div>`
+      : message.media === null
+        ? html`<div class="bubble">${sender}${reply}${messageText(message)}${meta}</div>`
+        : html`<div class="message-media-wrap">${reply}${mediaView(message, c, meta)}</div>`;
+  return html`${dayStart ? html`<li class="row-day"><time datetime="${new Date(message.ts).toISOString()}">${day.format(message.ts)}</time></li>` : html``}
+    <li class="message${message.own ? " is-own" : ""}${groupStart ? " is-group-start" : ""}${groupEnd ? " is-group-end" : ""}${system ? " is-system" : ""}${message.encryption.state === "undecryptable" ? " is-unreadable" : ""}" data-id="${message.id}">
+      <article
+        class="message-inner"
+        ${showSender ? html`aria-labelledby="${message.id}-sender"` : html`aria-label="${message.senderName}"`}
+        aria-haspopup="menu"
+        aria-controls="${SURFACE.messageMenu}"
+        tabindex="0"
+      >
+        ${avatar}
+        <div class="message-body">
+          <div class="message-line">${status}${content}</div>
+          ${reactionsView(message, c)}
+        </div>
+      </article>
+    </li>`;
+}
+
+function messageText(message: MessageRow): Html {
+  // Fixture HTML is controlled; the client sanitizes incoming HTML before it reaches this field.
+  return html`<div class="message-text${message.html === null ? "" : " is-rich"}">${message.html === null ? message.body : raw(message.html)}</div>`;
+}
+
+function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat): Html {
+  const edited = message.edited ? html`<span>${t(c, "message.edited")}</span>` : html``;
+  const stamp = html`<span class="bubble-stamp">
+    <time datetime="${new Date(message.ts).toISOString()}">${time.format(message.ts)}</time>
+    ${edited}
+  </span>`;
+  return html`<span class="bubble-meta">${stamp}</span>`;
+}
+
+function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
+  const media = message.media;
+  if (media === null) return html``;
+  const label = t(c, MEDIA_LABELS[media.kind]);
+  const caption =
+    message.body === "" || message.body === media.name || media.kind === "sticker"
+      ? html``
+      : html`<figcaption class="media-caption">${message.body}</figcaption>`;
+  if (media.kind === "sticker" && media.url === null) {
+    return html`<figure class="message-media is-sticker">
+      <div class="media-frame">
+        <button
+          class="sticker media-open"
+          type="button"
+          data-media-open="${media.name}"
+          data-media-kind="sticker"
+          commandfor="${SURFACE.viewer}"
+          command="show-modal"
+          aria-label="${media.name}"
+        >
+          ${message.body}
+        </button>
+        ${meta}
+      </div>
+    </figure>`;
+  }
+  if (media.kind === "file" || media.kind === "audio") {
+    const details = html`${MEDIA_ICONS[media.kind]}
+      <span class="attachment-text">
+        <span class="attachment-name">${media.name}</span>
+        <span class="attachment-meta"
+          >${label}${media.size === null ? html`` : html`<span class="attachment-size">${formatBytes(media.size)}</span>`}</span
+        >
+      </span>`;
+    const content =
+      media.url === null
+        ? html`<button
+            class="attachment media-open"
+            type="button"
+            data-media-open="${media.name}"
+            data-media-kind="${media.kind}"
+            commandfor="${SURFACE.viewer}"
+            command="show-modal"
+          >
+            ${details}
+          </button>`
+        : html`<a class="attachment" href="${media.url}" download>${details}</a>`;
+    return html`<div class="media-frame">${content}${meta}</div>`;
+  }
+  const dimensions =
+    media.width === null || media.height === null
+      ? html``
+      : html`<span class="media-dimensions">${String(media.width)} × ${String(media.height)}</span>`;
+  const content =
+    media.url === null
+      ? html`<button
+          class="media-placeholder media-open"
+          type="button"
+          data-media-open="${media.name}"
+          data-media-kind="${media.kind}"
+          commandfor="${SURFACE.viewer}"
+          command="show-modal"
+          aria-label="${label}: ${media.name}"
+        >
+          ${MEDIA_ICONS[media.kind]}<span class="media-label">${label}</span>${dimensions}
+        </button>`
+      : media.kind === "video"
+        ? html`<video class="media-element" controls preload="metadata" src="${media.url}" aria-label="${media.name}"></video>`
+        : html`<button
+            class="media-open"
+            type="button"
+            data-media-open="${media.name}"
+            data-media-kind="${media.kind}"
+            commandfor="${SURFACE.viewer}"
+            command="show-modal"
+          >
+            <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
+          </button>`;
+  return html`<figure class="message-media is-${media.kind}">
+    <div class="media-frame">${content}${meta}</div>
+    ${caption}
+  </figure>`;
+}
+
+export function reactionsView(message: MessageRow, c: Catalog): Html {
+  if (message.reactions.length === 0) return html``;
+  return html`<ul class="reactions" aria-label="${t(c, "chat.reactions")}">
+    ${message.reactions.map(
+      (reaction) => html`<li>
+        <button
+          class="reaction${reaction.mine ? " is-mine" : ""}"
+          type="button"
+          data-reaction="${reaction.key}"
+          aria-pressed="${reaction.mine ? "true" : "false"}"
+        >
+          <span aria-hidden="true">${reaction.key}</span><span>${String(reaction.count)}</span>
+        </button>
+      </li>`,
+    )}
+  </ul>`;
+}
+
+function formatBytes(size: number): string {
+  if (size < 1000) return `${String(size)} B`;
+  if (size >= 1_000_000) return `${Math.round(size / 100_000) / 10} MB`;
+  return `${Math.round(size / 1000)} kB`;
 }

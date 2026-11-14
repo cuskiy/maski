@@ -1,11 +1,12 @@
 # AGENTS.md
 
-This file is the whole design of the project, rewritten from the lessons of its first life. It has
-three parts: **Rules**, the **User Core Requirements**, and the **Design**. Nothing here describes
-the current working tree; the tree is an attempt at this design, not its definition.
+This file is the whole design of the project. It records the rules, the user's core requirements, the
+engineering design and the current working tree. The tree is an attempt at this design, not its
+definition.
 
-Read in order. Part 2 is authority over Part 3. Part 1 is authority over both. A change that needs
-one of them contradicted is a discussion, not an edit.
+Read in order: Part 1 is authority over Part 2; Part 2 is authority over Part 3; Part 4 is operational
+only. A change that needs a contradiction between Parts 1–3 is a discussion, not an edit. Do not
+change Part 2 without the user's decision; the latest user instruction is the only source that can.
 
 ---
 
@@ -15,43 +16,42 @@ one of them contradicted is a discussion, not an edit.
 
 The reader's time and trust outrank every technical preference here.
 
-- No white flash in a dark room, no layout shift while content arrives, no click lost because a node
-  was replaced under the pointer, no error hidden in a console.
+- No white flash in a dark room. No layout shift while content arrives. No click lost because a node
+  was replaced under the pointer. No error hidden in a console.
 - Every wait is visible, and every visible wait can be cancelled. A control that appears must work.
 - An error says what happened and what to do; internal state is not the reader's business.
 - One extra step is a cost. One extra second is a cost. Slow is rude.
 
-Every rule below exists to make this principle enforceable. A rule without a check is a wish; this
-file says which checks enforce which promise.
+Every rule below exists to make this principle enforceable. A rule without a check is a wish; 1.8
+names the owner of each promise.
 
 ## 1.2 Precedence
 
 1. These rules.
-2. Part 2, the user's core requirements. They are the user's words, never edited here.
-3. Part 3, the design. It is the engineering record and the default answer.
+2. Part 2, the user's core requirements. They are the user's words; only the user changes them.
+3. Part 3, the engineering design. It is the default answer.
 4. The specification and the reference implementation, read from disk.
 5. `past/` and earlier attempts. They are read, never shipped.
 
 ## 1.3 The working loop
 
-A step is short and complete. It is one of:
+One step is short and complete:
 
-1. **Read.** The module, the section of this file that governs it, and — for anything
-   protocol-shaped — the specification on disk. Do not plan against code nobody read.
-2. **Plan.** Name the approach and the smaller alternative. A change that needs a decision the user
-   owns stops here and becomes a question.
-3. **Implement.** Leave the tree coherent after every file. One job per module; one implementation
-   per boundary.
-4. **Run it.** The real page in a browser, the protocol test for the worker, a unit test for a rule
-   that can be pure.
-5. **Verify at the rung the change claims.** A claim one rung above its evidence is a reporting
-   defect.
-6. **Record.** A defect goes to an open-defect section with symptom, known facts, ruled out, next
+1. **Read.** The module, the governing section of this file, and any protocol specification on disk.
+   Do not plan against code nobody read.
+2. **Plan.** Name the approach and the smaller alternative. A decision the user owns stops here and
+   becomes a question.
+3. **Implement.** Leave the tree coherent after every file. One job per module; one implementation per
+   boundary.
+4. **Run it.** The real page in a browser, the worker protocol from a browser, or a pure test for a
+   rule that can be pure.
+5. **Verify at the rung claimed.** A claim one rung above its evidence is a reporting defect.
+6. **Record.** A defect goes to the open-defect section with symptom, known facts, ruled out and next
    step. A decision goes to Part 2 or Part 3.
 7. **Commit and push** one coherent change, the reason in the body.
 
-Before a step is called done, the single check command passes: types, lint, tests, bundle, output
-audit, contracts. A budget is never raised to make it pass.
+Before a step is done, `npm run check` passes: types, Prettier, lint, tests, build, audit, contracts.
+A budget is never raised to make it pass.
 
 ### A bug report is its own loop
 
@@ -60,9 +60,9 @@ with the cause named. Two failed fixes on one symptom mean the boundary is wrong
 
 ### Changing the design
 
-The user's words live in Part 2 and are not edited. Engineering decisions live in Part 3 with their
-reason; a decision that replaces an older one rewrites that paragraph. Adding a rule adds its row to
-the contract table (1.8) and, when it can be checked, the check itself.
+Part 2 changes only when the user decides. Engineering decisions live in Part 3 with their reason; a
+decision that replaces an older one rewrites that paragraph, never adds a second description. A new
+rule adds its contract row and, when possible, its check.
 
 ### What a step leaves behind
 
@@ -71,7 +71,7 @@ the contract table (1.8) and, when it can be checked, the check itself.
 | fixes a defect | the reproduction that failed before and passes after, named in the commit |
 | adds behavior | a unit test for the rule, or a browser run whose assertion is the behavior |
 | adds or moves a rule | its contract row and the check |
-| changes a decision | the rewritten paragraph in Part 2 or Part 3, never a second description |
+| changes a decision | the rewritten paragraph, never a second description |
 | adds a dependency | the reason, and the removal of one nothing imports |
 | touches the protocol | the specification path it was checked against, quoted in the commit |
 
@@ -87,8 +87,8 @@ A claim names its rung:
 5. **Real server** — the whole flow against a homeserver on a real device.
 6. **Other engines** — Firefox and Safari. Until this rung runs, a browser claim says Chromium.
 
-The first paint has its own evidence: a screenshot at load, a screenshot after the stored data
-arrives, and the absence of a shift between them. "It looked fine" is not evidence.
+The first paint has its own evidence: a screenshot at load, a screenshot after stored data arrives,
+and the absence of a shift between them. "It looked fine" is not evidence.
 
 ## 1.5 Defects, open questions, and the record
 
@@ -109,8 +109,8 @@ second place.
   grows, the workaround does not.
 - No dead code, unused export, TODO, stub, placeholder, fake control, or copy for a feature that does
   not exist. A missing feature is absent.
-- A comment states what the code cannot: a protocol quirk, a browser behavior, a security boundary, an
-  invariant. One line, English, no decoration. Code, identifiers, commits and docs are English;
+- A comment states what the code cannot: a protocol quirk, a browser behavior, a security boundary,
+  an invariant. One line, English, no decoration. Code, identifiers, commits and docs are English;
   Part 2 is Chinese because it is the user's voice.
 - No vendor prefix, no polyfill, no engine-specific branch, no compatibility shim. One spelling per
   feature.
@@ -136,27 +136,30 @@ and the paragraph that owns it.
 
 | id | contract | enforced by |
 |---|---|---|
-| C1 | one catalog key set per language; every key read; nothing empty | catalog test and contracts |
-| C2 | every protocol command has a handler | contracts |
-| C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | contracts |
-| C4 | every page has a language, one `h1`, a scriptless note, and the chat page carries its regions | page tests and contracts |
+| C1 | one catalog key set per language; every key is read outside the catalogs; nothing empty | catalog test and contracts |
+| C2 | every protocol command has a handler | contracts — waits for the worker |
+| C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | contracts — waits for the worker |
+| C4 | every page has a language, one `h1`, a scriptless note, and the chat page carries its `data-region` regions | page tests and contracts |
 | C5 | every manifest name is hashed and present in the output | audit and contracts |
 | C6 | client bundle and stylesheet budgets | contracts |
 | C7 | no TODO marker, no console output, no Chinese outside the Chinese catalog | contracts |
-| C8 | every screen exists in every language; English at the root | contracts |
+| C8 | every screen exists in every language; English at `/en/`, the root is the language entry | contracts |
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
-| C10 | the first paint has no placeholder, no fade, no layout shift | browser first-paint run |
+| C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
+| C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
 
-A budget is a decision, not a target. Raising one is a change to this file with the reason.
+Current budgets: 181 kB client bundle, 41 kB stylesheet. A budget is a decision, not a target.
+Raising one is a change to this file with the reason. The 1 kB increase is for the settings tab
+navigation and the visible settings header; approved by the user.
 
 ## 1.9 Review, commits, sessions
 
 - Before a multi-file change is reported, it is read once against this file by a reader with no
   memory of writing it. The answer is a list of blockers.
 - One commit is one coherent change, imperative, reason in the body, the contract or section named
-  when it is not obvious. History is never rewritten. A mistake is corrected by the next commit.
+  when not obvious. History is never rewritten. A mistake is corrected by the next commit.
 - Every commit is a place a reader can stop: the tree builds, the gate passes, the documents agree.
-- A session starts by reading this file, the open defects, and the status table. It ends green, the
+- A session starts by reading this file, the open defects and the status table. It ends green, the
   documents in step, the commits pushed, and one paragraph on what moved, what is verified at which
   rung, and what is next. An unfinished change is finished or removed before the session ends.
 - A snapshot is restored before work continues, and the tree is read again because the conversation
@@ -177,78 +180,96 @@ A budget is a decision, not a target. Raising one is a change to this file with 
 - Silently weakening a check, a budget, or a test to get green.
 - Reporting a feature as working when it was only wired.
 - Carrying a second implementation beside an existing one because the first was awkward.
-- Adding a new feature because it is new, before the four questions in 3.10 are answered.
+- Adding a new feature because it is new, before the design question is answered.
 
 ---
 
 # Part 2 — 用户核心要求
 
-这一部分是用户的话,是产品的承诺。不在这里编辑;变更先讨论。
+这一部分是用户的话，是产品的承诺。只有用户能改；代理先讨论，再记录。
 
 ## 2.1 产品
 
-一个快、省、本地优先的 Matrix 客户端。页面加载后即可离线使用;看消息、翻历史、搜索、发送都不该被网络或动画卡住。绝大多数 Matrix 客户端卡顿,这个不能。
+一个快、省、本地优先的 Matrix 客户端。页面加载后即可离线使用；看消息、翻历史、搜索、发送都不该被网络或动画卡住。绝大多数 Matrix 客户端卡顿，这个不能。
 
-输出是静态目录:没有后端,没有服务端渲染。协议、同步、加密都在 worker;主线程只画。技术栈是 TypeScript + esbuild,外加 `matrix-js-sdk` 与 rust crypto wasm,以及消毒器;没有 UI 框架、组件库、CSS 框架、状态库、路由库、i18n 库、日期库、图标字体、外部字体。
+输出是静态目录：没有后端，没有服务端渲染。协议、同步、加密都在 worker；主线程只画。技术栈是 TypeScript + esbuild，外加 `matrix-js-sdk` 与 rust crypto wasm，以及消毒器；没有 UI 框架、组件库、CSS 框架、状态库、路由库、i18n 库、日期库、图标字体、外部字体。
 
 ## 2.2 速度与首帧
 
-- 第一眼看到的就是最终画面。没有骨架屏,没有白闪,没有"先占位再替换",没有抖动。
-- 本地数据先出。房间列表、分区状态、顶栏身份来自本地,不等待同步、不等待加密初始化。缓存的密钥门状态可以先画,后台的检查再纠正。
-- 顶栏、标题、描述在首帧就有最终位置和最终颜色。标题和描述过长时截断,绝不换行。没有选中房间时顶栏仍在,身份区留空或显示一个转圈,不做淡入淡出,不做流动灰带。
-- 加载是可见的、可取消的;没有空白等待。首帧不做入场动画;页面重绘可以有短动画,并遵守 reduced-motion。
-- 折叠分区按账户记忆。列表原地更新,不重建节点;首帧的状态在绘制前应用。
-- 刷新应该像无感刷新:该在的内容已经在,变化的内容只变一次。
+- 第一眼看到的就是最终画面。有缓存房间时首帧直接画，不闪；没有缓存且 `roomsLoading` 时，只在房间区画灰条，菜单卡片、顶栏和输入区保持最终位置，数据到达后原地替换。没有白闪，没有“先占位再替换”，没有抖动。
+- 本地数据先出。房间列表、分区状态、顶栏身份来自本地，不等待同步、不等待加密初始化。缓存的密钥门状态可以先画，后台的检查再纠正。
+- 顶栏、标题、描述在首帧就有最终位置和最终颜色。标题和描述过长时截断，绝不换行。没有选中房间时顶栏仍在，身份区留空或显示一个转圈，不做淡入淡出，不做流动灰带。
+- 加载是可见的、可取消的；没有空白等待。首帧不做入场动画；页面重绘可以有短动画，并遵守 reduced-motion。
+- 折叠分区按账户记忆。列表原地更新，不重建节点；首帧的状态在绘制前应用。
+- 刷新应该像无感刷新：该在的内容已经在，变化的内容只变一次。
 
 ## 2.3 界面
 
-- **骨架交给 HTML,外观交给 CSS,业务逻辑才交给 JS。** HTML 不含内联 CSS/JS;样式表与脚本外部引入。
-- 没有 JS 时页面是完整的:导航、顶栏、时间线区域、输入框都在,只是没有数据。需要 JS 的能力必须是 `<button>`,由面板说明缺少 JavaScript;不用 `<a>` 假装能点。
-- 两墨一纸:表面声明墨的比例并据此推出文字色;浅色与深色各一套,用 `light-dark()`。所有颜色、字体、字号、间距、圆角、时长都是 token;规则只用 token。
-- 流体布局:`clamp()`、`minmax()`、`auto-fit`、容器查询;不用宽度媒体查询。窄屏与宽屏是同一套布局的两种状态。
-- 不用阴影、渐变、玻璃、卡片化仪表盘、大厂范式。
-- 焦点永远可见;点击目标不小于 24px;动画短、可打断、只动 transform/opacity/color,reduced-motion 下关闭。
-- 文案只陈述读者需要知道的事实。不解释他看得见的东西,不写空话、营销腔或机器腔。文案只在带类型的 catalog 里,缺键是编译错误。
+- **骨架交给 HTML，外观交给 CSS，业务逻辑才交给 JS。** HTML 不含内联 CSS/JS；样式表与脚本外部引入。
+- 没有 JS 时页面是完整的：导航、顶栏、时间线区域、输入框都在，只是没有数据。需要 JS 的能力必须是 `<button>`，由面板说明缺少 JavaScript；不用 `<a>` 假装能点。
+- 两墨一纸：表面声明墨的比例并据此推出文字色；浅色与深色各一套，用 `light-dark()`。所有颜色、字体、字号、间距、圆角、时长都是 token；规则只用 token。选中文本的灰蓝色是唯一获准的非 ink/page 色令牌。
+- 流体布局：`clamp()`、`minmax()`、`auto-fit`、容器查询；不用宽度媒体查询。窄屏与宽屏是同一套布局的两种状态。
+- 不用阴影、渐变、卡片化仪表盘、大厂范式。顶栏、导航和所有弹窗可以共享一层克制的半透明 + 高斯模糊；这是唯一获准的“玻璃”用法，不做第二套。
+- 焦点永远可见；点击目标不小于 24px；动画短、可打断、只动 transform/opacity/color，reduced-motion 下关闭。
+- 文案只陈述读者需要知道的事实。不解释他看得见的东西，不写空话、营销腔或机器腔。文案只在带类型的 catalog 里，缺键是编译错误。
 
 ## 2.4 弹窗与悬浮
 
-这是两类,不是一类:
+这是两类，不是一类：
 
-- **弹窗**:设置、搜索、新消息、邀请、加入、创建。用 `<dialog>`,虚化背景,背景不可操作,焦点被限制在弹窗内,关闭后焦点回到触发它的控件。背景点击、Escape、关闭按钮都能关闭。`closedby` 直接用,不做 JS 兜底。
-- **悬浮**:房间菜单、语言菜单、表情/贴纸选择器、附件选择器。用 popover,不虚化背景,不限制焦点,点击外部关闭。
+- **弹窗**：设置、搜索、新消息、邀请、加入、创建。用 `<dialog>`，虚化背景，背景不可操作，焦点被限制在弹窗内，关闭后焦点回到触发它的控件。背景点击、Escape、关闭按钮都能关闭。`closedby` 直接用，不做 JS 兜底。
+- **悬浮**：房间菜单、语言菜单、表情/贴纸选择器、附件选择器。用 popover，不虚化背景，不限制焦点，点击外部关闭。
 
-触发弹窗用声明式命令(`commandfor`),关闭也声明式;不需要 JS 就能打开和关闭。悬浮继续用 `popovertarget`。
+触发弹窗用声明式命令（`commandfor`），关闭也声明式；不需要 JS 就能打开和关闭。悬浮继续用 `popovertarget`。顶栏房间菜单与顶栏底部、窗口右边各留一个小的相等间距。
 
 ## 2.5 聊天
 
-- **左导航**:菜单区(搜索、新消息、邀请、加入、创建、设置)+ 房间区(收藏、房间、私聊、频道四个分区,默认只展开房间,状态按账户记忆,空区隐藏)。频道是 space,点击就地展开子房间,不改变右侧内容。房间行有头像、名称、预览、时间、未读/提及、静音、当前高亮;菜单在房间卡片上。
-- **右顶栏**:窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
-- **右内容**:没有房间时不渲染房间内容;有房间时顶栏、时间线、输入框。未登录在时间线位置说明;密钥门未完成说明密钥未设置;这两种状态由 JS 在知道会话之后画,静态页不预置。
-- **时间线**:自己的消息靠右、他人的靠左;同一发送者连续段只显示一次头像和名字;图片/视频/贴纸没有气泡底色,时间是小标签;只有一行的文字气泡撑长,时间留在同一行;日期分隔、已读线、新消息提示是行间小元素;不能解密的消息说明原因;加载更早、跳转、新消息提示都不阻塞滚动。
-- **输入框**:附件、贴纸、输入框、表情、发送。附件支持多选和粘贴,同一缓冲区,可移除、有进度、可取消、可重试。Enter 换行,Ctrl/Cmd+Enter 发送,输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送顺序:文件一条一个消息,随后文字。
-- 消息菜单:回复、回应、编辑、删除、复制文本、复制链接。右键、长按、键盘都能打开。
+- **左导航**：菜单区是一张 raised surface 卡片（搜索、新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、频道四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。频道是 space，点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
+- **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
+- **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
+- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只显示一次头像和名字。头像与昵称中心对齐，头像完整圆形。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
+- **输入框**：附件、贴纸、输入框、表情、发送。附件支持多选和粘贴，同一缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。
+- 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。
 
 ## 2.6 登录、密钥门、设置
 
-- 服务器地址、`.well-known`、`/versions`、`/login` flows;密码登录、SSO、注册(含交互式认证阶段)。忘记密码在重置流程存在之前不出现。
-- 密钥门强制。三条路径:恢复密钥/口令、另一台设备 SAS 验证、重新开始。注册后只有"重新开始"。恢复密钥只显示一次,等宽字体,可复制、可下载,不写日志。未完成前聊天页不可交互,也不渲染房间数据。
-- 设置一个对话框:账户、通知、安全、关于。账户有头像、显示名、MXID、语言、退出登录;安全有设备验证、恢复密钥、备份、重置、会话列表(验证/登出单台/登出其他);通知有应用内徽章、标题总数、桌面通知(默认关闭、手势请求、可关预览);关于有版本、源码、许可、无统计。
-- 房间设置从房间卡片菜单打开:概况、成员、通知模式、加密状态(只读)、离开。没有权限时只读。
+- 服务器地址、`.well-known`、`/versions`、`/login` flows；密码登录、SSO、注册（含交互式认证阶段）。忘记密码在重置流程存在之前不出现。
+- 密钥门强制。三条路径：恢复密钥/口令、另一台设备 SAS 验证、重新开始。注册后只有“重新开始”。恢复密钥只显示一次，等宽字体，可复制、可下载，不写日志。未完成前聊天页不可交互，也不渲染房间数据。
+- 设置一个对话框：账户、通知、安全、关于。账户有头像、显示名、MXID、退出登录；安全有设备验证、恢复密钥、备份、重置、会话列表（验证/登出单台/登出其他）；通知有应用内徽章、标题总数、桌面通知（默认关闭、手势请求、可关预览）；关于有版本、源码、许可、无统计。没有语言自定义。
+- 房间设置从房间卡片菜单打开：概况、成员、通知模式、加密状态（只读）、离开。没有权限时只读。
 - 个人资料从发送者、成员行或提及打开。
 
 ## 2.7 平台与安全
 
-- Chrome、Firefox、Safari 三方在 2026-10 的版本内可用。Baseline 2026 是底线,不是上限;每个新特性都用检查命令核实,不靠记忆、不靠文章。只有三大浏览器都支持才用。
-- 不满足三家的特性不用;`features.md` 只记录确实能用到的特性。
-- 事件、资料、房间名、formatted_body 一律不可信;富文本过白名单消毒器。CSP 不允许内联脚本与内联样式;没有第三方请求,没有统计。
-- token 与密钥只在 worker;主线程只看到会话摘要与一次性显示的恢复密钥。不记录 token、密钥与消息正文。
-- 离线是正常状态:预缓存 shell,导航 cache-first 并后台更新;消息、房间、头像在 IndexedDB 里,由 worker 独占;homeserver 请求永不进 HTTP 缓存。
+- Chrome、Firefox、Safari 三方在 2026-10 的版本内可用。Baseline 2026 是底线，不是上限；每个新特性都用检查命令核实，不靠记忆、不靠文章。只有三大浏览器都支持才用。
+- 不满足三家的特性不用；`features.md` 只记录确实能用到的特性。
+- 事件、资料、房间名、formatted_body 一律不可信；富文本过白名单消毒器。CSP 不允许内联脚本与内联样式；没有第三方请求，没有统计。
+- token 与密钥只在 worker；主线程只看到会话摘要与一次性显示的恢复密钥。不记录 token、密钥与消息正文。
+- 离线是正常状态：预缓存 shell，导航 cache-first 并后台更新；消息、房间、头像在 IndexedDB 里，由 worker 独占；homeserver 请求永不进 HTTP 缓存。
 
 ## 2.8 范围
 
-- **先做**:登录与密钥门。
-- **范围内**:房间与时间线、发送与接收、回复/编辑/删除/回应、媒体、贴纸与表情包、本地搜索、设置、会话与设备验证、频道、通知、离线。
-- **不做**:通话与视频、线程、低优先级分区。邀请进菜单。
+- **先做**：登录与密钥门。
+- **范围内**：房间与时间线、发送与接收、回复/编辑/删除/回应、媒体、贴纸与表情包、本地搜索、设置、会话与设备验证、频道、通知、离线。
+- **不做**：通话与视频、线程、低优先级分区。邀请进菜单。
+
+## 2.9 本轮用户视觉修正（摘要）
+
+- 左导航的 active 与 hover 必须分得清；space 内被选中的房间与未选中不能看起来一样。
+- 底部账号信息卡要有自己的背景。点击账号出现的菜单，hover 必须能在菜单底色上分辨。
+- 房间卡片左 padding 从 `space-1` 改为 `space-2`；房间行不再显示时间，样式更统一。
+- 顶栏和左侧背景应是同一层，都可以有一点透明；左侧看不出来也没关系。顶栏最右侧菜单与顶栏底部、浏览器窗口右边都留一个一致的、比较小的间距。
+- 下方聊天区不限宽，应该和容器一样宽。
+- 文字气泡按内容收缩，不因为字少就撑满整列；气泡之间的间距稍大。reaction 的背景要更淡。
+- 点击有未读计数气泡的房间时，跳到最后一次已读的位置；第一条新消息的整行背景短暂显示 hover 效果，然后消失。
+- 所有图标换成一套新的、统一的图标；现在的图标不好看。
+- 所有弹窗和右侧顶栏都用背景高斯模糊；具体强度由实现规划。
+- 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
+- 亮色模式气泡背景更浅。
+- 聊天区域的头像要完整圆形，并与昵称中心对齐；其他区域的圆形头像保持现状。
+- 图片、视频、贴纸等媒体消息的时间显示在媒体内部右下角，像一个 span；文本消息的时间保持在文本内。
+- `Load older` 与 `Copy link` 保留为 mock 评审演示，不当作真实功能。
+- 浏览器存储不可用时显式说明并停止重定向，不进入循环。
 
 ---
 
@@ -256,11 +277,9 @@ A budget is a decision, not a target. Raising one is a change to this file with 
 
 ## 3.1 The model
 
-Five decisions shape everything else:
-
 1. **One writer per fact.** The worker owns the account database, the SDK and crypto. The main thread
-   owns the UI database and the interface. A module asks another layer for a fact; it never reads
-   that layer's storage directly.
+   owns the UI database and the interface. A module asks another layer for a fact; it never reads that
+   layer's storage directly.
 2. **Local first.** The database is the source of the interface. A sync, a reload or an offline start
    reads the same projection. The network is an update, not a prerequisite.
 3. **Deterministic restore.** On load, the cached session state decides the first frame; the worker
@@ -268,8 +287,7 @@ Five decisions shape everything else:
    crypto initializes.
 4. **One protocol.** Client and worker never import each other; they speak commands and events. A
    command has an id and a reply; an event has no id.
-5. **Every promise has a check.** A rule that no check enforces is a wish; the contract table in 1.8
-   names the owner of each promise.
+5. **Every promise has a check.** A rule that no check enforces is a wish; 1.8 names the owner.
 
 ## 3.2 Architecture
 
@@ -279,39 +297,40 @@ region ids shared with the client), and scripts (build, pages, audit, features, 
 
 Runtime: `protocol/` (command and event unions), `client/` (store, worker client, router, one module
 per region), `worker/` (api, session, db, projection, media, keys), and `src/styles/` (one stylesheet,
-tokens first).
+tokens first). The current tree has only the build-time shell and a mock client.
 
-Dependency direction is one way: catalogs → lib → layouts/components → pages, build time only;
-client and worker depend on protocol and core types, never on each other.
+Dependency direction is one way: catalogs → lib → layouts/components → pages, build time only; client
+and worker depend on protocol and core types, never on each other.
 
 Each page is one document. `<body data-page>` tells the client what to boot. Region ids live in one
 module imported by both the generator and the client, so the two cannot disagree.
 
 ## 3.3 Data
 
-The account database is opened by the worker and nobody else. Its stores: session and per-room
-cursor, rooms, events (indexed by room and by room+time), members, and media keyed by a content
-address. The UI database holds locale, last account, collapse state, drafts, and recent emoji.
+The account database is opened by the worker and nobody else. Its stores: session and per-room cursor,
+rooms, events (indexed by room and by room+time), members, and media keyed by a content address. The
+UI database holds locale, last account, collapse state, drafts, and recent emoji. The current mock
+client stores sections, spaces and drafts under the account id.
 
-A message row carries identity, room, sender, name, avatar, time, kind, body, HTML, media, reply,
-edited, reactions, mentions, status, error, encrypted flag, membership, and search tokens. The HTML
-is stored raw and sanitized at render.
+A message row carries identity, room, sender, name, avatar, time, kind, body, HTML, media, reply, edited,
+reactions, mentions, status, error, encrypted flag, membership, and search tokens. The HTML is stored
+raw and sanitized at render.
 
-**The projection has two directions.** Forward: every event after the room cursor, plus the last
-thirty rows, because an edit, reaction or redaction changes an older row without adding one.
-Backward: after a scrollback, walk from the start of the live timeline and stop at the first stored
-id, because the cursor marks the newest row and cannot see that direction. Neither pass clears a
-store; a room disappears only on an explicit leave.
+**The projection has two directions.** Forward: every event after the room cursor, plus the last thirty
+rows, because an edit, reaction or redaction changes an older row without adding one. Backward: after a
+scrollback, walk from the start of the live timeline and stop at the first stored id, because the cursor
+marks the newest row and cannot see that direction. Neither pass clears a store; a room disappears only
+on an explicit leave.
 
-The queued message is an ordinary row, written under its transaction id before the request. The
-remote echo carries the same id and replaces it. A failed send leaves a failed row with an error;
-retry resets it, discard deletes it.
+The queued message is an ordinary row, written under its transaction id before the request. The remote
+echo carries the same id and replaces it. A failed send leaves a failed row with an error; retry resets
+it, discard deletes it.
 
 Relations come from the SDK aggregate at projection time, so there is no second store to replay. An
 annotation counts once per sender per key, and `me` is the viewer.
 
-Read state is one call that moves the receipt and the fully-read marker together; the room row keeps
-the receipt id so the timeline can draw where reading stopped.
+Read state is one call that moves the receipt and the fully-read marker together; the room row keeps the
+receipt id so the timeline can draw where reading stopped.
 
 ## 3.4 Worker protocol
 
@@ -332,51 +351,80 @@ One dedicated worker per tab, created when the page needs data.
 Events: ready, rooms, window, outbox, connection, keys, typing, fatal. The payload is bounded; a lost
 event costs one window, not a rebuild.
 
-**Start order.** `start` is sent once, before any room is opened. The stored rooms paint from the
-cached gate state; the start reply corrects the gate if the keys are gone. The room window is opened
-only after the start reply, and the timeline waits for it instead of racing it.
+**Start order.** `start` is sent once, before any room is opened. The stored rooms paint from the cached
+gate state; the start reply corrects the gate if the keys are gone. The room window is opened only after
+the start reply, and the timeline waits for it instead of racing it.
 
-**Failure.** A worker error marks the connection degraded and restarts it once; the projection on
-disk is untouched. There is no main-thread SDK fallback.
+**Failure.** A worker error marks the connection degraded and restarts it once; the projection on disk is
+untouched. There is no main-thread SDK fallback.
 
 ## 3.5 UI
 
 The store is a key table, not a render pass: phase, session, rooms, room id, messages, has-older,
-connection, keys, typing. `set` compares each key by reference and notifies only changed keys. A
-region subscribes to the keys it reads. Regions: navigation, header, timeline, composer, surfaces.
+connection, keys, typing. `set` compares each key by reference and notifies only changed keys. A region
+subscribes to the keys it reads. Regions: navigation, header, timeline, composer, surfaces.
 
-The composer and any open surface own their state and are never re-rendered by a store change; that
-is what keeps the caret and the selection.
+The composer and any open surface own their state and are never re-rendered by a store change; that is
+what keeps the caret and the selection.
 
-**Navigation** is built once. Rows are keyed by room id and moved only when order changes, so a sync,
-a repaint or a reload never rebuilds the list under the pointer. Section state is per account, with
-the old global map as the migration base; the default is rooms open, the rest closed.
+**Navigation** is built once. Its header is one account button: the avatar on the left, the display name
+over the MXID beside it. The whole header opens a floating menu of the six labeled actions below it, and
+each action opens its own dialog. The room sections follow. Section labels are bold. Rows are keyed by
+room id and moved only when order changes, so a sync, a repaint or a reload never rebuilds the list under
+the pointer. Section state is per account, with the old global map as the migration base; the default is
+rooms open, the rest closed. A room row has no visible menu button and no time; right-click, long-press or
+the keyboard context-menu key opens the room menu. The account card at the bottom has its own surface.
+Room cards use `space-2` left padding. Active is a deeper step than hover; a room nested in a space must
+still read as selected.
 
-**Topbar** has four cells: back (narrow only), room avatar, title over topic, room menu. The title
-and topic truncate, never wrap. The bar stays when no room is selected. The identity area is
-JS-only until real data exists; there is no static placeholder and no fade.
+**Topbar** has four cells: back (narrow only), room avatar, title over topic, room menu. The title and
+topic truncate, never wrap. The bar stays when no room is selected. It shares the navigation's translucent
+surface and blur. The identity area is JS-only until real data exists; there is no static placeholder and
+no fade. The room menu is anchored below the bar with a small equal gap from the bar and the window edge.
 
-**Timeline** rows are keyed by message id and updated in place; day separators, the read line and
-the older control are display items with their own keys. New rows append; backfill prepends and
-restores the scroll position from an anchor, whether the list grew or the server had nothing older.
-Opening another room resets the anchor and the pinned state. A receipt moves only while the newest
-row is on screen.
+**Timeline** fills the content column; it is not constrained to `--content-max`. Rows are keyed by
+message id and updated in place; day separators and the older control are display items with their own
+keys. A message has no visible menu button; its row is focusable and right-click, long-press or the
+keyboard context-menu key opens the message menu when no text is selected. New rows append; backfill
+prepends and restores the scroll position from an anchor, whether the list grew or the server had nothing
+older. Opening another room resets the anchor and the pinned state. A bubble tints to the hover step while
+a long press is held and while its menu is open; a click or a plain mouse hover does not change it. All
+rows share one message body column between the two avatar gutters; other bubbles fill that column, so
+every bubble's right edge lines up, and own bubbles align to the same right edge. Text bubbles fit their
+content up to `--bubble-max` and break at any character rather than leaving a ragged right edge; message
+spacing is `space-3`; media timestamps sit inside the media at the bottom right as a span. The first unread message gets a full-row reveal background that clears after the
+reveal. The message avatar is a complete circle, centered on the nickname line, never clipped by
+`content-visibility` paint containment. Every timestamp uses the `--text-xs` tier. A queued or sending row
+places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge
+there, whose title carries the error. The timestamp, edited mark and status are not selectable; copying a
+message reads its body, not the meta.
 
-**Composer** owns its draft, its tray, its height and its selection. The dialogs never cover it; the
-overlays never steal its caret.
+**Composer** owns its draft, its tray, its height and its selection. The send button's long-press or
+context menu offers normal text and Markdown; choosing an option sends immediately, with no visible
+format switch. Only rich-text bubbles render Markdown; normal text stays plain. The dialogs never cover
+it; the overlays never steal its caret. The bar fills the content column.
 
 **Overlays are two kinds.**
 
-- *Dialog*: a `<dialog>` with `showModal`, opened by `commandfor`, closed by `command`, `closedby`
-  and Escape. The backdrop is `--scrim` plus a small `backdrop-filter` blur. The background is inert,
-  the page scroll is locked with `:has`, focus starts inside and returns to the trigger. No JS is
-  needed to open, close, or dismiss it. No JS fallback for `closedby`.
-- *Popover*: a `popover="auto"` section with `popovertarget`, no backdrop, no focus trap, dismissed
-  by an outside click. Menus and pickers are popovers; they position themselves from the trigger
-  rect (anchor positioning is not in the platform floor yet).
+- *Dialog*: a `<dialog>` with `showModal`, opened by `commandfor`, closed by `command`, `closedby` and
+  Escape. The backdrop is `--scrim` plus a small `backdrop-filter` blur. The background is inert, the page
+  scroll is locked with `:has`, focus starts inside and returns to the trigger. No JS is needed to open,
+  close, or dismiss it. Safari 27.0 still lacks `closedby`; its backdrop click does not close, and there is
+  no JS fallback.
+- *Popover*: a `popover` section with `popovertarget`, no backdrop, no focus trap. Menus and pickers are
+  popovers; the room and message menus use `popover="manual"` and close on an outside pointerdown or
+  Escape, because Firefox light-dismisses an auto popover on the right-click release. The other pickers
+  use `auto` and anchor positioning (`position-area`, `position-try-fallbacks`, and the popover's implicit
+  anchor), as does the topbar room menu. Opening a new floating trigger closes an open context menu first,
+  so one menu at a time keeps its coordinates. The topbar room menu is anchored to its button at the
+  topbar's bottom and right edges, never positioned from a context point. Pointer context menus are
+  measured with visibility hidden, positioned at the pointer (a touch long-press opens after release,
+  centered on the touch point), and then revealed without an entrance transition; a non-empty selection
+  keeps the native menu, and a touch long-press suppresses the contextmenu only when no text is selected.
 
-The entrance of either uses `@starting-style` and `transition-behavior: allow-discrete`, never a
-skeleton and never a fade on the initial page load.
+All overlays and the topbar/navigation share one restrained backdrop blur and translucent surface; no
+second glass style. The entrance of either uses `@starting-style` and `transition-behavior:
+allow-discrete`, never a skeleton and never a fade on the initial page load.
 
 ## 3.6 First paint
 
@@ -385,52 +433,78 @@ contains room data, a "not signed in" sentence, or a loading placeholder.
 
 On the chat page:
 
-1. The account's last gate state selects the interface phase; the stored rooms and per-account
-   section state paint immediately.
+0. If a cached room window exists, it paints before any skeleton. Without one, only the room list shows
+   skeleton rows while `roomsLoading`; the action card, topbar and composer keep their final boxes, and
+   the rows replace in place when the data arrives.
+1. The account's last gate state selects the interface phase; the stored rooms and per-account section
+   state paint immediately.
 2. The topbar is part of the static shell, at its final height and background. The avatar, title and
    topic appear when the room is known; the bar does not move when they do.
-3. `start` is posted; the stored rooms event renders; the start reply corrects the gate; `open`
-   follows and the timeline fills.
+3. `start` is posted; the stored rooms event renders; the start reply corrects the gate; `open` follows
+   and the timeline fills.
 4. Nothing animates on this first pass. A sync that changes the list updates rows in place.
 5. A page reload is the same path. A background sync is the quiet one: same rows, same positions.
 
 The measured evidence is a screenshot at load, a screenshot after the data, and a comparison of the
 topbar and list boxes between them.
 
+A narrow first load opens on the navigation; selecting a room opens its detail. The generated review page
+starts with `data-room="false"` so the demo matches that entry instead of showing a room on load.
+
 ## 3.7 Build, assets, and caching
 
-Three entries — client, worker, stylesheet — bundled by esbuild, minified, content-hashed, with a
-metafile the page generator reads. HTML minified. Output is a static directory, committed and
-audited: the audit regenerates every page and fails on a byte of difference.
+Three entries — guard, client, stylesheet — bundled by esbuild, minified, content-hashed, with a metafile
+the page generator reads. The worker and wasm entry wait for Matrix. HTML is minified with the same
+options in build and audit. Output is a static directory, committed and audited: the audit regenerates
+every page and fails on a byte of difference.
 
-Assets are one of five things: a module import (hashed by the bundler), a stylesheet `url()` (hashed
-by the bundler), a page asset named in the generator's list and resolved through the manifest, a file
-the client needs by fixed name declared in a `<meta>` tag, or a platform file copied verbatim from
-`static/`. Icons that follow `currentColor` are functions returning SVG, not files. The worker never
-imports an asset. The generator never imports a browser module.
+Assets are one of five things: a module import (hashed by the bundler), a stylesheet `url()` (hashed by
+the bundler), a page asset named in the generator's list and resolved through the manifest, a file the
+client needs by fixed name declared in a `<meta>` tag, or a platform file copied verbatim from `static/`.
+Icons that follow `currentColor` are functions returning SVG, not files. The current icon set is one
+coherent 24px, rounded, 1.6-stroke system. The worker never imports an asset. The generator never imports
+a browser module.
 
-The crypto wasm is copied by the build with a hash of its bytes and served as `application/wasm`;
-the worker initializes it explicitly before rust crypto.
+The crypto wasm is copied by the build with a hash of its bytes and served as `application/wasm`; the
+worker initializes it explicitly before rust crypto.
 
 The service worker is generated with the manifest inlined, so its bytes change exactly when the shell
-does. Install precaches the locale's pages and hashed assets; navigation is cache-first with a
-background revalidate; `skipWaiting` and `clients.claim` keep one version live; registration is
-production-only with `updateViaCache: "none"`.
+does. Install precaches the locale's pages and hashed assets; navigation is cache-first with a background
+revalidate; `skipWaiting` and `clients.claim` keep one version live; registration is production-only with
+`updateViaCache: "none"`.
 
 ## 3.8 CSS
 
-Tokens in `:root`: page and ink, a surface ladder, derived text tones, rule, mark, scrim, focus, the
-type ladder, leading, spacing, radii, ease, and layout sizes. Rules only use tokens.
+Tokens in `:root`: `bg-1` page, `bg-2` right-click menu, `bg-3` bubble/topbar/sidebar/dialog/space/account,
+`bg-4` hover, `bg-5` active; `bg-topbar`, `bg-dialog`, `bg-menu` are their translucent glass versions;
+`text-1/2/3`; `border`; `mark`, `selection`, `focus`, `danger`, `scrim`, `scrollbar`. The only semantic color
+is `--danger` (`rgb(179 38 30)` in light, `rgb(154 99 94)` in dark), reserved for the failed-send mark and
+its background.
 
-Surfaces: navigation and room header use the raised surface; timeline and composer use the page; own
-bubbles are one step above the other bubble; overlays use the popover surface with a rule. The dialog
-backdrop uses the scrim plus the blur.
+Surfaces: page uses `bg-1`; `bg-2` is the right-click/popover paper; `bg-3` is the bubble, topbar, sidebar,
+dialog, space list and account card; `bg-4` is hover; `bg-5` is active. The topbar, dialogs and popovers use
+the translucent glass versions of `bg-3`/`bg-3`/`bg-2`. Hover and active are states of their paper, not new
+levels; a selected room uses the active state.
+Section labels are bold. Overlays have no visible header row or close button; the dialog is 24rem wide,
+the SAS 22rem, the floating surface 14rem, the send menu 11rem, and the accessible name is the surface
+title. Context menus fit their content within that cap and use SVG icons for their actions.
 
-One container query on the body switches the narrow shell; no width media query. `appearance: none`
-on every control before styling. Focus is a visible outline at a small offset; never removed.
+The topbar is `bg-topbar` over the timeline at 82% with an 8px blur; the navigation uses `bg-topbar`;
+dialogs use `bg-dialog`; popovers and context menus use `bg-menu`; all overlays use the same 8px blur. The
+topbar overlays the scroll area so the content passes behind it. The dialog backdrop uses the scrim plus a
+6px blur. No shadow, no gradient, no second glass style, no visible border.
 
-Animations are short, interruptible, and limited to transform, opacity and color; reduced motion
-disables them. No shadow, no gradient, no glass.
+Fluid layout: navigation `clamp(11rem, 20vw, 17rem)`, chat full content width, bubbles and media `32rem`,
+fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell; no width
+media query. `appearance: none` on every control before styling. Focus is a visible outline at a small
+offset; never removed. The danger token is the only semantic state color; every other paper and text token
+is a fixed sRGB value.
+
+Decorative motion is absent or at most a 120ms opacity/color/rotate change. The first unread reveal uses
+the surface-hover background and clears after the reveal; reduced motion removes any transition. A section
+collapses natively and immediately. Overlays fade without sliding, the skeleton is static, and the
+functional loaders — the router spinner and the pending message dots — are the only looping animations;
+reduced motion stops them.
 
 ## 3.9 Testing
 
@@ -445,27 +519,27 @@ popover behavior, wide and narrow, both color schemes, subpath base.
 Real-server tests: the whole flow on a device whose state is real, including the first paint and the
 timing of rooms versus crypto.
 
-The feature check: every new feature is looked up before it is written and recorded in
-`features.md`; the check passes for the platform floor.
+The feature check: every new feature is looked up before it is written and recorded in `features.md`; the
+check passes for the platform floor.
 
 ## 3.10 Platform
 
-The authority is the `web-features` dataset, with MDN compatibility data for what it does not name,
-and `features.md` is the project's recording of what it can use. The floor is the three browsers as
-of 2026-10.
+The authority is the `web-features` dataset, with MDN compatibility data for what it does not name, and
+`features.md` is the project's recording of what it can use. The floor is Chromium 156, Firefox 157 and
+Safari 27.0.
 
-Four questions before a feature is used: does the design need the behavior; does what we have already
-do the job; is the feature larger than the need; does it replace code or add a second spelling.
+Four questions before a feature is used: does the design need the behavior; does what we have already do
+the job; is the feature larger than the need; does it replace code or add a second spelling.
 
-Current decisions: `<dialog>` and popovers split the overlays; `commandfor` opens and closes the
-dialogs; `closedby` dismisses them, with no fallback; `backdrop-filter` blurs the backdrop;
-`@starting-style` and `transition-behavior` handle entrances; `content-visibility` and `scrollend`
-serve the timeline; same-document view transitions serve room changes; `:user-invalid` serves forms;
-`Promise.withResolvers`, `Map.groupBy`, set methods and `AbortSignal.timeout` serve the code.
+Current decisions: `<dialog>` and popovers split the overlays; `commandfor` opens the dialogs; `closedby`
+dismisses them, with no fallback; anchor positioning (`position-area`, `position-try-fallbacks`, implicit
+anchor) places popovers without JS; `backdrop-filter` blurs the backdrop, the topbar and the navigation;
+`@starting-style` and `transition-behavior` handle entrances; `content-visibility`, `::details-content`,
+`@scope` and `field-sizing` serve the UI; `:user-invalid` serves forms; `crypto.randomUUID` and async
+clipboard serve local actions.
 
-Rejected for this floor: anchor positioning, scroll-driven animations, `interpolate-size`,
-`text-box`, cross-document view transitions, and Temporal, because at least one of the three engines
-does not ship them.
+Rejected for this floor: scroll-driven animations, `interpolate-size`, `text-box`, cross-document view
+transitions, and Temporal, because at least one of the three engines does not ship them.
 
 ## 3.11 Lessons the design closes
 
@@ -496,12 +570,16 @@ does not ship them.
 | the dialog backdrop needs the modal top layer | `<dialog>` and `::backdrop`, not a popover |
 | a floating menu must not dim the page | popovers keep no backdrop |
 | the backdrop click is not native on `<dialog>` | `closedby`, not a JS fallback |
+| a negative margin under `content-visibility` paint containment is clipped | keep the avatar inside the row; pad the message body |
+| a media timestamp outside the image floats in the page | put the time span inside the media frame |
+| a topbar menu at an anchor edge overlaps the chrome | fixed inset below the bar with equal gaps |
+| active and hover at adjacent ink steps are indistinguishable | active is a deeper step; nested space rows use a middle step |
 
 ## 3.12 Phases
 
 | phase | work | exit |
 |---|---|---|
-| P0 | pipeline: build, pages, audit, features, layouts, components, router, chat pages, stylesheet | four generated pages, audit green, chat complete scriptless at both widths and both schemes |
+| P0 | pipeline: build, pages, audit, features, layouts, components, router, chat pages, stylesheet | generated locale pages, audit green, chat complete scriptless at both widths and both schemes |
 | P1 | worker: entry, hashed wasm, init, login, sync, decrypt | protocol test signs in, syncs, sends, reads the echo |
 | P2 | every page and the stylesheet in full | no dead control, every page complete scriptless |
 | P3 | data: database, both projections, store, sections, timeline, composer | a real account lists, reads, sends, keeps its place through backfill and reload |
@@ -524,3 +602,74 @@ These are the user's to make, not the agent's:
 - The scope cut for the first usable release.
 
 Until answered, the design defaults to the conservative option and records the choice in the commit.
+
+---
+
+# Part 4 — Working tree
+
+## Commands
+
+```text
+npm run check       # the single gate: types, Prettier, Oxlint/Stylelint, tests, build, audit, contracts
+npm run dev         # build, serve dist/ on 127.0.0.1:5172, watch src/scripts and live reload
+npm run serve       # serve an existing dist/ on 127.0.0.1:5172 (PORT/HOST override)
+npm run format      # write Prettier across src, scripts, test and the root JSON/YAML
+npm run format:check
+node --test test/catalog.test.ts   # one pure test file
+npm run features -- <web-features id> --require 2026
+npm run features -- <web-features id> --floor chrome=156,firefox=157,safari=27
+```
+
+Prettier checks the tracked source and root configs. It does not reformat embedded HTML inside the
+`html` tagged templates; that whitespace is significant. `AGENTS.md`, `features.md`, `past/`, `dist/`,
+`build/` and the lockfiles are not formatted by the gate.
+
+## Map and current boundary
+
+- `src/pages/` — one build-time view per page (the chat at the locale root); `src/layouts/` — document,
+  chat and auth shells; `src/components/` — pure markup returned as `Html`, shared with the client;
+  `src/catalogs/` — typed copy; `src/styles/style.css` — one layered stylesheet (tokens, reset, base,
+  layout, components, surfaces, motion); `src/lib/` — HTML escaping, catalog, assets;
+  `src/core/types.ts`, `regions.ts` and `mock.ts` — page state, region ids and deterministic mock data;
+  `src/client/` — guard, boot, auth, chat, session, position and the mock UI.
+- `/` is the one-time language entry. `/en/` and `/zh-CN/` are the locale roots; the chat is the locale
+  root, and the other pages sit under the prefix. `/` and `/en/` are English.
+- `scripts/pages.ts` — root router plus locale pages; `scripts/build.ts` — esbuild stylesheet, guard,
+  client, hashed icon, pages and manifest; `scripts/dev.ts` — live-reload server that runs each build in
+  a fresh child; `scripts/static.ts` — the 5172 server; `scripts/audit.ts` — minified-page and asset
+  comparison; `scripts/contracts.ts` — C1, C4–C8; `scripts/features.ts` — platform check.
+- The tree is a build-time static shell plus a client mock UI. There is no `src/worker` or `src/protocol`,
+  and no Matrix import; the client reads `src/core/mock.ts` and the guard validates the mock session. C2
+  and C3 wait for the real runtime. The SDK dependencies are not imported.
+- The generated chat page renders the deterministic mock rooms and messages at build time as a review
+  artifact; the Matrix shell later returns to no room data. The stylesheet has no visible borders or
+  dividers; the navigation action block is a menu surface and section labels are bold. The
+  frontend-design skill owns the visual review; do not add a second convention.
+- The client is a mock: the `Load older` control synthesizes a message and `Copy link` points at
+  addresses the build does not serve. They are kept as review artifacts, not shipped behavior.
+
+## Generated and reference-only
+
+- `dist/` and `build/manifest.json` are generated; the build and audit own them. Never hand-edit.
+- `past/` is reference only. It is never shipped and its implementation is not brought back.
+- `.omp/` holds the project context, skills, config and ignored worktrees.
+
+## Verification
+
+The gate is the whole operational contract: a claim names the rung it was verified at, and a stylesheet
+read is not a browser run. C9 is the feature check plus `features.md`; C10 is the browser first-paint run;
+neither is part of `npm run check` today. The mock UI is verified at the surface and scriptless rungs in
+Chromium at 390, 856 and 1280, light and dark; worker and real-server claims wait for Matrix. A budget is
+never raised to make the gate pass.
+
+## Open defects
+
+1. **Room time markup remains.** The design removes room times, and the stylesheet no longer styles them,
+   but `src/components/nav.ts` still emits `<time class="room-time">` in both room and space rows. Remove
+   the markup and the unused `Intl.DateTimeFormat` parameter.
+3. **The visual pass is uncommitted.** The active/hover, account card, menu hover, full-width chat, bubble
+   fit, reaction chip, first-unread reveal, new icon set, translucent topbar/navigation, selection color,
+   avatar alignment and media timestamps are in the tree but have not had a final independent review or a
+   complete 390/856/1280 light/dark interaction sweep.
+4. **The tree has no worker.** C2/C3, the protocol, account data, crypto and the real gate wait for P1. The
+   current client is a mock, not a product claim.

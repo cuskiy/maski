@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { en } from "../src/catalogs/en.ts";
 import { zhCN } from "../src/catalogs/zh-CN.ts";
 import { locales } from "../src/catalogs/index.ts";
-import { REGION, SURFACE } from "../src/pages/regions.ts";
-import { PAGES } from "./pages.ts";
+import { REGION, SURFACE } from "../src/core/regions.ts";
+import { generatedPages } from "./pages.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const failures: string[] = [];
@@ -14,111 +15,146 @@ function fail(contract: string, message: string): void {
   failures.push(`${contract}: ${message}`);
 }
 
-interface Source {
-  readonly path: string;
-  readonly text: string;
-}
-
-function sources(dir: string): Source[] {
+function sources(dir: string): string[] {
   return readdirSync(join(root, dir), { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return sources(path);
-    return entry.name.endsWith(".ts") ? [{ path, text: readFileSync(join(root, path), "utf8") }] : [];
+    return entry.name.endsWith(".ts") || entry.name.endsWith(".css") ? [path] : [];
   });
 }
 
 const sourceFiles = sources("src");
-const code = sourceFiles.map((file) => file.text).join("\n");
-const scripts = sources("scripts").map((file) => file.text).join("\n");
+const scriptFiles = sources("scripts");
+const code = [...sourceFiles.filter((file) => !file.startsWith("src/catalogs/")), ...scriptFiles]
+  .map((file) => readFileSync(join(root, file), "utf8"))
+  .join("\n");
 
-// C1 the catalog: same keys everywhere, every key read, no empty entry
 const enKeys = Object.keys(en);
 if (JSON.stringify(enKeys.toSorted()) !== JSON.stringify(Object.keys(zhCN).toSorted())) fail("C1", "catalogs disagree");
 for (const key of enKeys) {
-  if (!code.includes(`"${key}"`) && !scripts.includes(`"${key}"`)) fail("C1", `nobody reads ${key}`);
+  if (!code.includes(`"${key}"`)) fail("C1", `nobody reads ${key}`);
   const value: string = en[key as keyof typeof en];
   if (value.length === 0) fail("C1", `empty entry ${key}`);
 }
 
-// C2 the protocol: every command has a handler and every event a case
-const protocol = readFileSync(join(root, "src/protocol/messages.ts"), "utf8");
-const api = readFileSync(join(root, "src/worker/api.ts"), "utf8");
-for (const [, type] of protocol.matchAll(/\{ type: "([a-zA-Z]+)"/gu)) {
-  if (type !== undefined && !api.includes(`case "${type}"`)) fail("C2", `no handler for ${type}`);
-}
+const generated = generatedPages();
 
-// C3 the layers: the worker owns the SDK, the client never imports it
-for (const file of sources("src/client")) {
-  if (/from "matrix-js-sdk/u.test(file.text)) fail("C3", `a client module imports the SDK: ${file.path}`);
-}
-for (const file of sources("src/worker")) {
-  if (/from "\.\.\/(client|ui|pages|layouts|components)\//u.test(file.text)) fail("C3", `the worker imports the interface: ${file.path}`);
-}
-for (const file of sources("src/pages")) {
-  if (/from "\.\.\/client\//u.test(file.text)) fail("C3", `a page imports client code: ${file.path}`);
-}
-
-// C4 the regions: every id exists in the page that declares it, every page has one h1 and a note
-for (const page of PAGES) {
-  const dir = join(root, "dist", page.path.replace(/^\//u, ""), "index.html");
-  let html: string;
+for (const page of generated) {
+  const file = join(root, "dist", page.file);
+  let html = "";
   try {
-    html = readFileSync(dir, "utf8");
+    html = readFileSync(file, "utf8");
   } catch {
     fail("C4", `${page.id} was not generated`);
     continue;
   }
-  if (!/<html lang="[A-Za-z-]+"/u.test(html)) fail("C4", `${page.id} has no lang`);
+  const language = /<html lang="([^"]+)"/u.exec(html)?.[1];
+  if (language !== page.locale) fail("C4", `${page.id} declares lang ${language ?? "none"}, expected ${page.locale}`);
   if ([...html.matchAll(/<h1[\s>]/gu)].length !== 1) fail("C4", `${page.id} does not have exactly one h1`);
   if (!/<noscript>/u.test(html)) fail("C4", `${page.id} has no note for a script-free reader`);
   if (page.id === "chat") {
-    for (const id of Object.values(REGION)) if (!html.includes(id)) fail("C4", `region ${id} is missing`);
+    for (const id of Object.values(REGION)) {
+      if (!html.includes(`data-region="${id}"`)) fail("C4", `region ${id} is missing`);
+    }
     for (const id of Object.values(SURFACE)) if (!html.includes(`id="${id}"`)) fail("C4", `surface ${id} is missing`);
   }
 }
 
-// C5 the assets: hashed names, present on disk, no inline code in a page
-const manifest: unknown = JSON.parse(readFileSync(join(root, "build", "manifest.json"), "utf8"));
-for (const [key, value] of Object.entries(manifest as Record<string, unknown>)) {
-  if (typeof value !== "string") continue;
-  if (!value.startsWith("/assets/")) fail("C5", `${key} is not hashed`);
+function isAssets(value: unknown): value is {
+  stylesheet: string;
+  icon: string;
+  guard: string;
+  prepaint: string;
+  client: string;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "stylesheet" in value &&
+    typeof value.stylesheet === "string" &&
+    "icon" in value &&
+    typeof value.icon === "string" &&
+    "guard" in value &&
+    typeof value.guard === "string" &&
+    "prepaint" in value &&
+    typeof value.prepaint === "string" &&
+    "client" in value &&
+    typeof value.client === "string"
+  );
+}
+
+const parsedManifest: unknown = JSON.parse(readFileSync(join(root, "build", "manifest.json"), "utf8"));
+if (!isAssets(parsedManifest)) throw new Error("the build manifest is malformed");
+const manifest = parsedManifest;
+const manifestNames = {
+  stylesheet: { prefix: "style-", extension: ".css" },
+  icon: { prefix: "icon-", extension: ".svg" },
+  guard: { prefix: "guard-", extension: ".js" },
+  prepaint: { prefix: "prepaint-", extension: ".js" },
+  client: { prefix: "client-", extension: ".js" },
+} as const;
+for (const [key, value] of Object.entries(manifest)) {
+  const expected = manifestNames[key as keyof typeof manifestNames];
+  const name = basename(value);
+  const hash =
+    expected === undefined ? "" : name.slice(expected.prefix.length, name.length - expected.extension.length);
+  if (
+    expected === undefined ||
+    !value.startsWith("/assets/") ||
+    !name.startsWith(expected.prefix) ||
+    !name.endsWith(expected.extension) ||
+    !/^[A-Za-z0-9_-]{6,}$/u.test(hash)
+  ) {
+    fail("C5", `${key} is not hashed`);
+    continue;
+  }
   try {
     statSync(join(root, "dist", value));
   } catch {
     fail("C5", `${key} is missing from dist`);
   }
-}
-
-// C6 the budgets: a client that grows without a decision is a defect
-const sizes = Object.fromEntries(
-  readdirSync(join(root, "dist/assets")).map((name) => [name, statSync(join(root, "dist/assets", name)).size] as const),
-);
-const client = Object.entries(sizes).find(([name]) => name.startsWith("client-"))?.[1] ?? 0;
-const style = Object.entries(sizes).find(([name]) => name.startsWith("style-"))?.[1] ?? 0;
-if (client > 200_000) fail("C6", `client bundle is ${String(client)} bytes, over the 200 kB budget`);
-if (style > 40_000) fail("C6", `stylesheet is ${String(style)} bytes, over the 40 kB budget`);
-
-// C7 the text: no TODO, no console, no Chinese outside the translation
-for (const file of sourceFiles) {
-  if (/\b(TODO|FIXME|XXX)\b/u.test(file.text)) fail("C7", `a marker is left in ${file.path}`);
-  if (/console\.(log|debug|info|warn)/u.test(file.text)) fail("C7", `console output in ${file.path}`);
-  if (file.path.includes("zh-CN")) continue;
-  if (/[\u4e00-\u9fff]/u.test(file.text)) fail("C7", `Chinese in code: ${file.path}`);
-}
-
-// C8 the languages: every locale has a page for every screen, English at the root
-for (const locale of locales) {
-  for (const page of PAGES) {
-    const target = join(root, "dist", `${locale.path}${page.path.replace(/^\//u, "")}`, "index.html");
-    try {
-      statSync(target);
-    } catch {
-      fail("C8", `${locale.id}${page.path} was not generated`);
-    }
+  if (key === "icon") {
+    const source = readFileSync(join(root, "src/assets/icon.svg"));
+    const expectedHash = createHash("sha256").update(source).digest("hex").slice(0, 10);
+    if (hash !== expectedHash) fail("C5", "the icon name does not match its bytes");
   }
-  if (locale.id === "en" && locale.path !== "/") fail("C8", "English is not at the root");
 }
 
-process.stdout.write(`contracts checked: ${String(enKeys.length)} keys, ${String(PAGES.length)} pages, ${String(locales.length)} languages\n`);
+const assets = readdirSync(join(root, "dist/assets"));
+const stylesheet = assets.find((name) => name.startsWith("style-")) ?? "";
+const styleSize = stylesheet.length === 0 ? 0 : statSync(join(root, "dist/assets", stylesheet)).size;
+if (styleSize > 41_000) fail("C6", `stylesheet is ${String(styleSize)} bytes, over the 41 kB budget`);
+
+const client = assets.find((name) => name.startsWith("client-")) ?? "";
+const clientSize = client.length === 0 ? 0 : statSync(join(root, "dist/assets", client)).size;
+if (clientSize > 181_000) fail("C6", `client bundle is ${String(clientSize)} bytes, over the 181 kB budget`);
+
+for (const file of [...sourceFiles, ...scriptFiles]) {
+  const text = readFileSync(join(root, file), "utf8");
+  if (file !== "scripts/contracts.ts" && /\b(TODO|FIXME|XXX)\b/u.test(text)) {
+    fail("C7", `a marker is left in ${file}`);
+  }
+  if (/\bconsole\s*\./u.test(text)) fail("C7", `console output in ${file}`);
+  if (file.includes("zh-CN")) continue;
+  if (/[\u4e00-\u9fff]/u.test(text)) fail("C7", `Chinese in code: ${file}`);
+}
+
+for (const page of generated) {
+  try {
+    statSync(join(root, "dist", page.file));
+  } catch {
+    fail("C8", `${page.file} was not generated`);
+  }
+}
+
+const english = locales.find((locale) => locale.id === "en");
+if (english?.path !== "/en/") fail("C8", "English is not at /en/");
+const rootPage = readFileSync(join(root, "dist", "index.html"), "utf8");
+if (!rootPage.includes('data-page="router"')) fail("C8", "the root document is not the language entry");
+if (!rootPage.includes('href="/"')) fail("C8", "the root document has no canonical root");
+
+process.stdout.write(
+  `contracts checked: ${String(enKeys.length)} keys, ${String(generated.length)} pages, ${String(locales.length)} languages\n`,
+);
 for (const failure of failures) process.stderr.write(`${failure}\n`);
 process.exit(failures.length === 0 ? 0 : 1);

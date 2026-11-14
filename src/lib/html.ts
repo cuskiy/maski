@@ -1,11 +1,3 @@
-const escapes: Readonly<Record<string, string>> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
 export class Html {
   readonly value: string;
 
@@ -14,35 +6,37 @@ export class Html {
   }
 }
 
-/** The only way trusted markup bypasses escaping. */
-export function raw(value: string): Html {
-  return new Html(value);
-}
+const ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
 
-function escape(text: string): string {
-  return text.replace(/[&<>"']/gu, (character) => escapes[character] ?? character);
+function escape(value: string): string {
+  return value.replace(/[&<>"']/gu, (character) => ESCAPES[character] ?? character);
 }
 
 function render(value: unknown): string {
+  if (value === null || value === undefined || value === false) return "";
   if (value instanceof Html) return value.value;
   if (Array.isArray(value)) return value.map(render).join("");
-  if (value === undefined || value === null || value === false) return "";
   if (typeof value === "string") return escape(value);
   if (typeof value === "number") return String(value);
-  throw new TypeError(`cannot render ${typeof value} as markup`);
+  throw new TypeError("a template value must be text, a number, an Html fragment or an array");
 }
 
-export function html(strings: TemplateStringsArray, ...values: readonly unknown[]): Html {
-  let out = strings[0] ?? "";
-  for (const [index, value] of values.entries()) out += render(value) + (strings[index + 1] ?? "");
-  return new Html(out);
-}
-
-export function attrs(pairs: Record<string, string | number | boolean | null | undefined>): Html {
-  const parts: string[] = [];
-  for (const [name, value] of Object.entries(pairs)) {
-    if (value === null || value === undefined || value === false) continue;
-    parts.push(value === true ? name : `${name}="${escape(String(value))}"`);
+/** Markup is escaped unless it was built by this module; user text never becomes raw HTML. */
+export function html(strings: TemplateStringsArray, ...values: unknown[]): Html {
+  let output = strings[0] ?? "";
+  for (const [index, value] of values.entries()) {
+    output += render(value) + (strings[index + 1] ?? "");
   }
-  return raw(parts.length > 0 ? ` ${parts.join(" ")}` : "");
+  return new Html(output);
+}
+
+/** Only for strings this project controls: CSP headers, SVG icons, trusted attributes. */
+export function raw(value: string): Html {
+  return new Html(value);
 }

@@ -1,57 +1,93 @@
-import type { Message, Room, Session } from "../core/types.ts";
+import type { ChatState } from "../core/types.ts";
 
-export interface State {
-  phase: "boot" | "signedOut" | "gated" | "ready";
-  session: Session | null;
-  rooms: Room[];
-  roomId: string | null;
-  messages: Message[];
-  hasOlder: boolean;
-  connection: "connecting" | "online" | "offline" | "error";
+export type UiKey = keyof ChatState;
+
+export interface Store {
+  snapshot(): ChatState;
+  read<K extends UiKey>(key: K): ChatState[K];
+  write<K extends UiKey>(key: K, value: ChatState[K]): void;
+  batch(mutate: () => void): void;
+  watch(keys: readonly UiKey[], notify: (changed: ReadonlySet<UiKey>) => void): () => void;
+  watchOne<K extends UiKey>(key: K, notify: (value: ChatState[K], previous: ChatState[K]) => void): () => void;
 }
 
-const state: State = {
-  phase: "boot",
-  session: null,
-  rooms: [],
-  roomId: null,
-  messages: [],
-  hasOlder: false,
-  connection: "connecting",
-};
-
-type Listener = () => void;
-
-const listeners = new Map<keyof State, Set<Listener>>();
-
-export function get(): State {
-  return state;
+interface Watcher {
+  readonly keys: ReadonlySet<UiKey>;
+  readonly notify: (changed: ReadonlySet<UiKey>) => void;
 }
 
-/** A key that did not change does not wake its readers. */
-export function set(patch: Partial<State>): void {
-  let touched = false;
-  for (const [key, value] of Object.entries(patch) as Array<[keyof State, State[keyof State]]>) {
-    if (Object.is(state[key], value)) continue;
-    (state[key] as unknown) = value;
-    touched = true;
-    for (const listener of listeners.get(key) ?? []) listener();
+export function createStore(initial: ChatState): Store {
+  let state = initial;
+  let batching = false;
+  let flushing = false;
+  const pending = new Set<UiKey>();
+  const watchers = new Set<Watcher>();
+
+  function flush(): void {
+    if (flushing) return;
+    flushing = true;
+    try {
+      while (pending.size > 0) {
+        const changed = new Set(pending);
+        pending.clear();
+        for (const watcher of watchers) {
+          const hit = new Set<UiKey>();
+          for (const key of changed) if (watcher.keys.has(key)) hit.add(key);
+          if (hit.size > 0) watcher.notify(hit);
+        }
+      }
+    } finally {
+      flushing = false;
+    }
   }
-  if (!touched) return;
-}
 
-export function subscribe(keys: readonly (keyof State)[], listener: Listener): () => void {
-  for (const key of keys) {
-    const bucket = listeners.get(key) ?? new Set<Listener>();
-    bucket.add(listener);
-    listeners.set(key, bucket);
+  function write<K extends UiKey>(key: K, value: ChatState[K]): void {
+    if (Object.is(state[key], value)) return;
+    state = { ...state, [key]: value };
+    pending.add(key);
+    if (!batching) flush();
   }
-  return () => {
-    for (const key of keys) listeners.get(key)?.delete(listener);
+
+  return {
+    snapshot: () => state,
+    read: (key) => state[key],
+    write,
+    batch: (mutate) => {
+      if (batching) {
+        mutate();
+        return;
+      }
+      batching = true;
+      try {
+        mutate();
+      } finally {
+        batching = false;
+        flush();
+      }
+    },
+    watch: (keys, notify) => {
+      const watcher: Watcher = { keys: new Set<UiKey>(keys), notify };
+      watchers.add(watcher);
+      return () => {
+        watchers.delete(watcher);
+      };
+    },
+    watchOne: (key, notify) => {
+      let previous = state[key];
+      const wrapped: Watcher = {
+        keys: new Set<UiKey>([key]),
+        notify: () => {
+          const next = state[key];
+          if (Object.is(previous, next)) return;
+          const old = previous;
+          previous = next;
+          notify(next, old);
+        },
+      };
+      watchers.add(wrapped);
+      return () => {
+        watchers.delete(wrapped);
+      };
+    },
   };
-}
-
-/** One place decides the phase: no session, keys not ready, or ready. */
-export function applySession(session: Session | null, keys: { ready: boolean } | null): void {
-  set({ session, phase: session === null ? "signedOut" : keys?.ready === true ? "ready" : "gated" });
 }

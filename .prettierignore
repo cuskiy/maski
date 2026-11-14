@@ -1,0 +1,9 @@
+build/
+dist/
+past/
+node_modules/
+.direnv/
+package-lock.json
+flake.lock
+AGENTS.md
+features.md

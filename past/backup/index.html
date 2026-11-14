@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)">
+    <meta name="description" content="A fast, local-first Matrix client">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; connect-src *">
+    <title>maski</title>
+    <link rel="canonical" href="https://maski.example/">
+    <link rel="alternate" hreflang="en" href="https://maski.example/">
+    <link rel="alternate" hreflang="zh-CN" href="https://maski.example/zh-CN/">
+    <link rel="alternate" hreflang="x-default" href="https://maski.example/">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/src/styles/style.css">
+    <script type="module" src="/src/app/main.ts"></script>
+</head>
+<body>
+    <div id="app" data-locale="en">
+        <div class="boot-screen" aria-busy="true" aria-label="Loading maski…">
+            <p class="brand">maski</p>
+            <p class="boot-text">Loading maski…</p>
+            <span class="spinner" aria-hidden="true"></span>
+        </div>
+    </div>
+    <noscript>
+        <div class="nojs">
+            <div class="nojs-card">
+                <p class="brand">maski</p>
+                <h1>JavaScript is required</h1>
+                <p>maski needs JavaScript to connect to Matrix and decrypt messages locally.</p>
+                <p>Enable JavaScript, then reload this page.</p>
+                <a href="/zh-CN/">用中文阅读此页面</a>
+            </div>
+        </div>
+    </noscript>
+</body>
+</html>

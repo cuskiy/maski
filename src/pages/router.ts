@@ -2,18 +2,24 @@ import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
-export function routerView({ locale }: PageContext): PageView {
+export function routerView({ locale, localePath, alternates }: PageContext): PageView {
   const c = locale.catalog;
   return {
-    title: `${t(c, "app.name")} · ${t(c, "app.tagline")}`,
+    title: t(c, "app.name"),
     body: html`<main class="router">
-  <h1 class="router-mark">${t(c, "app.name")}</h1>
-  <span class="router-spinner" aria-hidden="true"></span>
-  <p class="visually-hidden" role="status">${t(c, "router.opening")}</p>
-  <noscript>
-    <p class="note">${t(c, "noscript.router")}</p>
-    <p class="note"><a class="link" href="./chat/">${t(c, "router.open")}</a></p>
-  </noscript>
-</main>`,
+      <h1 class="router-mark">${t(c, "app.name")}</h1>
+      <span class="router-spinner" aria-hidden="true"></span>
+      <p class="visually-hidden" role="status">${t(c, "router.opening")}</p>
+      <noscript>
+        <p class="note">${t(c, "noscript.router")}</p>
+        <nav class="auth-links" aria-label="${t(c, "router.languages")}">
+          ${alternates.map(
+            (alternate) =>
+              html`<a class="link" href="${alternate.href}">${t(c, alternate.lang === "zh-CN" ? "language.zh" : "language.en")}</a>`,
+          )}
+        </nav>
+        <a class="link" href="${localePath}server/">${t(c, "router.open")}</a>
+      </noscript>
+    </main>`,
   };
 }

@@ -1,205 +1,60 @@
-import type { Keys, Room, Session, Window } from "../core/types.ts";
-import type { Event } from "../protocol/messages.ts";
-import { locales } from "../catalogs/index.ts";
-import { useCatalog, t } from "../i18n.ts";
-import { el } from "../ui.ts";
-import { readAccount } from "./account.ts";
-import { copyText } from "./clipboard.ts";
-import { openMenu } from "./menu.ts";
-import { Composer } from "./composer.ts";
-import { Picker } from "./picker.ts";
-import { mountSettings } from "./settings.ts";
-import { Nav } from "./nav.ts";
-import { watchRoute } from "./router.ts";
-import { applySession, get, set, subscribe } from "./store.ts";
-import { Timeline } from "./timeline.ts";
-import { WorkerClient } from "./worker.ts";
+import type { Catalog } from "../lib/catalog.ts";
+import type { ChatState, SectionId } from "../core/types.ts";
+import { emptyChatState } from "../core/state.ts";
+import { mockChatState } from "../core/mock.ts";
+import { createStore } from "./store.ts";
+import { MockSource } from "./mockSource.ts";
+import { createActions, wireSources } from "./actions.ts";
+import { Composer } from "./regions/composer.ts";
+import { mountHeader } from "./regions/header.ts";
+import { mountNavigation } from "./regions/navigation.ts";
+import { mountTimeline } from "./regions/timeline.ts";
+import { wireSurfaces } from "./surfaces.ts";
+import { mockSession, type LocaleId } from "./session.ts";
+import * as prefs from "./prefs.ts";
 
-/** The chat page: start the worker, follow the hash, and let each region draw itself. */
-export function startChat(): void {
-  const locale = locales.find((entry) => entry.id === document.documentElement.lang) ?? locales[0];
-  if (locale) useCatalog(locale.catalog);
-
-  const shell = document.querySelector<HTMLElement>(".shell");
-  const timelineRoot = document.querySelector<HTMLElement>(".timeline-wrap");
-  const composerRoot = document.querySelector<HTMLElement>(".composer");
-  const navRoot = document.querySelector<HTMLElement>(".nav-sections");
-  const header = document.querySelector<HTMLElement>(".room-header");
-  if (!shell || !timelineRoot || !composerRoot || !navRoot || !header) return;
-
-  const menu = header.querySelector<HTMLButtonElement>(".room-menu");
-  menu?.addEventListener("click", () => {
-    const roomId = get().roomId;
-    if (roomId === null) return;
-    const box = menu.getBoundingClientRect();
-    openMenu(
-      [
-        {
-          label: t("action.copyLink"),
-          run: () => copyText(`${location.origin}${location.pathname}#/room/${encodeURIComponent(roomId)}`, t("action.copyLink")),
-        },
-      ],
-      box.left,
-      box.bottom,
-    );
-  });
-
-  const worker = new WorkerClient();
-  new Nav(navRoot, worker);
-  const composer = new Composer(composerRoot, worker);
-  const emojiSurface = document.querySelector<HTMLElement>('#surface-emoji');
-  if (!emojiSurface) return;
-  const picker = new Picker(emojiSurface, worker, (text) => composer.insert(text), () => get().roomId);
-  const timeline = new Timeline(timelineRoot, worker, composer, picker);
-  const settingsBody = document.querySelector<HTMLElement>('[data-region="settings-body"]');
-  if (settingsBody) mountSettings(settingsBody, worker);
-
-  const avatars = new Map<string, string>();
-
-  const draw = (): void => {
-    const state = get();
-    const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
-    shell.dataset["room"] = room === null ? "false" : "true";
-    drawHeader(header, room, worker, avatars);
-    drawNotice(timelineRoot, state.phase, timeline);
-    const newest = state.messages.at(-1) ?? null;
-    if (state.phase === "ready" && room !== null && newest !== null && newest.roomId === state.roomId) {
-      markRead(state.roomId, newest.id);
+export function initChat(c: Catalog, locale: LocaleId, review = false): void {
+  const account = mockSession().account ?? "local";
+  const base = review ? mockChatState() : emptyChatState();
+  const storedSections = prefs.readSections(account);
+  const sections = { ...base.sections };
+  if (storedSections !== null) {
+    for (const [id, open] of Object.entries(storedSections)) {
+      if (open !== undefined) sections[id as SectionId] = { open };
     }
+  }
+  const initial: ChatState = {
+    ...base,
+    sections,
+    openSpaces: prefs.readSpaces(account) ?? base.openSpaces,
+    notifications: prefs.readNotifications(account) ?? base.notifications,
   };
 
-  subscribe(["phase", "rooms", "roomId", "messages"], draw);
+  const store = createStore(initial);
+  const source = new MockSource(review);
+  const actions = createActions({ store, source, c, account });
+  const unwire = wireSources(store, source);
 
-  const account = readAccount();
-  // The router only lands here when the last check opened the gate; the stored rooms can paint
-  // before the worker finishes crypto, and the start reply corrects the gate if the keys are gone.
-  if (account?.keysReady === true) set({ phase: "ready" });
-  const started = worker.send<{ session: Session | null; keys: Keys | null }>({ type: "start", accountHash: account?.hash ?? null, wasm: worker.wasm() });
+  document.querySelector(".app")?.setAttribute("data-room", "false");
+  source.start();
+  if (initial.roomId !== null) source.open(initial.roomId);
 
-  const openWindow = async (roomId: string): Promise<void> => {
-    try {
-      await started;
-      const window = await worker.send<Window>({ type: "open", roomId });
-      if (window.roomId === get().roomId) set({ messages: window.messages, hasOlder: window.hasOlder });
-    } catch {
-      // the room may be gone; the next sync repairs the list
-    }
+  const composer = new Composer({ store, actions, c, account });
+  mountNavigation({ store, actions, c });
+  mountHeader({ store, c });
+  mountTimeline({ store, actions, c, locale });
+  wireSurfaces({ store, actions, c, composer });
+
+  const baseTitle = document.title;
+  const updateTitle = (): void => {
+    const state = store.snapshot();
+    const total = state.rooms.reduce((sum, room) => sum + room.unread, 0);
+    document.title = state.notifications.titleTotal && total > 0 ? `(${String(total)}) ${baseTitle}` : baseTitle;
   };
+  store.watch(["rooms", "notifications"], updateTitle);
+  updateTitle();
 
-  worker.onEvent((event: Event) => {
-    if (event.event === "rooms") set({ rooms: event.rooms });
-    if (event.event === "connection") set({ connection: event.state });
-    if (event.event === "window" && event.window.roomId === get().roomId) {
-      set({ messages: event.window.messages, hasOlder: event.window.hasOlder });
-    }
-    if (event.event === "outbox") {
-      const roomId = get().roomId;
-      if (roomId !== null) void openWindow(roomId);
-    }
-    if (event.event === "ready") applySession(event.session, event.keys);
+  window.addEventListener("beforeunload", () => {
+    unwire();
   });
-
-  let marked = "";
-  let pending = "";
-
-  const markRead = (roomId: string | null, eventId: string): void => {
-    if (roomId === null || !eventId.startsWith("$") || !timeline.atBottom()) return;
-    const key = `${roomId}:${eventId}`;
-    if (marked === key || pending === key) return;
-    pending = key;
-    void worker
-      .send({ type: "markRead", roomId, eventId })
-      .catch(() => undefined)
-      .finally(() => {
-        marked = key;
-        if (pending === key) pending = "";
-      });
-  };
-
-  watchRoute((roomId) => {
-    if (roomId === null) {
-      set({ messages: [], hasOlder: false });
-      return;
-    }
-    void openWindow(roomId);
-  });
-
-  started.then((result) => applySession(result.session, result.keys)).catch(() => applySession(null, null));
-
-  draw();
-  void timeline;
-}
-
-function drawHeader(header: HTMLElement, room: Room | null, worker: WorkerClient, avatars: Map<string, string>): void {
-  const text = header.querySelector<HTMLElement>(".room-head-text");
-  const avatar = header.querySelector<HTMLElement>(".room-header-avatar");
-  const menu = header.querySelector<HTMLElement>(".room-menu");
-  if (menu) menu.hidden = room === null;
-  if (avatar) {
-    avatar.hidden = room === null;
-    if (room !== null) setAvatar(avatar, room, worker, avatars);
-  }
-  if (!text) return;
-  if (room === null) {
-    text.replaceChildren();
-    return;
-  }
-  const title = text.querySelector<HTMLElement>(".room-title");
-  const topic = text.querySelector<HTMLElement>(".room-topic");
-  if (title && topic) {
-    if (title.textContent !== room.name) title.textContent = room.name;
-    if (topic.textContent !== room.topic) topic.textContent = room.topic;
-    return;
-  }
-  text.replaceChildren(
-    el("h2", { class: "room-title", text: room.name }),
-    el("p", { class: "room-topic", text: room.topic }),
-  );
-}
-
-function setAvatar(node: HTMLElement, room: Room, worker: WorkerClient, avatars: Map<string, string>): void {
-  const initial = room.name.slice(0, 1);
-  const url = room.avatar;
-  const key = url ?? "";
-  if (node.dataset["avatar"] === key) {
-    if (url === null && node.textContent !== initial) node.textContent = initial;
-    return;
-  }
-  node.dataset["avatar"] = key;
-  node.textContent = initial;
-  if (url === null) return;
-  const cached = avatars.get(url);
-  if (cached !== undefined) {
-    node.replaceChildren(el("img", { class: "room-avatar-image", attrs: { src: cached, alt: room.name } }));
-    return;
-  }
-  void worker
-    .send<{ blob: Blob }>({
-      type: "media",
-      media: { url, mime: "image/png", size: 0, width: null, height: null, name: "", file: null },
-      size: 64,
-    })
-    .then(({ blob }) => {
-      const object = URL.createObjectURL(blob);
-      avatars.set(url, object);
-      if (node.dataset["avatar"] === url) {
-        node.replaceChildren(el("img", { class: "room-avatar-image", attrs: { src: object, alt: room.name } }));
-      }
-    })
-    .catch(() => undefined);
-}
-
-function drawNotice(root: HTMLElement, phase: string, timeline: Timeline): void {
-  const existing = root.querySelector<HTMLElement>(".timeline-note");
-  if (phase === "ready" || phase === "boot") {
-    existing?.remove();
-    return;
-  }
-  const text = phase === "gated" ? t("chat.keyMissing") : t("chat.notSignedIn");
-  if (existing) {
-    existing.textContent = text;
-    return;
-  }
-  root.prepend(el("p", { class: "note timeline-note", text }));
-  timeline.scrollToBottom();
 }

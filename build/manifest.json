@@ -1,7 +1,7 @@
 {
-  "stylesheet": "/assets/style-P25FWSAL.css",
-  "script": "/assets/client-DULXWI7C.js",
-  "worker": "/assets/worker-TNXHB7RX.js",
-  "wasm": "/assets/crypto-c6b8137965.wasm",
-  "icon": "/assets/icon-6bf2e11ac3.svg"
+  "stylesheet": "/assets/style-N3GG5ITT.css",
+  "icon": "/assets/icon-d5485c628e.svg",
+  "guard": "/assets/guard-5KWALZBD.js",
+  "prepaint": "/assets/prepaint-A4T5MRDP.js",
+  "client": "/assets/client-SLJT3UTC.js"
 }

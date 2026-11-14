@@ -5,14 +5,7 @@
     "suspicious": "error",
     "perf": "error"
   },
-  "plugins": [
-    "eslint",
-    "typescript",
-    "unicorn",
-    "oxc",
-    "import",
-    "promise"
-  ],
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
   "rules": {
     "require-await": "off",
     "promise/always-return": "off",
@@ -27,11 +20,5 @@
     "eslint/no-new": "off",
     "typescript/no-unnecessary-type-assertion": "off"
   },
-  "ignorePatterns": [
-    "dist",
-    "backup",
-    "blog",
-    "git",
-    "node_modules"
-  ]
+  "ignorePatterns": ["dist", "backup", "blog", "git", "node_modules"]
 }

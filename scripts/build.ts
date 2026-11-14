@@ -1,102 +1,97 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { context, type BuildResult } from "esbuild";
+import { build } from "esbuild";
 import { minify } from "html-minifier-terser";
 import type { Assets } from "../src/lib/assets.ts";
 import { renderPages } from "./pages.ts";
 
-export const root = fileURLToPath(new URL("..", import.meta.url));
+export const minifyOptions = { collapseWhitespace: true, removeComments: true } as const;
+
+const root = fileURLToPath(new URL("..", import.meta.url));
 const dist = join(root, "dist");
 const buildDir = join(root, "build");
 
-const watch = process.argv.includes("--watch");
-
-function assetsOf(result: BuildResult): Assets {
-  let stylesheet = "";
-  let script = "";
-  let worker = "";
-  for (const [file, entry] of Object.entries(result.metafile?.outputs ?? {})) {
-    const name = file.replace(/^dist\//u, "/");
-    if (entry.entryPoint === "src/styles/style.css") stylesheet = name;
-    if (entry.entryPoint === "src/client/main.ts") script = name;
-    if (entry.entryPoint === "src/worker/worker.ts") worker = name;
-  }
-  if (!stylesheet || !script || !worker) throw new Error("the bundle did not produce a stylesheet, a script and a worker");
-  return { stylesheet, script, worker, wasm: "", icon: "" };
-}
-
-/** A file the page needs and no module imports: hashed here, named in the manifest. */
-async function emitPageAsset(name: string, source: string): Promise<string> {
-  const bytes = await readFile(join(root, "src", "assets", source));
-  const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 10);
-  const extension = source.slice(source.lastIndexOf("."));
-  const target = `/assets/${name}-${hash}${extension}`;
+export async function buildSite(): Promise<void> {
+  await rm(dist, { recursive: true, force: true });
+  await rm(buildDir, { recursive: true, force: true });
   await mkdir(join(dist, "assets"), { recursive: true });
-  await writeFile(join(dist, target), bytes);
-  return target;
-}
+  await mkdir(buildDir, { recursive: true });
 
-/** The crypto wasm is a file esbuild leaves alone, so the build hashes and copies it. */
-async function emitWasm(): Promise<string> {
-  const source = join(root, "node_modules", "@matrix-org", "matrix-sdk-crypto-wasm", "pkg", "matrix_sdk_crypto_wasm_bg.wasm");
-  const bytes = await readFile(source);
-  const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 10);
-  const name = `/assets/crypto-${hash}.wasm`;
-  await mkdir(join(dist, "assets"), { recursive: true });
-  await writeFile(join(dist, name), bytes);
-  return name;
-}
+  const result = await build({
+    entryPoints: [join(root, "src/styles/style.css")],
+    bundle: true,
+    minify: true,
+    outdir: join(dist, "assets"),
+    entryNames: "style-[hash]",
+    assetNames: "[name]-[hash]",
+    loader: { ".svg": "file" },
+    metafile: true,
+    logLevel: "silent",
+  });
 
-/** Every page is written from its function, minified, and compared by the audit afterwards. */
-async function emitPages(assets: Assets): Promise<number> {
+  const cssOutput = Object.keys(result.metafile.outputs).find((path) => path.endsWith(".css"));
+  if (cssOutput === undefined) throw new Error("the stylesheet was not emitted");
+  const stylesheet = `/assets/${basename(cssOutput)}`;
+
+  const guardResult = await build({
+    entryPoints: [join(root, "src/client/guard.ts")],
+    bundle: true,
+    minify: true,
+    format: "iife",
+    outdir: join(dist, "assets"),
+    entryNames: "guard-[hash]",
+    metafile: true,
+    logLevel: "silent",
+  });
+  const guardOutput = Object.keys(guardResult.metafile.outputs).find((path) => path.endsWith(".js"));
+  if (guardOutput === undefined) throw new Error("the guard bundle was not emitted");
+  const guard = `/assets/${basename(guardOutput)}`;
+
+  const prepaintResult = await build({
+    entryPoints: [join(root, "src/client/prepaint.ts")],
+    bundle: true,
+    minify: true,
+    format: "iife",
+    outdir: join(dist, "assets"),
+    entryNames: "prepaint-[hash]",
+    metafile: true,
+    logLevel: "silent",
+  });
+  const prepaintOutput = Object.keys(prepaintResult.metafile.outputs).find((path) => path.endsWith(".js"));
+  if (prepaintOutput === undefined) throw new Error("the prepaint bundle was not emitted");
+  const prepaint = `/assets/${basename(prepaintOutput)}`;
+
+  const clientResult = await build({
+    entryPoints: [join(root, "src/client/main.ts")],
+    bundle: true,
+    minify: true,
+    format: "iife",
+    outdir: join(dist, "assets"),
+    entryNames: "client-[hash]",
+    metafile: true,
+    logLevel: "silent",
+  });
+  const clientOutput = Object.keys(clientResult.metafile.outputs).find((path) => path.endsWith(".js"));
+  if (clientOutput === undefined) throw new Error("the client bundle was not emitted");
+  const client = `/assets/${basename(clientOutput)}`;
+
+  const iconSource = await readFile(join(root, "src/assets/icon.svg"));
+  const iconHash = createHash("sha256").update(iconSource).digest("hex").slice(0, 10);
+  const icon = `/assets/icon-${iconHash}.svg`;
+  await writeFile(join(dist, icon), iconSource);
+
+  const assets: Assets = { stylesheet, icon, guard, prepaint, client };
   const pages = renderPages(assets);
   for (const page of pages) {
     const target = join(dist, page.file);
-    await mkdir(join(target, ".."), { recursive: true });
-    await writeFile(target, await minify(page.content, { collapseWhitespace: true, removeComments: true }), "utf8");
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, await minify(page.content, minifyOptions));
   }
-  return pages.length;
+  await writeFile(join(buildDir, "manifest.json"), `${JSON.stringify(assets, null, 2)}\n`);
+
+  process.stdout.write(`built ${String(pages.length)} pages · ${stylesheet} · ${icon}\n`);
 }
 
-async function onBundle(result: BuildResult): Promise<void> {
-  const assets = { ...assetsOf(result), wasm: await emitWasm(), icon: await emitPageAsset("icon", "icon.svg") };
-  await cp(join(root, "static"), dist, { recursive: true });
-  await mkdir(buildDir, { recursive: true });
-  await writeFile(join(buildDir, "manifest.json"), JSON.stringify(assets, null, 2), "utf8");
-  const count = await emitPages(assets);
-  process.stdout.write(`built ${String(count)} pages · ${assets.script} · ${assets.worker} · ${assets.wasm}\n`);
-}
-
-const bundler = await context({
-  absWorkingDir: root,
-  entryPoints: { client: "src/client/main.ts", worker: "src/worker/worker.ts", style: "src/styles/style.css" },
-  outdir: dist,
-  entryNames: "assets/[name]-[hash]",
-  assetNames: "assets/[name]-[hash]",
-  bundle: true,
-  format: "esm",
-  target: ["chrome120", "firefox128", "safari18"],
-  minify: true,
-  metafile: true,
-  logLevel: "warning",
-  plugins: [
-    {
-      name: "pages",
-      setup(build) {
-        build.onEnd((result) => (result.errors.length === 0 ? onBundle(result) : Promise.resolve()));
-      },
-    },
-  ],
-});
-
-await rm(dist, { recursive: true, force: true });
-
-if (watch) {
-  await bundler.watch();
-  process.stdout.write("watching\n");
-} else {
-  await bundler.rebuild();
-  await bundler.dispose();
-}
+if (import.meta.main) await buildSite();

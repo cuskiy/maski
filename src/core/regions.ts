@@ -1,0 +1,33 @@
+export const REGION = {
+  shell: "shell",
+  nav: "nav",
+  menu: "nav-menu",
+  sections: "nav-sections",
+  content: "content",
+  header: "room-header",
+  timeline: "timeline",
+  timelineState: "timeline-state",
+  composer: "composer",
+  tray: "composer-tray",
+  composerReply: "composer-reply",
+} as const;
+
+export const SURFACE = {
+  navMenu: "surface-nav-menu",
+  search: "surface-search",
+  newMessage: "surface-new-message",
+  invite: "surface-invite",
+  join: "surface-join",
+  create: "surface-create",
+  settings: "surface-settings",
+  roomSettings: "surface-room-settings",
+  roomMenu: "surface-room-menu",
+  messageMenu: "surface-message-menu",
+  profile: "surface-profile",
+  attach: "surface-attach",
+  sticker: "surface-sticker",
+  emoji: "surface-emoji",
+  sendMenu: "surface-send-menu",
+  viewer: "surface-viewer",
+  language: "surface-language",
+} as const;
