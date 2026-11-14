@@ -1,13 +1,9 @@
 import * as prefs from "./prefs.ts";
+import * as storage from "./storage.ts";
 
 const page = document.documentElement.dataset["page"] ?? "";
 if (page === "chat" || page === "review") {
-  let account = "local";
-  try {
-    account = localStorage.getItem("maski.account") ?? "local";
-  } catch {
-    // Storage can be unavailable; the shell keeps its default state.
-  }
+  const account = storage.read(storage.STORAGE.account) ?? "local";
   const sections = prefs.readSections(account);
   if (sections !== null) {
     for (const details of document.querySelectorAll<HTMLDetailsElement>("details.section[data-section]")) {

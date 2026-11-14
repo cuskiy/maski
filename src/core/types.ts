@@ -38,7 +38,6 @@ export interface SessionCapabilities {
   readonly verify: boolean;
   readonly recoveryKey: boolean;
   readonly backup: boolean;
-  readonly reset: boolean;
   readonly signOut: boolean;
   readonly signOutOthers: boolean;
 }
@@ -60,6 +59,7 @@ export interface RoomSummary {
   readonly avatar: string | null;
   readonly preview: Preview | null;
   readonly lastTs: number;
+  readonly readReceipt: string | null;
   readonly unread: number;
   readonly highlight: number;
   readonly muted: boolean;
@@ -111,7 +111,7 @@ export interface MessageRow {
   readonly edited: boolean;
   readonly status: MessageStatus;
   readonly error: string | null;
-  readonly system?: boolean;
+  readonly system: boolean;
   readonly encryption: MessageEncryption;
   readonly capabilities: MessageCapabilities;
 }

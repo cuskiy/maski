@@ -1,28 +1,6 @@
-import {
-  localeForPath,
-  localeRoot,
-  mockSession,
-  setLocale,
-  storageAvailable,
-  storedLocale,
-  systemLocale,
-  type MockSession,
-} from "./session.ts";
-
-document.addEventListener(
-  "pointerdown",
-  () => {
-    document.documentElement.dataset["input"] = "pointer";
-  },
-  true,
-);
-document.addEventListener(
-  "keydown",
-  () => {
-    document.documentElement.dataset["input"] = "keyboard";
-  },
-  true,
-);
+import { localeForPath, localeRoot } from "../core/locales.ts";
+import { mockSession, setLocale, storedLocale, systemLocale, type MockSession } from "./session.ts";
+import * as storage from "./storage.ts";
 
 function targetFor(session: MockSession, root: string): string {
   if (session.server === null) return `${root}server/`;
@@ -48,8 +26,7 @@ function run(): void {
 
   if (page === "review") return;
 
-  if (!storageAvailable()) {
-    document.documentElement.dataset.storage = "unavailable";
+  if (!storage.available()) {
     if (document.readyState === "loading")
       document.addEventListener("DOMContentLoaded", showStorageNote, { once: true });
     else showStorageNote();

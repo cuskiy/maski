@@ -1,18 +1,22 @@
 import { t } from "../lib/catalog.ts";
-import type { Catalog } from "../lib/catalog.ts";
+import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
+import type { LocaleId } from "../core/locales.ts";
+import { LOCALE_DEFS, localeRoot } from "../core/locales.ts";
 import { SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
 
-const LOCALES = [
-  { id: "en", key: "language.en" },
-  { id: "zh-CN", key: "language.zh" },
-] as const;
+const LOCALE_KEYS: Readonly<Record<LocaleId, CatalogKey>> = {
+  en: "language.en",
+  "zh-CN": "language.zh",
+};
 
-function target(path: string, locale: string): string {
+const LOCALE_PREFIX = new RegExp(`^/(?:${LOCALE_DEFS.map((entry) => entry.id).join("|")})(?=/|$)`, "u");
+
+function target(path: string, locale: LocaleId): string {
   if (path.startsWith("/review/")) return locale === "en" ? "/review/" : "/review/zh-CN/";
-  if (path === "/") return `/${locale}/`;
-  return path.replace(/^\/(?:en|zh-CN)(?=\/|$)/u, `/${locale}`);
+  if (path === "/") return localeRoot(locale);
+  return path.replace(LOCALE_PREFIX, `/${locale}`);
 }
 
 export function languageMenu(c: Catalog, path: string, current: string): Html {
@@ -24,14 +28,14 @@ export function languageMenu(c: Catalog, path: string, current: string): Html {
   >
     <div class="surface-body">
       <div class="surface-menu">
-        ${LOCALES.map(
+        ${LOCALE_DEFS.map(
           (locale) => html`<a
             class="surface-item"
             href="${target(path, locale.id)}"
             hreflang="${locale.id}"
             ${locale.id === current ? html` aria-current="true"` : html``}
           >
-            ${t(c, locale.key)}
+            ${t(c, LOCALE_KEYS[locale.id])}
           </a>`,
         )}
       </div>
@@ -46,12 +50,11 @@ export function languageTrigger(c: Catalog, kind: "action" | "quiet"): Html {
       class="surface-item"
       type="button"
       popovertarget="${SURFACE.language}"
-      aria-haspopup="menu"
     >
       ${icons.globe}<span>${label}</span>
     </button>`;
   }
-  return html`<button class="button-quiet" type="button" popovertarget="${SURFACE.language}" aria-haspopup="menu">
+  return html`<button class="button-quiet" type="button" popovertarget="${SURFACE.language}">
     ${label}
   </button>`;
 }

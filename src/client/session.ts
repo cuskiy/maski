@@ -1,4 +1,6 @@
-export type LocaleId = "en" | "zh-CN";
+import type { LocaleId } from "../core/locales.ts";
+import { LOCALE_DEFS } from "../core/locales.ts";
+import * as storage from "./storage.ts";
 
 export interface MockSession {
   readonly server: string | null;
@@ -6,49 +8,14 @@ export interface MockSession {
   readonly key: boolean;
 }
 
-const KEYS = {
-  locale: "maski.locale",
-  server: "maski.server",
-  account: "maski.account",
-  key: "maski.key",
-} as const;
-
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    // Storage can be unavailable; the guard reports it instead of redirecting.
-    return null;
-  }
-}
-
-function write(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Storage can be unavailable; the guard reports it instead of redirecting.
-  }
-}
-
-export function storageAvailable(): boolean {
-  try {
-    const key = "maski.storage-check";
-    localStorage.setItem(key, "1");
-    localStorage.removeItem(key);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function storedLocale(): LocaleId | null {
-  const value = read(KEYS.locale);
-  return value === "en" || value === "zh-CN" ? value : null;
+  const value = storage.read(storage.STORAGE.locale);
+  return LOCALE_DEFS.find((entry) => entry.id === value)?.id ?? null;
 }
 
 export function setLocale(locale: LocaleId): void {
-  write(KEYS.locale, locale);
+  if (storedLocale() === locale) return;
+  storage.write(storage.STORAGE.locale, locale);
 }
 
 export function systemLocale(): LocaleId {
@@ -56,38 +23,28 @@ export function systemLocale(): LocaleId {
   return language.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
-export function localeForPath(pathname: string): LocaleId | null {
-  if (pathname.startsWith("/zh-CN/")) return "zh-CN";
-  if (pathname.startsWith("/en/")) return "en";
-  return null;
-}
-
-export function localeRoot(locale: LocaleId): string {
-  return locale === "en" ? "/en/" : "/zh-CN/";
-}
-
 export function mockSession(): MockSession {
   return {
-    server: read(KEYS.server),
-    account: read(KEYS.account),
-    key: read(KEYS.key) === "ready",
+    server: storage.read(storage.STORAGE.server),
+    account: storage.read(storage.STORAGE.account),
+    key: storage.read(storage.STORAGE.key) === "ready",
   };
 }
 
 export function setServer(server: string): void {
-  write(KEYS.server, server);
+  storage.write(storage.STORAGE.server, server);
 }
 
 export function setAccount(account: string): void {
-  write(KEYS.account, account);
+  storage.write(storage.STORAGE.account, account);
 }
 
 export function setKeyReady(): void {
-  write(KEYS.key, "ready");
+  storage.write(storage.STORAGE.key, "ready");
 }
 
 export function clearSession(): void {
-  write(KEYS.server, null);
-  write(KEYS.account, null);
-  write(KEYS.key, null);
+  storage.write(storage.STORAGE.server, null);
+  storage.write(storage.STORAGE.account, null);
+  storage.write(storage.STORAGE.key, null);
 }

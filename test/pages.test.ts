@@ -96,10 +96,11 @@ void test("surfaces have a close control and an accessible title", () => {
   }
 });
 
-void test("chat rows have no ellipsis menu trigger", () => {
+void test("chat rows are context-menu targets without an ellipsis button", () => {
   const chat = pages().find((page) => page.name === "en/chat")?.html ?? "";
   assert.doesNotMatch(chat, /class="(?:message-more|room-more)"/u);
-  assert.match(chat, /aria-haspopup="menu"/u);
+  assert.doesNotMatch(chat, /aria-haspopup="menu"/u);
+  assert.match(chat, /data-region="timeline"/u);
 });
 
 for (const page of pages()) {

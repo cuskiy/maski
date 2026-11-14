@@ -13,10 +13,14 @@ export function composer(state: ChatState, c: Catalog): Html {
     class="composer"
     method="post"
     data-region="${REGION.composer}"
-    data-room="${room === null ? "none" : "open"}"
   >
-    <div class="tray" data-region="${REGION.tray}" aria-label="${t(c, "composer.tray")}" hidden></div>
-    <div class="composer-reply" data-region="${REGION.composerReply}" hidden></div>
+    <div class="tray" data-region="${REGION.tray}" role="group" aria-label="${t(c, "composer.tray")}" hidden></div>
+    <div
+      class="composer-reply"
+      data-region="${REGION.composerReply}"
+      role="group"
+      hidden
+    ></div>
     <div class="composer-bar">
       <button
         class="composer-action"
@@ -58,7 +62,6 @@ export function composer(state: ChatState, c: Catalog): Html {
         type="submit"
         id="composer-send"
         aria-label="${t(c, "composer.send")}"
-        aria-haspopup="menu"
         aria-controls="${SURFACE.sendMenu}"
         ${room === null ? html` disabled` : html``}
       >

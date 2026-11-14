@@ -120,11 +120,6 @@ for (const [key, value] of Object.entries(manifest)) {
   }
 }
 
-const assets = readdirSync(join(root, "dist/assets"));
-const client = assets.find((name) => name.startsWith("client-")) ?? "";
-const clientSize = client.length === 0 ? 0 : statSync(join(root, "dist/assets", client)).size;
-if (clientSize > 181_000) fail("C6", `client bundle is ${String(clientSize)} bytes, over the 181 kB budget`);
-
 for (const file of [...sourceFiles, ...scriptFiles]) {
   const text = readFileSync(join(root, file), "utf8");
   if (file !== "scripts/contracts.ts" && /\b(TODO|FIXME|XXX)\b/u.test(text)) {

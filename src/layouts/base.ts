@@ -34,14 +34,14 @@ export function base(input: BaseInput): Html {
         <title>${input.title}</title>
         <meta name="description" content="${input.description}" />
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#181715" media="(prefers-color-scheme: dark)" />
         <link rel="icon" href="${input.assets.icon}" type="image/svg+xml" />
         <link rel="canonical" href="${input.canonical}" />
         ${alternates}
         <link rel="stylesheet" href="${input.assets.stylesheet}" />
         <script src="${input.assets.guard}"></script>
       </head>
-      <body data-page="${input.page}">
+      <body>
         <p class="note" data-storage-note hidden>${t(input.c, "storage.unavailable")}</p>
         ${input.body} ${languageMenu(input.c, input.canonical, input.lang)}
         <script src="${input.assets.prepaint}"></script>

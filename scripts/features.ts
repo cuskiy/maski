@@ -23,6 +23,8 @@ for (const [id, value] of Object.entries(data.features)) {
 const args = process.argv.slice(2);
 const BCD_ALIASES: Record<string, string> = {
   "crypto.randomUUID": "api.Crypto.randomUUID",
+  "anchor-positioning": "css.properties.anchor-name",
+  "anchor-size": "css.properties.inline-size.anchor-size",
 };
 
 const BCD_COMPAT = "__compat";
@@ -52,9 +54,12 @@ function bcdFeature(query: string): Feature | null {
 }
 
 function find(query: string): Array<[string, Feature]> {
+  const fallback = bcdFeature(query);
+  if ((query === "anchor-positioning" || query === "anchor-size") && fallback !== null) {
+    return [[query, fallback]];
+  }
   const exact = features[query];
   if (exact) return [[query, exact]];
-  const fallback = bcdFeature(query);
   if (fallback !== null) return [[query, fallback]];
   return Object.entries(features).filter(([id, feature]) => {
     const name = feature.name ?? id;

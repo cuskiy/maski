@@ -141,14 +141,14 @@ and the paragraph that owns it.
 | C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | contracts — waits for the worker |
 | C4 | every page has a language, one `h1`, a scriptless note, and the chat page carries its `data-region` regions | page tests and contracts |
 | C5 | every manifest name is hashed and present in the output | audit and contracts |
-| C6 | client bundle budget; stylesheet budget deferred until the UI is complete | contracts |
+| C6 | client and stylesheet budgets deferred until the UI is complete | contracts |
 | C7 | no TODO marker, no console output, no Chinese outside the Chinese catalog | contracts |
 | C8 | every screen exists in every language; English at `/en/`, the root is the language entry | contracts |
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
 | C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
 | C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
 
-Current budgets: 181 kB client bundle. The stylesheet budget is deferred until the UI is complete; C6 enforces only the client budget in this phase. A budget is a decision, not a target.
+Current budgets: the client and stylesheet budgets are deferred until the UI is complete; C6 enforces neither in this phase. A budget is a decision, not a target.
 Raising one is a change to this file with the reason.
 
 ## 1.9 Review, commits, sessions
@@ -448,20 +448,20 @@ The measured evidence is a screenshot at load, a screenshot after the data, and 
 topbar and list boxes between them.
 
 A narrow first load opens on the navigation; selecting a room opens its detail. The generated review page
-starts with `data-room="false"` so the demo matches that entry instead of showing a room on load.
+starts with `data-view="list"` so the demo matches that entry instead of showing a room on load.
 
 ## 3.7 Build, assets, and caching
 
-Three entries — guard, client, stylesheet — bundled by esbuild, minified, content-hashed, with a metafile
-the page generator reads. The worker and wasm entry wait for Matrix. HTML is minified with the same
-options in build and audit. Output is a static directory, committed and audited: the audit regenerates
-every page and fails on a byte of difference.
+Four entries — guard, prepaint, client, stylesheet — bundled by esbuild, minified, content-hashed, with a
+metafile the page generator reads. The worker and wasm entry wait for Matrix. HTML is minified with the same
+options in build and audit. Output is a generated static directory, audited byte-for-byte; `dist/` and
+`build/manifest.json` are ignored and owned by the build.
 
 Assets are one of five things: a module import (hashed by the bundler), a stylesheet `url()` (hashed by
 the bundler), a page asset named in the generator's list and resolved through the manifest, a file the
-client needs by fixed name declared in a `<meta>` tag, or a platform file copied verbatim from `static/`.
+client needs by fixed name declared in a `<meta>` tag, or a platform file copied verbatim.
 Icons that follow `currentColor` are functions returning SVG, not files. The current icon set is one
-coherent 24px, rounded, 1.6-stroke system. The worker never imports an asset. The generator never imports
+coherent 24px, rounded, 1.75-stroke system. The worker never imports an asset. The generator never imports
 a browser module.
 
 The crypto wasm is copied by the build with a hash of its bytes and served as `application/wasm`; the
@@ -474,30 +474,33 @@ revalidate; `skipWaiting` and `clients.claim` keep one version live; registratio
 
 ## 3.8 CSS
 
-Tokens in `:root`: `bg-1` page, `bg-2` right-click menu, `bg-3` bubble/topbar/sidebar/dialog/space/account,
-`bg-4` hover, `bg-5` active; `bg-topbar`, `bg-dialog`, `bg-menu` are their translucent glass versions;
-`text-1/2/3`; `border`; `mark`, `selection`, `focus`, `danger`, `scrim`, `scrollbar`. The only semantic color
-is `--danger` (`rgb(179 38 30)` in light, `rgb(154 99 94)` in dark), reserved for the failed-send mark and
-its background.
+Tokens in `:root`: `--page`; the non-text ink scale `--ink`, `--ink-3`, `--ink-4` for strokes, focus and
+status marks; component paper tokens `--surface`, `--surface-hover`, `--surface-active`, `--bg-modal`,
+`--bg-menu`, `--bg-popup`, `--bg-account`, `--bg-media`, `--bg-time`, `--bg-action`, `--bg-close`,
+`--chrome`, `--nav`; and paired text tokens such as `--surface-text`, `--bg-modal-text`, `--bg-account-text`,
+`--nav-text`, `--topbar-text`, `--timeline-text`, `--bubble-text`, `--composer-text`, `--bg-media-text`,
+`--bg-time-text`, `--bg-action-text` and `--bg-close-text`. `--danger` is the only semantic state color,
+reserved for the failed-send mark, the mention badge and destructive actions.
 
-Surfaces: page uses `bg-1`; `bg-2` is the right-click/popover paper; `bg-3` is the bubble, topbar, sidebar,
-dialog, space list and account card; `bg-4` is hover; `bg-5` is active. The topbar, dialogs and popovers use
-the translucent glass versions of `bg-3`/`bg-3`/`bg-2`. Hover and active are states of their paper, not new
-levels; a selected room uses the active state.
-Section labels are bold. Overlays have no visible header row or close button; the dialog is 24rem wide,
-the SAS 22rem, the floating surface 14rem, the send menu 11rem, and the accessible name is the surface
-title. Context menus fit their content within that cap and use SVG icons for their actions.
+Surfaces: the page uses `--page`; the topbar and navigation share the same translucent `--chrome`/`--nav`
+paper; the dialog uses `--bg-modal`; menus and pickers use `--bg-menu`/`--bg-popup`; the account card,
+media frame, timestamp chip and action/close controls have their own paper. Each paper carries its own
+text pair, so hover and active states keep an ink that belongs to that paper instead of a global gray.
+Section labels are bold. Dialogs have a title and a close control; floating surfaces have no header. The
+dialog is 24rem wide, settings 46rem, the SAS 22rem, the floating surface 14rem, the send menu 11rem, and
+the accessible name is the surface title. Context menus fit their content within that cap and use SVG
+icons for their actions.
 
-The topbar is `bg-topbar` over the timeline at 82% with an 8px blur; the navigation uses `bg-topbar`;
-dialogs use `bg-dialog`; popovers and context menus use `bg-menu`; all overlays use the same 8px blur. The
-topbar overlays the scroll area so the content passes behind it. The dialog backdrop uses the scrim plus a
-6px blur. No shadow, no gradient, no second glass style, no visible border.
+The topbar and navigation use the same 88% glass and 8px blur; dialogs use a 94% paper plus the same blur;
+popovers and context menus use the menu paper; the dialog backdrop uses the scrim plus a 6px blur. No
+shadow, no gradient, no second glass style, no visible border.
 
-Fluid layout: navigation `clamp(11rem, 20vw, 17rem)`, chat full content width, bubbles and media `32rem`,
-fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell; no width
-media query. `appearance: none` on every control before styling. Focus is a visible outline at a small
-offset; never removed. The danger token is the only semantic state color; every other paper and text token
-is a fixed sRGB value.
+Fluid layout: navigation `clamp(15rem, 22vw, 19rem)`, chat full content width, bubbles and media `36rem`,
+fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell and `data-view` on the
+app switches list/room; no width media query. `appearance: none` on every control before styling. Focus is
+a visible outline at a small offset; never removed except the composer textarea, whose field draws the
+focus ring. The danger token is the only semantic state color; every other paper and text token is a fixed
+sRGB value.
 
 Decorative motion is absent or at most a 120ms opacity/color/rotate change. The first unread reveal uses
 the surface-hover background and clears after the reveal; reduced motion removes any transition. A section
@@ -507,13 +510,10 @@ reduced motion stops them.
 
 ## 3.9 Testing
 
-Pure tests: projection in both directions, store notification granularity, catalog parity, page
-generation per page and locale, sanitizer allowlist, search tokens, the overlay split.
-
-Worker tests: login, sync, send, decrypt, the gate.
-
-Surface tests: every page scriptless, the login flow, the gate, keyboard, reduced motion, dialog and
-popover behavior, wide and narrow, both color schemes, subpath base.
+Pure tests: catalog parity and placeholder substitution, HTML escaping, message grouping in one pass,
+store notification granularity and batching, generated page structure and locale addresses, the surface
+registry, CSS token/selector invariants and the deterministic watermark pack. Browser surface tests cover
+the live chat, dialogs and popovers; worker and real-server tests wait for P1.
 
 Real-server tests: the whole flow on a device whose state is real, including the first paint and the
 timing of rooms versus crypto.
@@ -523,19 +523,20 @@ check passes for the platform floor.
 
 ## 3.10 Platform
 
-The authority is the `web-features` dataset, with MDN compatibility data for what it does not name, and
-`features.md` is the project's recording of what it can use. The floor is Chromium 156, Firefox 157 and
-Safari 27.0.
+The authority is the `web-features` dataset, with MDN compatibility data for entries it does not name or
+where its compatibility record lags the engines (anchor positioning), and `features.md` is the project's
+recording of what it can use. The floor is Chromium 156, Firefox 157 and Safari 27.0.
 
 Four questions before a feature is used: does the design need the behavior; does what we have already do
 the job; is the feature larger than the need; does it replace code or add a second spelling.
 
 Current decisions: `<dialog>` and popovers split the overlays; `commandfor` opens the dialogs; `closedby`
 dismisses them, with no fallback; anchor positioning (`position-area`, `position-try-fallbacks`, implicit
-anchor) places popovers without JS; `backdrop-filter` blurs the backdrop, the topbar and the navigation;
-`@starting-style` and `transition-behavior` handle entrances; `content-visibility`, `::details-content`,
-`@scope` and `field-sizing` serve the UI; `:user-invalid` serves forms; `crypto.randomUUID` and async
-clipboard serve local actions.
+anchor, `anchor-size`) places and sizes popovers without JS; `backdrop-filter` blurs the backdrop, the
+topbar, the navigation and dialogs; `@starting-style` and `transition-behavior` handle entrances;
+`field-sizing`, `scrollbar-gutter` and container queries serve the layout; `:user-invalid` serves forms;
+`crypto.randomUUID` and async clipboard serve local actions. `content-visibility`, `::details-content`,
+`@scope` and nesting are not used and are not claimed.
 
 Rejected for this floor: scroll-driven animations, `interpolate-size`, `text-box`, cross-document view
 transitions, and Temporal, because at least one of the three engines does not ship them.
@@ -557,6 +558,8 @@ transitions, and Temporal, because at least one of the three engines does not sh
 | an IndexedDB transaction dies across an await | reads open their own transaction or cursor |
 | long unbroken strings overflow a flex child | `min-inline-size: 0` and `overflow-wrap` |
 | a click is lost when a node is replaced mid-gesture | keyed rows, updated in place |
+| a surface text color copied globally fails on another paper | each paper declares its own text pair; hover keeps the same family |
+| a chat surface defined in several lists drifts | one `core/surfaces.ts` registry feeds markup and overlay behavior |
 | one file under two names is two facts | one hashed icon, no speculative probe |
 | a page paints the agent's canvas before CSS | `color-scheme` in the head of every page |
 | copy that explains the visible is noise | one sentence per note, only what is missing |
@@ -626,26 +629,29 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
 ## Map and current boundary
 
 - `src/pages/` — one build-time view per page (the chat at the locale root); `src/layouts/` — document,
-  chat and auth shells; `src/components/` — pure markup returned as `Html`, shared with the client;
-  `src/catalogs/` — typed copy; `src/styles/style.css` — one layered stylesheet (tokens, reset, base,
-  layout, components, surfaces, motion); `src/lib/` — HTML escaping, catalog, assets;
-  `src/core/types.ts`, `regions.ts` and `mock.ts` — page state, region ids and deterministic mock data;
-  `src/client/` — guard, boot, auth, chat, session, position and the mock UI.
+  chat and auth shells; `src/components/` — pure markup returned as `Html`, shared with the client, with
+  `surfaces.ts` holding the dialog/floating bodies; `src/catalogs/` — typed copy; `src/styles/style.css` —
+  one layered stylesheet (tokens, reset, base, layout, components, surfaces, motion); `src/lib/` — HTML
+  escaping, catalog, assets; `src/core/types.ts`, `state.ts`, `regions.ts`, `surfaces.ts`, `locales.ts`,
+  `rooms.ts`, `messageGroups.ts` and `mock.ts` — page state, ids, locale paths, room factories, grouping and
+  deterministic mock data; `src/client/` — main/app, guard, prepaint, auth, chat, storage, session, prefs,
+  store, actions, the surface controller, regions (navigation, header, timeline, composer) and position.
 - `/` is the one-time language entry. `/en/` and `/zh-CN/` are the locale roots; the chat is the locale
   root, and the other pages sit under the prefix. `/` and `/en/` are English.
 - `scripts/pages.ts` — root router plus locale pages; `scripts/build.ts` — esbuild stylesheet, guard,
-  client, hashed icon, pages and manifest; `scripts/dev.ts` — live-reload server that runs each build in
-  a fresh child; `scripts/static.ts` — the 5172 server; `scripts/audit.ts` — minified-page and asset
-  comparison; `scripts/contracts.ts` — C1, C4–C8; `scripts/features.ts` — platform check.
+  prepaint, client, hashed icon, pages and manifest; `scripts/dev.ts` — live-reload server that runs each
+  build in a fresh child; `scripts/static.ts` — the 5172 server; `scripts/audit.ts` — minified-page and
+  asset comparison; `scripts/contracts.ts` — C1, C4–C8; `scripts/features.ts` — platform check;
+  `scripts/review.ts` — dev-only review artifact; `scripts/watermark.ts` — watermark generator.
 - The tree is a build-time static shell plus a client mock UI. There is no `src/worker` or `src/protocol`,
   and no Matrix import; the client reads `src/core/mock.ts` and the guard validates the mock session. C2
   and C3 wait for the real runtime. The SDK dependencies are not imported.
-- The generated chat page renders the deterministic mock rooms and messages at build time as a review
-  artifact; the Matrix shell later returns to no room data. The stylesheet has no visible borders or
-  dividers; the navigation action block is a menu surface and section labels are bold. The
-  frontend-design skill owns the visual review; do not add a second convention.
-- The client is a mock: the `Load older` control synthesizes a message and `Copy link` points at
-  addresses the build does not serve. They are kept as review artifacts, not shipped behavior.
+- The generated chat page is the empty shell. The dev-only `/review/` artifact renders deterministic mock
+  rooms and messages for visual review; it is not part of `renderPages()` or the production audit. The
+  stylesheet has no visible borders or dividers; the navigation action block is a menu surface and section
+  labels are bold. The frontend-design skill owns the visual review; do not add a second convention.
+- The client is a mock: `Load older` emits an empty older window and `Copy link` points at addresses the
+  build does not serve. They are kept as review artifacts, not shipped behavior.
 
 ## Generated and reference-only
 
@@ -657,18 +663,19 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
 
 The gate is the whole operational contract: a claim names the rung it was verified at, and a stylesheet
 read is not a browser run. C9 is the feature check plus `features.md`; C10 is the browser first-paint run;
-neither is part of `npm run check` today. The mock UI is verified at the surface and scriptless rungs in
-Chromium at 390, 856 and 1280, light and dark; worker and real-server claims wait for Matrix. A budget is
-never raised to make the gate pass.
+neither is part of `npm run check` today. The mock UI has a Chromium surface pass at 390, 856 and 1280,
+light and dark, plus the generated scriptless structure and the pure tests. Worker and real-server claims
+wait for Matrix. The client and stylesheet budgets are deferred until the UI is complete, not raised.
 
 ## Open defects
 
-1. **Room time markup remains.** The design removes room times, and the stylesheet no longer styles them,
-   but `src/components/nav.ts` still emits `<time class="room-time">` in both room and space rows. Remove
-   the markup and the unused `Intl.DateTimeFormat` parameter.
-3. **The visual pass is uncommitted.** The active/hover, account card, menu hover, full-width chat, bubble
-   fit, reaction chip, first-unread reveal, new icon set, translucent topbar/navigation, selection color,
-   avatar alignment and media timestamps are in the tree but have not had a final independent review or a
-   complete 390/856/1280 light/dark interaction sweep.
-4. **The tree has no worker.** C2/C3, the protocol, account data, crypto and the real gate wait for P1. The
+1. **The tree has no worker.** C2/C3, the protocol, account data, crypto and the real gate wait for P1. The
    current client is a mock, not a product claim.
+2. **The review artifact is outside the production gate.** `scripts/review.ts` writes `/review/` and
+   `/review/zh-CN/`, and `src/styles/watermark.svg` is generated by `scripts/watermark.ts`; neither is
+   compared by `npm run check`. The review page is intentionally dev-only and must not be read as a
+   production page.
+3. **Budgets are deferred.** C6 enforces neither the client nor the stylesheet budget until the UI is
+   complete; the current sizes are reported by the build rather than failing the gate.
+4. **Settings reset is absent.** A reset needs the worker's crypto/session command; until then the control
+   is not rendered rather than being a second destructive action.

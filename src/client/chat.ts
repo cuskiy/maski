@@ -10,7 +10,8 @@ import { mountHeader } from "./regions/header.ts";
 import { mountNavigation } from "./regions/navigation.ts";
 import { mountTimeline } from "./regions/timeline.ts";
 import { wireSurfaces } from "./surfaces.ts";
-import { mockSession, type LocaleId } from "./session.ts";
+import type { LocaleId } from "../core/locales.ts";
+import { mockSession } from "./session.ts";
 import * as prefs from "./prefs.ts";
 
 export function initChat(c: Catalog, locale: LocaleId, review = false): void {
@@ -35,15 +36,16 @@ export function initChat(c: Catalog, locale: LocaleId, review = false): void {
   const actions = createActions({ store, source, c, account });
   const unwire = wireSources(store, source);
 
-  document.querySelector(".app")?.setAttribute("data-room", "false");
   source.start();
   if (initial.roomId !== null) source.open(initial.roomId);
 
   const composer = new Composer({ store, actions, c, account });
-  mountNavigation({ store, actions, c });
-  mountHeader({ store, c });
-  mountTimeline({ store, actions, c, locale });
-  wireSurfaces({ store, actions, c, composer });
+  const disposers = [
+    mountNavigation({ store, actions, c }),
+    mountHeader({ store, actions, c }),
+    mountTimeline({ store, actions, c, locale }),
+    wireSurfaces({ store, actions, c, composer }),
+  ];
 
   const baseTitle = document.title;
   const updateTitle = (): void => {
@@ -51,10 +53,18 @@ export function initChat(c: Catalog, locale: LocaleId, review = false): void {
     const total = state.rooms.reduce((sum, room) => sum + room.unread, 0);
     document.title = state.notifications.titleTotal && total > 0 ? `(${String(total)}) ${baseTitle}` : baseTitle;
   };
-  store.watch(["rooms", "notifications"], updateTitle);
+  const unwatchTitle = store.watch(["rooms", "notifications"], updateTitle);
   updateTitle();
 
-  window.addEventListener("beforeunload", () => {
-    unwire();
-  });
+  window.addEventListener(
+    "beforeunload",
+    () => {
+      unwire();
+      unwatchTitle();
+      composer.dispose();
+      for (const dispose of disposers) dispose();
+      source.dispose();
+    },
+    { once: true },
+  );
 }

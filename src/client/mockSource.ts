@@ -6,6 +6,7 @@ type Listener = (payload: unknown) => void;
 
 export class MockSource implements ChatSource {
   private readonly listeners = new Map<SourceEvent, Set<Listener>>();
+  private readonly timers = new Set<number>();
   private devices: readonly DeviceSession[] = [...mockDevices];
   private invites: readonly Invite[] = [...mockInvites];
   private readonly state = mockChatState();
@@ -57,7 +58,14 @@ export class MockSource implements ChatSource {
     this.emit("window", { roomId, messages: [], hasOlder: false, older: true });
   }
 
-  send(_roomId: string, _row: MessageRow): void {}
+  send(roomId: string, row: MessageRow): void {
+    if (row.status === "sent") return;
+    const timer = window.setTimeout(() => {
+      this.timers.delete(timer);
+      this.emit("outbox", { roomId, messageId: row.id, status: "sent", error: null });
+    }, 600);
+    this.timers.add(timer);
+  }
   markRead(_roomId: string): void {}
   react(_roomId: string, _messageId: string, _key: string): void {}
   edit(_roomId: string, _messageId: string, _body: string, _html: string | null): void {}
@@ -95,6 +103,8 @@ export class MockSource implements ChatSource {
   logout(): void {}
 
   dispose(): void {
+    for (const timer of this.timers) window.clearTimeout(timer);
+    this.timers.clear();
     this.listeners.clear();
   }
 }

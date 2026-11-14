@@ -107,7 +107,24 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
     actions.toggleSection(id as SectionId, target.open);
   };
 
+  const onClick = (event: MouseEvent): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const space = target.closest<HTMLElement>("[data-space-toggle]");
+    if (space !== null) {
+      event.preventDefault();
+      actions.toggleSpace(space.dataset["spaceToggle"] ?? "");
+      return;
+    }
+    const room = target.closest<HTMLButtonElement>("button[data-room]");
+    if (room !== null) {
+      event.preventDefault();
+      actions.selectRoom(room.dataset["room"] ?? "");
+    }
+  };
+
   root.addEventListener("toggle", onToggle, true);
+  root.addEventListener("click", onClick);
   const unsubscribe = store.watch(
     ["rooms", "roomsLoading", "roomId", "sections", "openSpaces", "session", "phase"],
     render,
@@ -116,5 +133,6 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
   return () => {
     unsubscribe();
     root.removeEventListener("toggle", onToggle, true);
+    root.removeEventListener("click", onClick);
   };
 }

@@ -3,7 +3,7 @@ import type { Catalog } from "../../lib/catalog.ts";
 import { REGION } from "../../core/regions.ts";
 import type { MessageRow } from "../../core/types.ts";
 import type { Actions } from "../actions.ts";
-import type { LocaleId } from "../session.ts";
+import type { LocaleId } from "../../core/locales.ts";
 import type { Store } from "../store.ts";
 import { markMultilineBubbles } from "../bubbleLayout.ts";
 
@@ -37,7 +37,7 @@ function isNearBottom(wrap: HTMLElement): boolean {
   return wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 24;
 }
 
-const RUNTIME_CLASSES = ["is-multiline", "is-active", "is-holding"] as const;
+const RUNTIME_CLASSES = ["is-multiline", "is-active", "is-holding", "is-unread-reveal"] as const;
 
 function stableMarkup(element: HTMLElement): string {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -61,6 +61,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let activeRoomId = store.read("roomId");
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
+  let revealTimer: number | null = null;
 
   const updateJump = (): void => {
     const jump = region.querySelector<HTMLButtonElement>(".jump-newest");
@@ -172,12 +173,24 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     if (pendingRoomId !== null && state.messages.length > 0) {
       const roomId = pendingRoomId;
       pendingRoomId = null;
-      const unread = room?.unread ?? 0;
-      const first = unread > 0 ? state.messages.at(-unread) : undefined;
+      const receipt = room?.readReceipt ?? null;
+      const receiptIndex = receipt === null ? -1 : state.messages.findIndex((message) => message.id === receipt);
+      const first =
+        receiptIndex >= 0 && receiptIndex + 1 < state.messages.length
+          ? state.messages[receiptIndex + 1]
+          : (room?.unread ?? 0) > 0
+            ? state.messages.at(-(room?.unread ?? 0))
+            : undefined;
       if (first !== undefined) {
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(first.id)}"]`);
         if (row !== null) {
           wrap.scrollTop = Math.max(0, row.offsetTop - wrap.clientHeight / 2 + row.offsetHeight / 2);
+          if (revealTimer !== null) window.clearTimeout(revealTimer);
+          row.classList.add("is-unread-reveal");
+          revealTimer = window.setTimeout(() => {
+            row.classList.remove("is-unread-reveal");
+            revealTimer = null;
+          }, 900);
         }
         pinned = false;
       } else {
@@ -215,7 +228,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   };
 
   wrap.addEventListener("scroll", onScroll, { passive: true });
-  wrap.addEventListener("click", onClick);
+  region.addEventListener("click", onClick);
   const resizeObserver = new ResizeObserver(() => {
     markMultilineBubbles(list);
   });
@@ -226,6 +239,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     unsubscribe();
     resizeObserver.disconnect();
     wrap.removeEventListener("scroll", onScroll);
-    wrap.removeEventListener("click", onClick);
+    region.removeEventListener("click", onClick);
+    if (revealTimer !== null) window.clearTimeout(revealTimer);
   };
 }

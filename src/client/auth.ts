@@ -1,6 +1,8 @@
 import type { Catalog } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
-import { localeRoot, setAccount, setKeyReady, setServer, type LocaleId } from "./session.ts";
+import type { LocaleId } from "../core/locales.ts";
+import { localeRoot } from "../core/locales.ts";
+import { setAccount, setKeyReady, setServer } from "./session.ts";
 
 function navigate(path: string): void {
   location.assign(path);

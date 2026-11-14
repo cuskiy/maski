@@ -1,13 +1,12 @@
 import { marked } from "marked";
 import { t } from "../../lib/catalog.ts";
 import type { Catalog } from "../../lib/catalog.ts";
-import { html, type Html } from "../../lib/html.ts";
+import { html } from "../../lib/html.ts";
 import { REGION, SURFACE } from "../../core/regions.ts";
 import type { ChatState, MessageRow, ReplyRef } from "../../core/types.ts";
 import { icons } from "../../components/icons.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
-import { sanitizeMessageHtml } from "../sanitize.ts";
 import * as prefs from "../prefs.ts";
 
 interface ComposerInput {
@@ -18,7 +17,6 @@ interface ComposerInput {
 }
 
 export class Composer {
-  private readonly store: Store;
   private readonly actions: Actions;
   private readonly c: Catalog;
   private readonly account: string;
@@ -32,9 +30,11 @@ export class Composer {
   private preDraft: string | null = null;
   private roomId: string | null;
   private draftRoom: string | null = null;
+  private draftTimer: number | null = null;
+  private readonly abort = new AbortController();
+  private readonly unsubscribe: () => void;
 
   constructor({ store, actions, c, account }: ComposerInput) {
-    this.store = store;
     this.actions = actions;
     this.c = c;
     this.account = account;
@@ -44,35 +44,48 @@ export class Composer {
     this.replyRegion = document.querySelector<HTMLElement>(`[data-region="${REGION.composerReply}"]`);
     this.roomId = store.read("roomId");
     this.mount();
+    this.unsubscribe = store.watch(["roomId", "rooms", "phase"], () => this.render(store.snapshot()));
     this.render(store.snapshot());
   }
 
+  dispose(): void {
+    this.unsubscribe();
+    this.abort.abort();
+    this.clearDraftTimer();
+  }
+
   private mount(): void {
-    this.form?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void this.send("text");
-    });
-    this.textarea?.addEventListener("keydown", (event) => {
-      if (event.isComposing) return;
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    const signal = this.abort.signal;
+    this.form?.addEventListener(
+      "submit",
+      (event) => {
         event.preventDefault();
         void this.send("text");
-      }
-    });
-    this.textarea?.addEventListener("input", () => {
-      this.saveDraft();
-    });
-    this.textarea?.addEventListener("paste", (event) => {
-      const files = event.clipboardData?.files;
-      if (files === undefined || files.length === 0) return;
-      event.preventDefault();
-      this.addFiles(Array.from(files));
-    });
-    this.store.watch(["roomId", "rooms", "phase"], (changed) => {
-      if (changed.has("roomId") || changed.has("rooms") || changed.has("phase")) {
-        this.render(this.store.snapshot());
-      }
-    });
+      },
+      { signal },
+    );
+    this.textarea?.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.isComposing) return;
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          void this.send("text");
+        }
+      },
+      { signal },
+    );
+    this.textarea?.addEventListener("input", () => this.scheduleDraft(), { signal });
+    this.textarea?.addEventListener(
+      "paste",
+      (event) => {
+        const files = event.clipboardData?.files;
+        if (files === undefined || files.length === 0) return;
+        event.preventDefault();
+        this.addFiles(Array.from(files));
+      },
+      { signal },
+    );
   }
 
   private render(state: ChatState): void {
@@ -99,8 +112,6 @@ export class Composer {
       textarea.value = prefs.readDraft(this.account, room.roomId);
       this.draftRoom = room.roomId;
     }
-    const form = this.form;
-    if (form !== null) form.dataset["room"] = disabled ? "none" : "open";
     for (const button of document.querySelectorAll<HTMLButtonElement>(
       ".composer-send, .composer-action, .composer-emoji",
     )) {
@@ -108,7 +119,24 @@ export class Composer {
     }
   }
 
+  private clearDraftTimer(): void {
+    if (this.draftTimer !== null) {
+      window.clearTimeout(this.draftTimer);
+      this.draftTimer = null;
+    }
+  }
+
+  private scheduleDraft(): void {
+    if (this.editing !== null) return;
+    this.clearDraftTimer();
+    this.draftTimer = window.setTimeout(() => {
+      this.draftTimer = null;
+      this.saveDraft();
+    }, 150);
+  }
+
   private saveDraft(): void {
+    this.clearDraftTimer();
     if (this.editing !== null) return;
     const textarea = this.textarea;
     const roomId = this.roomId;
@@ -223,9 +251,10 @@ export class Composer {
   }
 
   sendSticker(sticker: string): void {
-    if (sticker === "") return;
-    this.actions.appendRows([
-      this.actions.createRow(sticker, {
+    const roomId = this.roomId;
+    if (sticker === "" || roomId === null) return;
+    this.actions.appendRows(roomId, [
+      this.actions.createRow(roomId, sticker, {
         kind: "sticker",
         media: { kind: "sticker", name: sticker, width: null, height: null, size: null, url: null },
       }),
@@ -233,9 +262,28 @@ export class Composer {
     this.hide(SURFACE.sticker);
   }
 
-  openSendMenu(): void {
+  openSendMenu(focusFirst = false): void {
     const menu = document.getElementById(SURFACE.sendMenu);
-    if (menu instanceof HTMLElement) menu.showPopover();
+    if (!(menu instanceof HTMLElement)) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFirstItem = (): void => {
+      menu.querySelector<HTMLElement>(".surface-item")?.focus({ preventScroll: true });
+    };
+    const onToggle = (event: Event): void => {
+      if (!(event instanceof ToggleEvent)) return;
+      if (event.newState === "closed") {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement && active.closest(".composer") !== null)) {
+          trigger?.focus({ preventScroll: true });
+        }
+        menu.removeEventListener("toggle", onToggle);
+        return;
+      }
+      if (focusFirst) focusFirstItem();
+    };
+    if (focusFirst) menu.addEventListener("toggle", onToggle);
+    menu.showPopover();
+    if (focusFirst) window.setTimeout(focusFirstItem, 40);
   }
 
   async send(mode: "text" | "markdown"): Promise<void> {
@@ -243,7 +291,8 @@ export class Composer {
     const roomId = this.roomId;
     if (textarea === null || roomId === null) return;
     const text = textarea.value.trim();
-    if (text === "" && this.tray.length === 0) return;
+    const tray = [...this.tray];
+    if (text === "" && tray.length === 0) return;
 
     if (this.editing !== null) {
       if (text === "") return;
@@ -272,40 +321,38 @@ export class Composer {
             senderName: this.replyTo.senderName,
             body: this.replyTo.body === "" ? (this.replyTo.media?.name ?? "") : this.replyTo.body,
           };
+    const renderedHtml = text === "" ? null : await this.markdown(mode, text);
+    if (this.roomId !== roomId) return;
+
     const now = Date.now();
     const rows: MessageRow[] = [];
-    for (const [index, file] of this.tray.entries()) {
-      const row = this.actions.createRow("", {
-        kind: "file",
-        media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
-        ts: now + index,
-        status: "sending",
-      });
-      rows.push(row);
-      window.setTimeout(
-        () => {
-          this.actions.setMessageStatus(row.id, "sent");
-        },
-        500 + index * 250,
+    for (const [index, file] of tray.entries()) {
+      rows.push(
+        this.actions.createRow(roomId, "", {
+          kind: "file",
+          media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
+          ts: now + index,
+          status: "sending",
+        }),
       );
     }
     if (text !== "") {
       rows.push(
-        this.actions.createRow(text, {
-          html: await this.markdown(mode, text),
+        this.actions.createRow(roomId, text, {
+          html: renderedHtml,
           reply,
-          ts: now + this.tray.length,
+          ts: now + tray.length,
         }),
       );
     }
-    this.actions.appendRows(rows);
+    this.actions.appendRows(roomId, rows);
     this.clearComposer();
   }
 
   private async markdown(mode: "text" | "markdown", text: string): Promise<string | null> {
     if (mode !== "markdown") return null;
     try {
-      return sanitizeMessageHtml(await marked.parse(text));
+      return await marked.parse(text);
     } catch {
       // A parse failure still sends the plain text body.
       return null;
@@ -370,5 +417,3 @@ export class Composer {
     return false;
   }
 }
-
-export type { Html };

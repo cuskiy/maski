@@ -53,7 +53,6 @@ export function nav(state: ChatState, c: Catalog): Html {
       type="button"
       data-region="${REGION.menu}"
       popovertarget="${SURFACE.navMenu}"
-      aria-haspopup="menu"
       aria-label="${t(c, "nav.menu")}"
     >
       <span class="nav-avatar" data-field="avatar" aria-hidden="true" ${session === null ? html`hidden` : html``}
@@ -70,18 +69,15 @@ export function nav(state: ChatState, c: Catalog): Html {
 function sectionView(state: ChatState, c: Catalog, id: SectionId, key: Parameters<typeof t>[1]): Html {
   const rooms = state.rooms.filter((room) => belongs(room, id));
   const open = state.sections[id].open;
+  const loading = state.roomsLoading && id === "rooms";
   return html`<details class="section" data-section="${id}" ${open ? html` open` : html``}>
     <summary class="section-head">
       <span class="section-name">${t(c, key)}</span>
-      ${state.roomsLoading ? html`` : html`<span class="section-count">${String(rooms.length)}</span>`}
+      ${loading ? html`` : html`<span class="section-count">${String(rooms.length)}</span>`}
       <span class="section-chevron" aria-hidden="true">${icons.chevron}</span>
     </summary>
-    <ol class="section-rows" data-rows="${id}">
-      ${
-        state.roomsLoading
-          ? skeletonRows()
-          : rooms.map((room) => (room.isSpace ? spaceRow(state, c, room) : roomRow(state, c, room)))
-      }
+    <ol class="section-rows" role="list" data-rows="${id}">
+      ${loading ? skeletonRows() : rooms.map((room) => (room.isSpace ? spaceRow(state, c, room) : roomRow(state, c, room)))}
     </ol>
   </details>`;
 }
@@ -131,7 +127,6 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       type="button"
       data-space-toggle="${room.roomId}"
       aria-expanded="${open ? "true" : "false"}"
-      aria-haspopup="menu"
     >
       <span class="room-avatar" aria-hidden="true">${room.name.slice(0, 1)}</span>
       <span class="room-text">
@@ -144,7 +139,7 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
         <span class="space-chevron" aria-hidden="true">${icons.chevron}</span>
       </span>
     </button>
-    <ol class="space-rows" ${open ? html`` : html`hidden`}>
+    <ol class="space-rows" role="list" ${open ? html`` : html`hidden`}>
       ${children.map((child) => roomRow(state, c, child))}
     </ol>
   </li>`;
@@ -157,7 +152,6 @@ function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       class="room-main"
       type="button"
       ${active ? html` aria-current="page"` : html``}
-      aria-haspopup="menu"
       data-room="${room.roomId}"
     >
       <span class="room-avatar" aria-hidden="true"

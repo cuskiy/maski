@@ -11,7 +11,7 @@ import type {
   RoomSummary,
   SectionId,
 } from "../core/types.ts";
-import { REGION } from "../core/regions.ts";
+import { createRoom, roomFromInvite } from "../core/rooms.ts";
 import type { Store } from "./store.ts";
 import * as prefs from "./prefs.ts";
 import { clearSession } from "./session.ts";
@@ -31,8 +31,8 @@ export interface Actions {
   back(): void;
   markRead(roomId: string): void;
   loadOlder(): void;
-  appendRows(rows: readonly MessageRow[]): void;
-  createRow(body: string, options?: MessageOptions): MessageRow;
+  appendRows(roomId: string, rows: readonly MessageRow[]): void;
+  createRow(roomId: string, body: string, options?: MessageOptions): MessageRow;
   toggleSection(id: SectionId, open: boolean): void;
   toggleSpace(roomId: string): void;
   toggleFavorite(roomId: string): void;
@@ -43,12 +43,12 @@ export interface Actions {
   react(messageId: string, key: string): void;
   edit(messageId: string, body: string, html: string | null): void;
   redact(messageId: string): void;
-  setMessageStatus(messageId: string, status: MessageRow["status"], error?: string | null): void;
   discardMessage(messageId: string): void;
   acceptInvite(roomId: string): void;
   declineInvite(roomId: string): void;
   setPref(key: keyof NotificationPrefs, value: boolean): void;
   revealRecoveryKey(): void;
+  clearRecoveryKey(): void;
   verifyDevice(deviceId: string): void;
   signOutDevice(deviceId: string): void;
   signOutOthers(): void;
@@ -62,8 +62,8 @@ interface Context {
   readonly account: string;
 }
 
-function setRootRoom(open: boolean): void {
-  document.querySelector(".app")?.setAttribute("data-room", open ? "true" : "false");
+function setRootView(open: boolean): void {
+  document.querySelector(".app")?.setAttribute("data-view", open ? "room" : "list");
 }
 
 function cleanRow(row: MessageRow): MessageRow {
@@ -79,7 +79,12 @@ export function createActions({ store, source, c, account }: Context): Actions {
   }
 
   function markRead(roomId: string): void {
-    updateRoom(roomId, { unread: 0, highlight: 0 });
+    const last = store.read("roomId") === roomId ? store.read("messages").at(-1) : undefined;
+    updateRoom(roomId, {
+      unread: 0,
+      highlight: 0,
+      ...(last === undefined ? {} : { readReceipt: last.id }),
+    });
     source.markRead(roomId);
   }
 
@@ -93,7 +98,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.write("hasOlder", false);
         store.write("typing", []);
       });
-      setRootRoom(true);
+      setRootView(true);
       source.open(roomId);
     },
     back() {
@@ -102,18 +107,17 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.write("messages", []);
         store.write("hasOlder", false);
       });
-      setRootRoom(false);
+      setRootView(false);
     },
     markRead,
     loadOlder() {
       const roomId = store.read("roomId");
       if (roomId !== null) source.older(roomId);
     },
-    appendRows(rawRows) {
+    appendRows(roomId, rawRows) {
       if (rawRows.length === 0) return;
+      if (!store.read("rooms").some((room) => room.roomId === roomId)) return;
       const rows = rawRows.map(cleanRow);
-      const roomId = store.read("roomId");
-      if (roomId === null) return;
       const last = rows[rows.length - 1];
       if (last === undefined) return;
       const preview = {
@@ -121,16 +125,16 @@ export function createActions({ store, source, c, account }: Context): Actions {
         body: last.body === "" ? (last.media?.name ?? "") : last.body,
       };
       store.batch(() => {
-        store.write("messages", [...store.read("messages"), ...rows]);
-        updateRoom(roomId, { preview, lastTs: last.ts, unread: 0, highlight: 0 });
+        if (store.read("roomId") === roomId) store.write("messages", [...store.read("messages"), ...rows]);
+        updateRoom(roomId, { preview, lastTs: last.ts });
       });
       for (const row of rows) source.send(roomId, row);
     },
-    createRow(body, options = {}) {
+    createRow(roomId, body, options = {}) {
       const session = store.read("session");
       return {
         id: `local-${crypto.randomUUID()}`,
-        roomId: store.read("roomId") ?? "",
+        roomId,
         sender: session?.userId ?? "",
         senderName: session?.displayName ?? t(c, "chat.you"),
         senderAvatar: session?.avatar ?? null,
@@ -200,41 +204,15 @@ export function createActions({ store, source, c, account }: Context): Actions {
           store.write("messages", []);
         }
       });
-      if (wasActive) setRootRoom(false);
+      if (wasActive) setRootView(false);
     },
     addRoom(name, topic, direct) {
       const roomId = `local-${crypto.randomUUID()}`;
-      const room: RoomSummary = {
-        roomId,
-        name,
-        topic,
-        avatar: null,
-        preview: null,
-        lastTs: Date.now(),
-        unread: 0,
-        highlight: 0,
-        muted: false,
-        membership: "join",
-        isDirect: direct,
-        isSpace: false,
-        favorite: false,
-        spaceId: null,
-        notification: "all",
-        encryption: "encrypted",
-        capabilities: {
-          invite: true,
-          manage: true,
-          notifications: true,
-          leave: true,
-          markRead: true,
-          favorite: true,
-          mute: true,
-        },
-      };
+      const room = createRoom({ roomId, name, topic, direct });
       store.write("rooms", [...store.read("rooms"), room]);
       store.write("roomId", roomId);
       store.write("messages", []);
-      setRootRoom(true);
+      setRootView(true);
       source.open(roomId);
     },
     setNotification(roomId, mode) {
@@ -286,14 +264,6 @@ export function createActions({ store, source, c, account }: Context): Actions {
       );
       source.redact(message.roomId, messageId);
     },
-    setMessageStatus(messageId, status, error = null) {
-      store.write(
-        "messages",
-        store
-          .read("messages")
-          .map((message) => (message.id === messageId ? Object.assign({}, message, { status, error }) : message)),
-      );
-    },
     discardMessage(messageId) {
       store.write(
         "messages",
@@ -303,43 +273,20 @@ export function createActions({ store, source, c, account }: Context): Actions {
     acceptInvite(roomId) {
       const invite = store.read("invites").find((entry) => entry.roomId === roomId);
       if (invite === undefined || !invite.capabilities.accept) return;
-      const room: RoomSummary = {
-        roomId: invite.roomId,
-        name: invite.name,
-        topic: invite.topic,
-        avatar: null,
-        preview: null,
-        lastTs: Date.now(),
-        unread: 0,
-        highlight: 0,
-        muted: false,
-        membership: "join",
-        isDirect: false,
-        isSpace: false,
-        favorite: false,
-        spaceId: null,
-        notification: "all",
-        encryption: "encrypted",
-        capabilities: {
-          invite: true,
-          manage: false,
-          notifications: true,
-          leave: true,
-          markRead: true,
-          favorite: true,
-          mute: true,
-        },
-      };
+      const room = roomFromInvite(invite);
       store.batch(() => {
         store.write(
           "invites",
           store.read("invites").filter((entry) => entry.roomId !== roomId),
         );
         store.write("rooms", [...store.read("rooms"), room]);
+        store.write("roomId", room.roomId);
+        store.write("messages", []);
+        store.write("hasOlder", false);
+        store.write("typing", []);
       });
       source.answerInvite(roomId, true);
-      store.write("roomId", room.roomId);
-      setRootRoom(true);
+      setRootView(true);
       source.open(room.roomId);
     },
     declineInvite(roomId) {
@@ -358,6 +305,9 @@ export function createActions({ store, source, c, account }: Context): Actions {
     revealRecoveryKey() {
       source.revealRecoveryKey();
     },
+    clearRecoveryKey() {
+      store.write("recoveryKey", null);
+    },
     verifyDevice(deviceId) {
       source.verifyDevice(deviceId);
     },
@@ -368,6 +318,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
       source.signOutOthers();
     },
     logout() {
+      source.logout();
       clearSession();
       location.assign("/");
     },
@@ -416,10 +367,4 @@ export function wireSources(store: Store, source: ChatSource): () => void {
   return () => {
     for (const unsubscribe of subscriptions) unsubscribe();
   };
-}
-
-export function roomRegion(): HTMLElement {
-  const region = document.querySelector<HTMLElement>(`[data-region="${REGION.content}"]`);
-  if (region === null) throw new Error("the chat content region is missing");
-  return region;
 }

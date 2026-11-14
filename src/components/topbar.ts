@@ -7,7 +7,7 @@ import { icons } from "./icons.ts";
 
 export function topbar(state: ChatState, c: Catalog): Html {
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
-  return html`<header class="room-header" data-region="${REGION.header}" data-room="${room === null ? "none" : "open"}">
+  return html`<header class="room-header" data-region="${REGION.header}">
     <button class="room-back" type="button" aria-label="${t(c, "chat.back")}">${icons.back}</button>
     ${room === null ? emptyRoom() : roomInfo(room, state, c)}
     <button
@@ -16,7 +16,6 @@ export function topbar(state: ChatState, c: Catalog): Html {
       popovertarget="${SURFACE.roomMenu}"
       data-field="menu"
       data-room-id="${state.roomId ?? ""}"
-      aria-haspopup="menu"
       aria-label="${t(c, "chat.roomMenu")}"
       ${room === null ? html` hidden` : html``}
     >
@@ -28,8 +27,8 @@ export function topbar(state: ChatState, c: Catalog): Html {
 function emptyRoom(): Html {
   return html`<span class="room-header-avatar" data-field="avatar" aria-hidden="true" hidden></span>
     <span class="room-head-text">
-      <h2 class="room-title" data-field="title"></h2>
-      <p class="room-topic" data-field="topic"></p>
+      <h2 class="room-title" data-field="title" hidden></h2>
+      <p class="room-topic" data-field="topic" hidden></p>
     </span>`;
 }
 

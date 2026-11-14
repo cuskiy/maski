@@ -2,7 +2,8 @@
 
 Only features this client can use are listed. The cutoff is Chromium 156, Firefox 157 and
 **Safari 27.0** (2026-11-13). The dataset is `web-features` (2026-11-13), with
-`@mdn/browser-compat-data` for the entries the dataset does not name.
+`@mdn/browser-compat-data` for entries the dataset does not name or where its record lags the engines;
+anchor positioning and `anchor-size()` are recorded from MDN.
 
 ## Overlays
 
@@ -12,7 +13,7 @@ Only features this client can use are listed. The cutoff is Chromium 156, Firefo
 | invoker commands (`commandfor`) | 2025-12 | 135 / 144 / 26.2 | declarative dialog open |
 | `popover` | 2025-01 | 116 / 125 / 17 | floating menus, pickers, profile |
 | `closedby` | — | 134 / 141 / 27.3 | backdrop/Escape close; Safari 27.0 lacks it, no JS fallback |
-| anchor positioning (`anchor-name`, `position-anchor`, `position-area`, `position-try`) | — | 125 / 147 / 26 | popover placement from the invoker; no JS |
+| anchor positioning (`anchor-name`, `position-anchor`, `position-area`, `position-try`, `anchor-size`) | — | 125 / 147 / 26 | popover placement and width from the invoker; no JS |
 | popover implicit anchor reference | — | 133 / 147 / 26 | `popovertarget` supplies the anchor |
 | `backdrop-filter` | 2024-09 | 76 / 103 / 18 | modal backdrop blur |
 | `@starting-style` | 2024-08 | 117 / 129 / 17.5 | overlay entrance |
@@ -24,15 +25,11 @@ Only features this client can use are listed. The cutoff is Chromium 156, Firefo
 |---|---|---|---|
 | `light-dark()` | 2024-05 | 123 / 120 / 17.5 | the two ink/paper schemes |
 | `color-mix()` | 2023-05 | 111 / 113 / 16.2 | surface ladder and text tones |
-| nesting | 2023 | 120 / 117 / 17.2 | component-scoped rules |
 | `:has()` | 2023 | 105 / 121 / 15.4 | state selectors and scroll lock |
 | container queries | 2023 | 105 / 110 / 16 | the narrow/wide shell and nav density |
 | `scrollbar-gutter` | 2024-12 | 94 / 97 / 18.2 | stable timeline gutter |
 | `field-sizing` | 2026-06 | 123 / 152 / 26.2 | composer growth |
 | `text-wrap` | 2024-10 | 130 / 124 / 17.5 | headings and labels |
-| `::details-content` | 2025-09 | 131 / 143 / 18.4 | navigation sections |
-| `@scope` | 2026-03 | 143 / 146 / 26.4 | message markup containment |
-| `content-visibility` | 2025-09 | 108 / 130 / 26 | long timeline rows |
 
 ## Data, routing, forms
 

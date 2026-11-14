@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { messagePosition, type MessageGroupRow } from "../src/core/messageGroups.ts";
+import { messagePosition, messagePositions, type MessageGroupRow } from "../src/core/messageGroups.ts";
 import type { Media } from "../src/core/types.ts";
 
 const DAY = Date.UTC(2026, 10, 13, 9, 0);
@@ -68,4 +68,21 @@ void test("local midnight starts a new day group", () => {
   assert.equal(messagePosition(messages, 1).dayStart, true);
   assert.equal(messagePosition(messages, 1).groupStart, true);
   assert.equal(messagePosition(messages, 0).groupEnd, true);
+});
+
+void test("the batch grouping matches every indexed lookup", () => {
+  const messages = [
+    row("alice", DAY),
+    row("alice", DAY + 1, { media: image }),
+    row("alice", DAY + 2),
+    row("bob", DAY + 3),
+    row("bob", NEXT_DAY),
+  ];
+  const positions = messagePositions(messages);
+  for (let index = 0; index < messages.length; index += 1) {
+    assert.deepEqual(messagePosition(messages, index), positions[index]);
+  }
+  assert.equal(positions[0]?.showSender, true);
+  assert.equal(positions[2]?.showSender, false);
+  assert.equal(positions[3]?.showSender, true);
 });

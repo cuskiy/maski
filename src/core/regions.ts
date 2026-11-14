@@ -29,5 +29,6 @@ export const SURFACE = {
   emoji: "surface-emoji",
   sendMenu: "surface-send-menu",
   viewer: "surface-viewer",
+  confirm: "surface-confirm",
   language: "surface-language",
 } as const;

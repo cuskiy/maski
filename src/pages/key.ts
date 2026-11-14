@@ -32,8 +32,15 @@ export function keyView({ locale }: PageContext): PageView {
           ${surfaceHead(c, "sas-dialog", "auth.key.sasTitle")}
           <div class="surface-body">
             <p class="note">${t(c, "auth.key.sasNote")}</p>
-            <ol class="sas-grid">
-              ${sasEmoji.map((emoji) => html`<li class="sas-emoji"><span role="img" aria-label="${emoji}">${emoji}</span></li>`)}
+            <ol class="sas-grid" role="list">
+              ${sasEmoji.map(
+                (emoji, index) =>
+                  html`<li class="sas-emoji">
+                    <span role="img" aria-label="${t(c, "auth.key.sasEmoji", { number: String(index + 1) })}"
+                      >${emoji}</span
+                    >
+                  </li>`,
+              )}
             </ol>
             <div class="sas-actions">
               <button class="button-primary" type="button" data-sas-match>${t(c, "auth.key.verifyMatch")}</button>

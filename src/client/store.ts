@@ -8,7 +8,6 @@ export interface Store {
   write<K extends UiKey>(key: K, value: ChatState[K]): void;
   batch(mutate: () => void): void;
   watch(keys: readonly UiKey[], notify: (changed: ReadonlySet<UiKey>) => void): () => void;
-  watchOne<K extends UiKey>(key: K, notify: (value: ChatState[K], previous: ChatState[K]) => void): () => void;
 }
 
 interface Watcher {
@@ -70,23 +69,6 @@ export function createStore(initial: ChatState): Store {
       watchers.add(watcher);
       return () => {
         watchers.delete(watcher);
-      };
-    },
-    watchOne: (key, notify) => {
-      let previous = state[key];
-      const wrapped: Watcher = {
-        keys: new Set<UiKey>([key]),
-        notify: () => {
-          const next = state[key];
-          if (Object.is(previous, next)) return;
-          const old = previous;
-          previous = next;
-          notify(next, old);
-        },
-      };
-      watchers.add(wrapped);
-      return () => {
-        watchers.delete(wrapped);
       };
     },
   };

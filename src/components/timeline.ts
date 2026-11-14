@@ -2,7 +2,7 @@ import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
 import type { ChatState, Media, MessageRow } from "../core/types.ts";
-import { messagePosition } from "../core/messageGroups.ts";
+import { messagePositions, type MessagePosition } from "../core/messageGroups.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
 
@@ -38,6 +38,7 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
   const day = new Intl.DateTimeFormat(locale, { dateStyle: "full" });
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
   const ready = state.phase === "ready" && room !== null;
+  const positions = messagePositions(state.messages);
   return html`<section class="timeline-region" data-region="${REGION.timeline}" aria-label="${t(c, "chat.title")}">
     <div class="timeline-wrap">
       <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state">
@@ -48,8 +49,25 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
           ? html`<button class="load-older" type="button" ${state.hasOlder ? html`` : html` hidden`}>${icons.older}<span>${t(c, "chat.loadOlder")}</span></button>`
           : html``
       }
-      <ol class="timeline" role="log" aria-live="polite" aria-relevant="additions text">
-        ${ready ? state.messages.map((message, index) => messageRow(state, c, message, index, time, day)) : html``}
+      <ol class="timeline" role="list" aria-live="polite" aria-relevant="additions text">
+        ${
+          ready
+            ? state.messages.map((message, index) =>
+                messageRow(
+                  c,
+                  message,
+                  positions[index] ?? {
+                    dayStart: false,
+                    groupStart: false,
+                    groupEnd: false,
+                    showSender: false,
+                  },
+                  time,
+                  day,
+                ),
+              )
+            : html``
+        }
       </ol>
     </div>
     ${ready ? html`<button class="jump-newest" type="button" hidden>${t(c, "chat.jump")}</button>` : html``}
@@ -63,19 +81,29 @@ function stateNote(state: ChatState, c: Catalog): Html {
 }
 
 function messageRow(
-  state: ChatState,
   c: Catalog,
   message: MessageRow,
-  index: number,
+  position: MessagePosition,
   time: Intl.DateTimeFormat,
   day: Intl.DateTimeFormat,
 ): Html {
-  const { dayStart, groupStart, groupEnd, showSender } = messagePosition(state.messages, index);
-  const system = message.system === true;
+  const { dayStart, groupStart, groupEnd, showSender } = position;
+  const system = message.system;
   const sender = showSender
-    ? html`<h3 class="message-sender" id="${message.id}-sender">${message.senderName}</h3>`
+    ? html`<h3 class="message-sender" id="${message.id}-sender">
+        <button
+          class="message-sender-button"
+          type="button"
+          commandfor="${SURFACE.profile}"
+          command="show-modal"
+          data-profile="${message.senderName}"
+          data-profile-id="${message.sender}"
+        >
+          ${message.senderName}
+        </button>
+      </h3>`
     : html``;
-  const avatar = groupEnd
+  const avatar = groupStart
     ? html`<button
         class="message-avatar"
         type="button"
@@ -102,8 +130,7 @@ function messageRow(
   const failure = `${t(c, "message.failed")}${message.error === null ? "" : `: ${message.error}`}`;
   const status = pending
     ? message.status === "failed"
-      ? html`<span class="message-failed" role="img" aria-label="${failure}">!</span
-          ><span class="bubble tip" aria-hidden="true">${failure}</span>`
+      ? html`<span class="message-failed" role="img" aria-label="${failure}" title="${failure}">!</span>`
       : html`<span
           class="message-spinner"
           role="status"
@@ -124,8 +151,6 @@ function messageRow(
       <article
         class="message-inner"
         ${showSender ? html`aria-labelledby="${message.id}-sender"` : html`aria-label="${message.senderName}"`}
-        aria-haspopup="menu"
-        aria-controls="${SURFACE.messageMenu}"
         tabindex="0"
       >
         ${avatar}
@@ -174,7 +199,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
         >
           ${message.body}
         </button>
-        ${meta}
+        <div class="media-footer">${meta}</div>
       </div>
     </figure>`;
   }
@@ -236,7 +261,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
 
 export function reactionsView(message: MessageRow, c: Catalog): Html {
   if (message.reactions.length === 0) return html``;
-  return html`<ul class="reactions" aria-label="${t(c, "chat.reactions")}">
+  return html`<ul class="reactions" role="list" aria-label="${t(c, "chat.reactions")}">
     ${message.reactions.map(
       (reaction) => html`<li>
         <button
