@@ -569,8 +569,8 @@
     min-block-size: var(--field-height);
     padding: 0 var(--space-4);
     border-radius: var(--radius-sm);
-    background: var(--ink);
-    color: var(--page);
+    background: var(--surface-hover);
+    color: var(--ink);
     font-size: var(--text-md);
     font-weight: var(--weight-strong);
     line-height: 1;
@@ -578,7 +578,7 @@
   }
 
   .button-primary:hover {
-    background: var(--ink-2);
+    background: var(--surface-active);
   }
 
   .button-primary:disabled {
@@ -1851,15 +1851,6 @@
     background: var(--page);
   }
 
-  #surface-profile {
-    background: color-mix(in srgb, var(--float) 65%, transparent);
-    backdrop-filter: blur(26px) saturate(1.1);
-  }
-
-  #surface-profile::backdrop {
-    backdrop-filter: blur(18px);
-  }
-
   .surface.modal[open] {
     display: flex;
     flex-direction: column;
@@ -2246,12 +2237,6 @@
 
   .profile-card .button-primary {
     inline-size: 100%;
-    background: var(--surface-hover);
-    color: var(--ink);
-  }
-
-  .profile-card .button-primary:hover {
-    background: var(--surface-active);
   }
 
   .session-list {
