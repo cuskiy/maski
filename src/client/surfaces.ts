@@ -23,14 +23,7 @@ interface ProfileTarget {
 }
 
 const CONTEXT_SURFACES = [SURFACE.roomMenu, SURFACE.messageMenu, SURFACE.sendMenu] as const;
-const POPOVERS = [
-  SURFACE.navMenu,
-  SURFACE.profile,
-  SURFACE.attach,
-  SURFACE.sticker,
-  SURFACE.emoji,
-  SURFACE.sendMenu,
-] as const;
+const POPOVERS = [SURFACE.navMenu, SURFACE.attach, SURFACE.sticker, SURFACE.emoji, SURFACE.sendMenu] as const;
 function closePopovers(except?: string): void {
   for (const id of [...POPOVERS, ...CONTEXT_SURFACES]) {
     if (id === except) continue;

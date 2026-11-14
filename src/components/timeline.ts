@@ -79,7 +79,8 @@ function messageRow(
     ? html`<button
         class="message-avatar"
         type="button"
-        popovertarget="${SURFACE.profile}"
+        commandfor="${SURFACE.profile}"
+        command="show-modal"
         data-profile="${message.senderName}"
         data-profile-id="${message.sender}"
         aria-label="${t(c, "surface.profile")}: ${message.senderName}"

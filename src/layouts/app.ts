@@ -23,7 +23,7 @@ const SURFACES: ReadonlyArray<{ id: string; key: Parameters<typeof t>[1]; kind: 
   { id: SURFACE.viewer, key: "surface.viewer", kind: "modal" },
   { id: SURFACE.roomMenu, key: "surface.roomMenu", kind: "floating" },
   { id: SURFACE.messageMenu, key: "surface.messageMenu", kind: "floating" },
-  { id: SURFACE.profile, key: "surface.profile", kind: "floating" },
+  { id: SURFACE.profile, key: "surface.profile", kind: "modal" },
   { id: SURFACE.attach, key: "surface.attach", kind: "floating" },
   { id: SURFACE.sticker, key: "surface.sticker", kind: "floating" },
   { id: SURFACE.emoji, key: "surface.emoji", kind: "floating" },
@@ -361,8 +361,9 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
                   <button
                     class="member"
                     type="button"
-                    popovertarget="${SURFACE.profile}"
-                    data-profile="${member.displayName}"
+        commandfor="${SURFACE.profile}"
+        command="show-modal"
+        data-profile="${member.displayName}"
                     data-profile-id="${member.userId}"
                   >
                     <span class="profile-avatar" aria-hidden="true">${member.displayName.slice(0, 1)}</span>

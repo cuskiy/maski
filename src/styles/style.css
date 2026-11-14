@@ -2216,23 +2216,27 @@
 
   .profile-card {
     display: grid;
-    justify-items: start;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    text-align: start;
+    justify-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) 0 var(--space-2);
+    text-align: center;
   }
 
   .profile-card .profile-avatar {
-    inline-size: var(--avatar-xl);
-    block-size: var(--avatar-xl);
-    font-size: var(--text-lg);
+    inline-size: 5rem;
+    block-size: 5rem;
+    font-size: var(--text-2xl);
   }
 
   .profile-name {
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
     font-weight: var(--weight-strong);
     letter-spacing: -0.01em;
     line-height: 1.2;
+  }
+
+  .profile-card .button-primary {
+    inline-size: 100%;
   }
 
   .session-list {
