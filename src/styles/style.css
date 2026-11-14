@@ -1851,6 +1851,15 @@
     background: var(--page);
   }
 
+  #surface-profile {
+    background: color-mix(in srgb, var(--float) 65%, transparent);
+    backdrop-filter: blur(26px) saturate(1.1);
+  }
+
+  #surface-profile::backdrop {
+    backdrop-filter: blur(18px);
+  }
+
   .surface.modal[open] {
     display: flex;
     flex-direction: column;
@@ -2237,6 +2246,12 @@
 
   .profile-card .button-primary {
     inline-size: 100%;
+    background: var(--surface-hover);
+    color: var(--ink);
+  }
+
+  .profile-card .button-primary:hover {
+    background: var(--surface-active);
   }
 
   .session-list {
