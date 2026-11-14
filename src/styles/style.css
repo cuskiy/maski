@@ -1848,7 +1848,8 @@
     overflow: hidden;
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--page);
+    background: color-mix(in srgb, var(--page) 94%, transparent);
+    backdrop-filter: blur(4px);
   }
 
   .surface.modal[open] {
