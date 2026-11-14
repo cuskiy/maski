@@ -147,6 +147,7 @@ and the paragraph that owns it.
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
 | C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
 | C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
+| C12 | the review shell and booted store start from one read state; boot removes no active badge, scroll target, or media chrome | review test |
 
 Current budgets: the client and stylesheet budgets are deferred until the UI is complete; C6 enforces neither in this phase. A budget is a decision, not a target.
 Raising one is a change to this file with the reason.
@@ -447,6 +448,12 @@ On the chat page:
 The measured evidence is a screenshot at load, a screenshot after the data, and a comparison of the
 topbar and list boxes between them.
 
+The static shell and the booted store are one snapshot. The review's active room is born read, its read
+receipt is the last message, and `prepaint` places the timeline at that receipt before the first frame; no
+active unread badge, scroll target or media chrome may be painted and then removed. A static page never
+contains a visible state that boot changes. C12 tests this snapshot; C10 remains the browser first-paint
+check.
+
 A narrow first load opens on the navigation; selecting a room opens its detail. The generated review page
 starts with `data-view="list"` so the demo matches that entry instead of showing a room on load.
 
@@ -595,6 +602,7 @@ transitions, and Temporal, because at least one of the three engines does not sh
 | a media timestamp outside the image floats in the page | put the time span inside the media frame |
 | a topbar menu at an anchor edge overlaps the chrome | fixed inset below the bar with equal gaps |
 | active and hover at adjacent ink steps are indistinguishable | active is a deeper step; nested space rows use a middle step |
+| a static review frame showed unread badges and media chrome boot removes | one read-first snapshot, prepared anchor and C12 |
 
 ## 3.12 Phases
 
@@ -681,10 +689,11 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
 ## Verification
 
 The gate is the whole operational contract: a claim names the rung it was verified at, and a stylesheet
-read is not a browser run. C9 is the feature check plus `features.md`; C10 is the browser first-paint run;
-neither is part of `npm run check` today. The mock UI has a Chromium surface pass at 390, 856 and 1280,
-light and dark, plus the generated scriptless structure and the pure tests. Worker and real-server claims
-wait for Matrix. The client and stylesheet budgets are deferred until the UI is complete, not raised.
+read is not a browser run. C9 is the feature check plus `features.md`; C10 is the browser first-paint run
+and is not part of `npm run check`; C12 is the pure review-state contract and is part of it. The mock UI has
+a Chromium surface pass at 390, 856 and 1280, light and dark, plus the generated scriptless structure and
+the pure tests. Worker and real-server claims wait for Matrix. The client and stylesheet budgets are
+deferred until the UI is complete, not raised.
 
 ## Open defects
 
