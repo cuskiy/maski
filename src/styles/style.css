@@ -1849,7 +1849,7 @@
     border: 0;
     border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--page) 94%, transparent);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(3px);
   }
 
   .surface.modal[open] {
