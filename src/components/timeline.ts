@@ -200,10 +200,6 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
         : html`<a class="attachment" href="${media.url}" download>${details}${meta}</a>`;
     return content;
   }
-  const dimensions =
-    media.width === null || media.height === null
-      ? html``
-      : html`<span class="media-dimensions">${String(media.width)} × ${String(media.height)}</span>`;
   const content =
     media.url === null
       ? html`<button
@@ -215,7 +211,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           command="show-modal"
           aria-label="${label}: ${media.name}"
         >
-          ${MEDIA_ICONS[media.kind]}<span class="media-label">${label}</span>${dimensions}
+          <span class="media-pattern" aria-hidden="true"></span>${MEDIA_ICONS[media.kind]}
         </button>`
       : media.kind === "video"
         ? html`<video class="media-element" controls preload="metadata" src="${media.url}" aria-label="${media.name}"></video>`
@@ -230,7 +226,10 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
           </button>`;
   return html`<figure class="message-media is-${media.kind}">
-    <div class="media-frame">${content}${caption}${meta}</div>
+    <div class="media-frame">
+      ${content}
+      <div class="media-footer">${caption}${meta}</div>
+    </div>
   </figure>`;
 }
 
