@@ -1520,14 +1520,21 @@
   }
 
   .media-caption {
-    max-inline-size: var(--bubble-max);
-    color: var(--ink-2);
-    font-size: var(--text-md);
-    line-height: var(--leading-normal);
-  }
-
-  .message.is-own .media-caption {
-    text-align: end;
+    position: absolute;
+    z-index: 1;
+    inset-block-end: 6px;
+    inset-inline-start: 6px;
+    max-inline-size: calc(100% - 4.5rem);
+    padding: 2px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--media-bg);
+    color: var(--media-ink);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    overflow: hidden;
+    pointer-events: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .attachment {

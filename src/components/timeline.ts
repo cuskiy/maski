@@ -158,7 +158,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   const caption =
     message.body === "" || message.body === media.name || media.kind === "sticker"
       ? html``
-      : html`<figcaption class="media-caption">${message.body}</figcaption>`;
+      : html`<span class="media-caption">${message.body}</span>`;
   if (media.kind === "sticker" && media.url === null) {
     return html`<figure class="message-media is-sticker">
       <div class="media-frame">
@@ -230,8 +230,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
           </button>`;
   return html`<figure class="message-media is-${media.kind}">
-    <div class="media-frame">${content}${meta}</div>
-    ${caption}
+    <div class="media-frame">${content}${caption}${meta}</div>
   </figure>`;
 }
 
