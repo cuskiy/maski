@@ -100,17 +100,14 @@ function messageRow(
   const pending = message.status !== "sent";
   const failure = `${t(c, "message.failed")}${message.error === null ? "" : `: ${message.error}`}`;
   const status = pending
-    ? html`<span class="message-status" data-status="${message.status}">
-        ${
-          message.status === "failed"
-            ? html`<span class="message-failed" role="img" aria-label="${failure}" title="${failure}">!</span>`
-            : html`<span
-                class="message-spinner"
-                role="status"
-                aria-label="${t(c, STATUS_LABELS[message.status === "queued" ? "queued" : "sending"])}"
-              ></span>`
-        }
-      </span>`
+    ? message.status === "failed"
+      ? html`<span class="message-failed" role="img" aria-label="${failure}">!</span
+          ><span class="bubble tip" aria-hidden="true">${failure}</span>`
+      : html`<span
+          class="message-spinner"
+          role="status"
+          aria-label="${t(c, STATUS_LABELS[message.status === "queued" ? "queued" : "sending"])}"
+        ></span>`
     : html``;
   const meta = messageMeta(message, c, time, status);
   const content =
