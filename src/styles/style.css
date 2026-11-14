@@ -22,7 +22,7 @@
     --chrome: light-dark(rgb(251 251 251 / 82%), rgb(29 28 26 / 82%));
     --nav: light-dark(rgb(241 241 241 / 94%), rgb(30 29 27 / 94%));
     --hairline: light-dark(rgb(20 20 20 / 8%), rgb(228 225 220 / 8%));
-    --focus: light-dark(rgb(77 108 133), rgb(161 191 213));
+    --focus: var(--ink-3);
     --danger: light-dark(rgb(150 97 92), rgb(217 167 161));
     --danger-soft: light-dark(rgb(150 97 92 / 10%), rgb(217 167 161 / 14%));
     --mark: light-dark(rgb(232 232 232), rgb(64 62 59));
@@ -195,7 +195,7 @@
   }
 
   :focus-visible {
-    outline: var(--outline-width) solid var(--focus);
+    outline: 1px solid var(--focus);
     outline-offset: var(--outline-offset);
   }
 
@@ -1486,22 +1486,6 @@
     color: var(--ink-3);
   }
 
-  .media-frame:has(> .attachment) {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    inline-size: fit-content;
-    gap: var(--space-1);
-    padding: var(--space-1);
-  }
-
-  .media-frame:has(> .attachment) > .bubble-meta {
-    position: static;
-    padding: 0;
-    background: none;
-    color: var(--ink-3);
-  }
-
   .media-placeholder {
     display: grid;
     min-inline-size: 14rem;
@@ -1549,12 +1533,17 @@
     align-items: center;
     gap: var(--space-2);
     max-inline-size: 22rem;
-    padding: var(--space-2) var(--space-3);
+    padding: 6px var(--space-2);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--ink);
     text-align: start;
     transition: var(--control-transition);
+  }
+
+  .attachment > .bubble-meta {
+    margin-inline-start: auto;
+    align-self: center;
   }
 
   .attachment:hover {
@@ -2172,7 +2161,7 @@
   }
 
   .setting-row:has(> input[type="checkbox"]:focus-visible)::after {
-    outline: var(--outline-width) solid var(--focus);
+    outline: 1px solid var(--focus);
     outline-offset: var(--outline-offset);
   }
 

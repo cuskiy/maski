@@ -195,10 +195,10 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             commandfor="${SURFACE.viewer}"
             command="show-modal"
           >
-            ${details}
+            ${details}${meta}
           </button>`
-        : html`<a class="attachment" href="${media.url}" download>${details}</a>`;
-    return html`<div class="media-frame">${content}${meta}</div>`;
+        : html`<a class="attachment" href="${media.url}" download>${details}${meta}</a>`;
+    return content;
   }
   const dimensions =
     media.width === null || media.height === null
