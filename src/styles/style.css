@@ -871,7 +871,7 @@
     margin-block-start: var(--space-2);
     padding: 5px var(--space-2);
     border-radius: var(--radius-md);
-    background: var(--surface);
+    background: light-dark(var(--surface-hover), var(--menu));
     color: var(--ink);
     text-align: start;
     anchor-name: --nav-account;
@@ -879,11 +879,11 @@
   }
 
   .nav-account:hover {
-    background: var(--surface-hover);
+    background: light-dark(var(--surface-active), var(--menu-hover));
   }
 
   .nav-account:active {
-    background: var(--surface-active);
+    background: light-dark(var(--surface-active), var(--menu-active));
   }
 
   .nav-avatar {
@@ -1848,7 +1848,7 @@
     overflow: hidden;
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--page);
+    background: var(--surface);
   }
 
   .surface.modal[open] {
@@ -1881,7 +1881,13 @@
     place-items: center;
     inline-size: 2rem;
     block-size: 2rem;
+    border-radius: var(--radius-sm);
     font-size: var(--text-xl);
+  }
+
+  .surface-close:focus-visible {
+    background: var(--surface-hover);
+    outline: none;
   }
 
   .surface.modal.sas {
@@ -1961,7 +1967,8 @@
     position-try-fallbacks: flip-block, flip-inline;
   }
 
-  #surface-nav-menu {
+  #surface-nav-menu,
+  body:has(.app) #surface-language {
     inline-size: var(--float-width);
     inline-size: anchor-size(width);
     margin: 0 0 var(--space-2);
@@ -1969,6 +1976,7 @@
     position-anchor: --nav-account;
     position-area: top span-right;
     position-try-fallbacks: flip-block, flip-inline;
+    background: var(--surface);
   }
 
   #surface-room-menu,
@@ -2003,12 +2011,6 @@
   #surface-room-menu.is-measuring,
   #surface-message-menu.is-measuring {
     visibility: hidden;
-  }
-
-  body:has(.app) #surface-language {
-    position-anchor: --nav-account;
-    position-area: center right;
-    position-try-fallbacks: flip-inline, flip-block;
   }
 
   #surface-attach,
