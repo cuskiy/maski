@@ -1,5 +1,9 @@
 node_modules/
 dist/
+build/
 .direnv/
 .omp/worktrees/
 *.swp
+*.swo
+.DS_Store
+npm-debug.log*
