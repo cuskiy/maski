@@ -1638,7 +1638,8 @@
     display: grid;
     gap: 6px;
     padding: var(--space-2) var(--timeline-pad) var(--space-3);
-    background: transparent;
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    backdrop-filter: blur(10px) saturate(1.08);
   }
 
   .tray {
@@ -1765,8 +1766,7 @@
     min-block-size: var(--composer-height);
     padding: 0 var(--space-1) 0 var(--space-3);
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface) 70%, transparent);
-    backdrop-filter: blur(10px) saturate(1.08);
+    background: var(--surface);
   }
 
   .composer-field:has(.composer-input:focus-visible) {
