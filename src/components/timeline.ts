@@ -112,12 +112,12 @@ function messageRow(
   const meta = messageMeta(message, c, time, status);
   const content =
     message.encryption.state === "undecryptable"
-      ? html`<div class="bubble is-unreadable">${sender}${reply}<p class="message-unreadable">
+      ? html`<div class="bubble is-unreadable">${sender}<p class="message-unreadable">
           ${t(c, UNREADABLE_KEYS[message.encryption.reason])}
         </p>${meta}</div>`
       : message.media === null
-        ? html`<div class="bubble">${sender}${reply}${messageText(message)}${meta}</div>`
-        : html`<div class="message-media-wrap">${mediaView(message, c, meta, reply)}</div>`;
+        ? html`<div class="bubble">${sender}${messageText(message)}${meta}</div>`
+        : html`<div class="message-media-wrap">${mediaView(message, c, meta)}</div>`;
   return html`${dayStart ? html`<li class="row-day"><time datetime="${new Date(message.ts).toISOString()}">${day.format(message.ts)}</time></li>` : html``}
     <li class="message${message.own ? " is-own" : ""}${groupStart ? " is-group-start" : ""}${groupEnd ? " is-group-end" : ""}${system ? " is-system" : ""}${message.encryption.state === "undecryptable" ? " is-unreadable" : ""}" id="${message.id}" data-id="${message.id}">
       <article
@@ -129,6 +129,7 @@ function messageRow(
       >
         ${avatar}
         <div class="message-body">
+          ${reply}
           <div class="message-line">${content}</div>
           ${reactionsView(message, c)}
         </div>
@@ -150,7 +151,7 @@ function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat,
   return html`<span class="bubble-meta">${stamp}${status}</span>`;
 }
 
-function mediaView(message: MessageRow, c: Catalog, meta: Html, reply: Html): Html {
+function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   const media = message.media;
   if (media === null) return html``;
   const label = t(c, MEDIA_LABELS[media.kind]);
@@ -161,7 +162,6 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html, reply: Html): Ht
   if (media.kind === "sticker" && media.url === null) {
     return html`<figure class="message-media is-sticker">
       <div class="media-frame">
-        ${reply}
         <button
           class="sticker media-open"
           type="button"
@@ -198,7 +198,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html, reply: Html): Ht
             ${details}
           </button>`
         : html`<a class="attachment" href="${media.url}" download>${details}</a>`;
-    return html`<div class="media-frame">${reply}${content}${meta}</div>`;
+    return html`<div class="media-frame">${content}${meta}</div>`;
   }
   const dimensions =
     media.width === null || media.height === null
@@ -230,7 +230,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html, reply: Html): Ht
             <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" />
           </button>`;
   return html`<figure class="message-media is-${media.kind}">
-    <div class="media-frame">${reply}${content}${meta}</div>
+    <div class="media-frame">${content}${meta}</div>
     ${caption}
   </figure>`;
 }
