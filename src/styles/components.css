@@ -1,0 +1,201 @@
+@layer components {
+  .icon {
+    display: block;
+    flex: none;
+    inline-size: var(--icon);
+    block-size: var(--icon);
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .auth-panel {
+    display: grid;
+    gap: var(--space-4);
+    inline-size: min(100%, var(--auth-width));
+  }
+
+  .auth-mark {
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+    letter-spacing: 0.01em;
+  }
+
+  .auth-title {
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-strong);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  .auth-hint {
+    max-inline-size: 38ch;
+    color: var(--ink-2);
+    font-size: var(--text-base);
+    line-height: var(--leading-relaxed);
+  }
+
+  .auth-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  .auth-language {
+    justify-self: start;
+    margin-block-start: var(--space-1);
+  }
+
+  .router {
+    align-content: center;
+    gap: var(--space-3);
+  }
+
+  .router-mark {
+    color: var(--ink-2);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-strong);
+    letter-spacing: 0.01em;
+  }
+
+  .router-spinner {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+    border: var(--outline-width) solid var(--surface-active);
+    border-block-start-color: var(--ink);
+    border-radius: 50%;
+  }
+
+  .router .note {
+    max-inline-size: 36ch;
+    text-align: center;
+  }
+
+  .form {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .field {
+    position: relative;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .field-label {
+    color: var(--ink-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-snug);
+  }
+
+  .field-hint {
+    color: var(--ink-3);
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+  }
+
+  .input {
+    inline-size: 100%;
+    block-size: var(--field-height);
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--field-bg);
+    color: var(--field-ink);
+    font-size: var(--text-md);
+    line-height: var(--leading-normal);
+  }
+
+  .input::placeholder {
+    color: var(--field-placeholder);
+  }
+
+  .input:user-invalid {
+    outline: var(--outline-width) solid var(--danger);
+    outline-offset: var(--outline-offset);
+  }
+
+  select.input {
+    padding-inline-end: var(--space-7);
+  }
+
+  .field:has(> select.input)::after {
+    position: absolute;
+    inset-block-end: 0.95rem;
+    inset-inline-end: var(--space-3);
+    color: var(--ink-3);
+    content: "▾";
+    font-size: var(--text-xs);
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .button-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-block-size: var(--field-height);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--ink);
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    line-height: 1;
+    transition: var(--control-transition);
+  }
+
+  .button-primary:hover {
+    background: var(--surface-active);
+    color: var(--ink);
+  }
+
+  .button-primary:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .button-quiet {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-block-size: 2.125rem;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    text-align: start;
+    transition: var(--control-transition);
+  }
+
+  .button-quiet:hover {
+    background: var(--surface-hover);
+    color: var(--ink);
+  }
+
+  .button-quiet:active {
+    background: var(--surface-active);
+  }
+
+  .button-quiet.is-danger {
+    color: var(--danger);
+  }
+
+  .button-quiet.is-danger:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  .button-quiet:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}

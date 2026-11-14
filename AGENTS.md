@@ -147,7 +147,7 @@ and the paragraph that owns it.
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
 | C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
 | C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
-| C12 | the review shell and booted store start from one read state; boot removes no active badge, scroll target, or media chrome | review test |
+| C12 | the static shell contains no room, message, unread, identity, draft or media state; booted mock state is already read | review test |
 | C13 | a grouped message carries its avatar on the last row and chains its inner bubble corners | timeline and style tests |
 
 Current budgets: the client and stylesheet budgets are deferred until the UI is complete; C6 enforces neither in this phase. A budget is a decision, not a target.
@@ -206,11 +206,13 @@ Raising one is a change to this file with the reason.
 - 加载是可见的、可取消的；没有空白等待。首帧不做入场动画；页面重绘可以有短动画，并遵守 reduced-motion。
 - 折叠分区按账户记忆。列表原地更新，不重建节点；首帧的状态在绘制前应用。
 - 刷新应该像无感刷新：该在的内容已经在，变化的内容只变一次。
+- 静态 HTML 只画 shell：HTML、`color-scheme`、导航框架、顶栏框架、时间线区域、输入区和无 JS 提示。房间行、未读数、成员、顶栏身份、消息、草稿、媒体和选择器内容都由 JS 一次性注入。
+- 注入前的状态必须已经是最终态（已读、最终滚动位置）；注入完成后不再 `markRead`，不再二次滚动。
 
 ## 2.3 界面
 
 - **骨架交给 HTML，外观交给 CSS，业务逻辑才交给 JS。** HTML 不含内联 CSS/JS；样式表与脚本外部引入。
-- 没有 JS 时页面是完整的：导航、顶栏、时间线区域、输入框都在，只是没有数据。需要 JS 的能力必须是 `<button>`，由面板说明缺少 JavaScript；不用 `<a>` 假装能点。
+- 没有 JS 时页面是完整的：导航、顶栏、时间线区域、输入框都在，只是没有数据。窄屏无 JS 时导航与内容上下排列，导航仍可展开；需要 JS 的能力必须是 `<button>`，由面板说明缺少 JavaScript；不用 `<a>` 假装能点。
 - 两墨一纸：表面声明墨的比例并据此推出文字色；浅色与深色各一套，用 `light-dark()`。所有颜色、字体、字号、间距、圆角、时长都是 token；规则只用 token。选中文本的灰蓝色是唯一获准的非 ink/page 色令牌。
 - 流体布局：`clamp()`、`minmax()`、`auto-fit`、容器查询；不用宽度媒体查询。窄屏与宽屏是同一套布局的两种状态。
 - 不用阴影、渐变、卡片化仪表盘、大厂范式。顶栏、导航和所有弹窗可以共享一层克制的半透明 + 高斯模糊；这是唯一获准的“玻璃”用法，不做第二套。
@@ -268,6 +270,7 @@ Raising one is a change to this file with the reason.
 - 点击有未读计数气泡的房间时，跳到最后一次已读的位置；第一条新消息的整行背景短暂显示 hover 效果，然后消失。
 - 所有图标换成一套新的、统一的图标；现在的图标不好看。
 - 所有弹窗和右侧顶栏都用背景高斯模糊；具体强度由实现规划。
+- 组件的背景与文字颜色独立：导航、账号卡、顶栏、气泡、菜单、对话框、输入框和卡片各自声明纸与文字角色；卡片不必共用同一个 ink，文字颜色根据它所在的背景推导。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
 - 聊天区域的头像要完整圆形，并与昵称中心对齐；其他区域的圆形头像保持现状。
@@ -300,14 +303,17 @@ default), asset records, layouts, components (markup in, string out), pages (one
 region ids shared with the client), and scripts (build, pages, audit, features, contracts).
 
 Runtime: `protocol/` (command and event unions), `client/` (store, worker client, router, one module
-per region), `worker/` (api, session, db, projection, media, keys), and `src/styles/` (one stylesheet,
-tokens first). The current tree has only the build-time shell and a mock client.
+per region), `worker/` (api, session, db, projection, media, keys), and `src/styles/` (one entry importing
+layer modules, tokens first). The current tree has only the build-time shell and a mock client; the static
+shell carries no room or message data, and the client injects one final snapshot.
 
 Dependency direction is one way: catalogs → lib → layouts/components → pages, build time only; client
 and worker depend on protocol and core types, never on each other.
 
-Each page is one document. `<body data-page>` tells the client what to boot. Region ids live in one
-module imported by both the generator and the client, so the two cannot disagree.
+Each page is one document. `<html data-page>` tells the client what to boot. Region ids live in one
+module imported by both the generator and the client, so the two cannot disagree. The build-time
+`appShell` takes no state and always renders `emptyChatState`; a page cannot accidentally ship mock data.
+The client mounts the same components with the final store.
 
 ## 3.3 Data
 
@@ -455,14 +461,18 @@ On the chat page:
 The measured evidence is a screenshot at load, a screenshot after the data, and a comparison of the
 topbar and list boxes between them.
 
-The static shell and the booted store are one snapshot. The review's active room is born read, its read
-receipt is the last message, and `prepaint` places the timeline at that receipt before the first frame; no
-active unread badge, scroll target or media chrome may be painted and then removed. A static page never
-contains a visible state that boot changes. C12 tests this snapshot; C10 remains the browser first-paint
-check.
+The static shell is data-free. The client receives one final snapshot, renders every region once in one
+task, computes the first scroll from the same snapshot, and only then becomes interactive. The initial
+injection never calls `markRead` and never scrolls a second time. The review's active room is already
+read, so its receipt is the last message and the first render is final. `prepaint` sets the interactive
+view and the saved section open state; it never writes data, a badge, a draft or a scroll position.
+
+A static page never contains a visible state that boot would change. C12 tests the data-free shell and the
+read snapshot; C10 remains the browser first-paint check.
 
 A narrow first load opens on the navigation; selecting a room opens its detail. The generated review page
-starts with `data-view="list"` so the demo matches that entry instead of showing a room on load.
+starts with `data-view="shell"` so a script-free reader sees the complete navigation and content frame;
+`prepaint` switches an interactive page to `data-view="list"` before the client renders.
 
 ## 3.7 Build, assets, and caching
 
@@ -488,45 +498,43 @@ revalidate; `skipWaiting` and `clients.claim` keep one version live; registratio
 
 ## 3.8 CSS
 
-Color tokens in `:root` are semantic roles, copied from the frozen backup palette: `--page`; the non-text
-ink scale `--ink`, `--ink-2`, `--ink-3`, `--ink-4`; surfaces `--surface`, `--surface-hover`,
-`--surface-active`; bubbles `--bubble`, `--bubble-hover`, `--bubble-ink`; menu states `--menu-hover`,
-`--menu-active`; glass roles `--float`, `--chrome`, `--nav`; state roles `--focus`, `--danger`,
-`--danger-soft`, `--mark`, `--selection`; and the media and scrim roles. `--danger` is the only semantic
-state color, reserved for the failed-send mark, the mention badge and destructive actions. A role names
-its use, never a shade: there is no `--bg-1` and no paired `--surface-text`; components reference these
-roles directly. The values are the backup palette and a refactor never rewrites them through an alias. Do
-not add a near-paper role; the account card is the surface paper and the account menu is the float paper.
+The palette in `:root` is the frozen sRGB set: `--page`; the ink scale; the surface steps; bubble, menu,
+chrome, navigation and float glass; and the focus, danger, mark, selection, media and scrim roles. On top of
+that, each paper declares its own text and state roles: `--nav-*`, `--account-*`, `--topbar-*`,
+`--bubble-*`, `--menu-*`, `--dialog-*`, `--field-*`, `--composer-*` and `--card-*`. These are semantic
+pairs, not numbered shades: a component never has to take the page ink when its paper is a card, a bubble
+or a glass menu. A value may be derived with `color-mix` from ink and its paper; the role name records the
+paper. `--danger` remains the only semantic state color, reserved for the failed-send mark, the mention
+badge and destructive actions.
 
-Surfaces: the page uses `--page`; the topbar uses `--chrome` and the navigation uses `--nav`; dialogs,
-pickers, the account menu and context menus use the single `--float` glass; the account card, media frame
-and controls use the `--surface` family. Text comes from the ink scale, bubble text from `--bubble-ink`,
-and text over media from `--media-ink`. A surface does not declare its own text pair. Hover and active move
-through the surface or menu role steps. Section labels are bold. Dialogs have a title and a close control;
-floating surfaces have no header. The dialog is 24rem wide, settings 46rem, the SAS 22rem, the floating
-surface 14rem, the send menu 11rem, and the accessible name is the surface title. Context menus fit their
-content within that cap and use SVG icons for their actions.
+Surfaces: the page uses `--page`; the topbar uses `--chrome`; the navigation uses `--nav`; the account card
+uses `--account-bg`; raised cards use `--card-bg`; bubbles use `--bubble-bg`; floating menus use
+`--menu-bg`; dialogs use `--dialog-bg`; fields use `--field-bg`. Text, muted text and hover/active states
+come from that paper's own roles. The topbar and navigation share the 8px glass blur; dialogs and popovers
+share the same blur without a second glass style. The dialog backdrop uses the scrim plus a 6px blur. No
+shadow, no gradient, no visible border.
 
-The topbar uses the 82% chrome, the navigation the 94% navigation paper, and dialogs and popovers the 88%
-float paper; all share the same 8px blur. The dialog backdrop uses the scrim plus a 6px blur. No shadow, no
-gradient, no second glass style, no visible border.
+Dialogs have a title and a close control; floating surfaces have no header. The dialog is 24rem wide,
+settings 46rem, the SAS 22rem, the floating surface 14rem, the send menu 11rem, and the accessible name is
+the surface title. Context menus fit their content within that cap and use SVG icons for their actions.
 
 Rules for future CSS:
 
-1. A token names a role, not a level. Numbered color tokens and component text aliases are forbidden; a
-   component uses `--ink`, `--surface`, `--bubble` and their documented states directly.
-2. Palette values are fixed. Changing one is a user decision, never a side effect of a refactor; the CSS
-   test enforces semantic names and token-only colors.
+1. A token names a paper and a role. Numbered color tokens are forbidden; paper text aliases are required
+   because they prove contrast against the paper the component actually paints.
+2. Palette values are fixed. Component role values may derive from the palette with `color-mix`; changing a
+   palette value is a user decision, never a side effect of a refactor.
 3. Literal colors live only in the token layer. Component rules use roles; `color-mix` may combine roles,
    never a literal.
-4. Hover and active reuse existing role steps. A new state color needs a new named role and a check.
-5. One stylesheet, one layer order: tokens, reset, base, layout, components, surfaces, motion. Local custom
-   properties are for geometry or motion, never for a color.
+4. Hover and active reuse the paper's state roles. A new state color needs a new named role and a check.
+5. One stylesheet entry, one layer order: tokens, reset, base, layout, components, surfaces, motion. The
+   entry imports modules by layer; navigation, timeline and composer are separate files inside the
+   components layer. Local custom properties are for geometry or motion, never for a color.
 6. No width media query. Layout is fluid with `clamp()`, `minmax()`, `auto-fit` and container queries;
    every control gets `appearance: none` before styling and a visible focus outline.
 7. Every new rule must pass `test/style.test.ts`: all declared properties used, no numbered color tokens,
-   no `-text` aliases, no literal `color` or `background` outside tokens, no vendor prefixes or viewport
-   width queries.
+   no literal `color` or `background` outside tokens, no vendor prefixes or viewport width queries, and the
+   navigation, bubble, menu, dialog, field and card text roles still resolve to their own token.
 
 Fluid layout: navigation `clamp(15rem, 22vw, 19rem)`, chat full content width, bubbles and media `36rem`,
 fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell and `data-view` on the
@@ -545,8 +553,9 @@ reduced motion stops them.
 
 Pure tests: catalog parity and placeholder substitution, HTML escaping, message grouping in one pass,
 store notification granularity and batching, generated page structure and locale addresses, the surface
-registry, CSS token/selector invariants and the deterministic watermark pack. Browser surface tests cover
-the live chat, dialogs and popovers; worker and real-server tests wait for P1.
+registry, the data-free static shell, per-paper color roles, grouped avatars and bubble corners, CSS
+token/selector invariants and the deterministic watermark pack. Browser surface tests cover the live chat,
+dialogs and popovers; worker and real-server tests wait for P1.
 
 Real-server tests: the whole flow on a device whose state is real, including the first paint and the
 timing of rooms versus crypto.
@@ -609,7 +618,7 @@ transitions, and Temporal, because at least one of the three engines does not sh
 | a media timestamp outside the image floats in the page | put the time span inside the media frame |
 | a topbar menu at an anchor edge overlaps the chrome | fixed inset below the bar with equal gaps |
 | active and hover at adjacent ink steps are indistinguishable | active is a deeper step; nested space rows use a middle step |
-| a static review frame showed unread badges and media chrome boot removes | one read-first snapshot, prepared anchor and C12 |
+| a static review frame showed unread badges and media chrome boot removes | data-free shell, one final injection and C12 |
 | a grouped message avatar moved to the first row and lost its corner chain | avatar on the group end; inner corners use `--bubble-inner`; C13 |
 
 ## 3.12 Phases
@@ -665,12 +674,13 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
 
 - `src/pages/` — one build-time view per page (the chat at the locale root); `src/layouts/` — document,
   chat and auth shells; `src/components/` — pure markup returned as `Html`, shared with the client, with
-  `surfaces.ts` holding the dialog/floating bodies; `src/catalogs/` — typed copy; `src/styles/style.css` —
-  one layered stylesheet (tokens, reset, base, layout, components, surfaces, motion); `src/lib/` — HTML
-  escaping, catalog, assets; `src/core/types.ts`, `state.ts`, `regions.ts`, `surfaces.ts`, `locales.ts`,
-  `rooms.ts`, `messageGroups.ts` and `mock.ts` — page state, ids, locale paths, room factories, grouping and
-  deterministic mock data; `src/client/` — main/app, guard, prepaint, auth, chat, storage, session, prefs,
-  store, actions, the surface controller, regions (navigation, header, timeline, composer) and position.
+  `surfaces.ts` holding the dialog/floating bodies; `src/catalogs/` — typed copy; `src/styles/style.css` — the
+  entry that imports `tokens`, `reset`, `base`, `layout`, `components`, `navigation`, `timeline`, `composer`,
+  `surfaces` and `motion`; `src/lib/` — HTML escaping, catalog, assets; `src/core/types.ts`, `state.ts`,
+  `regions.ts`, `surfaces.ts`, `locales.ts`, `rooms.ts`, `messageGroups.ts` and `mock.ts` — page state, ids,
+  locale paths, room factories, grouping and deterministic mock data; `src/client/` — main/app, guard,
+  prepaint, auth, chat, storage, session, prefs, store, actions, the surface controller, regions (navigation,
+  header, timeline, composer) and position.
 - `/` is the one-time language entry. `/en/` and `/zh-CN/` are the locale roots; the chat is the locale
   root, and the other pages sit under the prefix. `/` and `/en/` are English.
 - `scripts/pages.ts` — root router plus locale pages; `scripts/build.ts` — esbuild stylesheet, guard,
@@ -681,10 +691,11 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
 - The tree is a build-time static shell plus a client mock UI. There is no `src/worker` or `src/protocol`,
   and no Matrix import; the client reads `src/core/mock.ts` and the guard validates the mock session. C2
   and C3 wait for the real runtime. The SDK dependencies are not imported.
-- The generated chat page is the empty shell. The dev-only `/review/` artifact renders deterministic mock
-  rooms and messages for visual review; it is not part of `renderPages()` or the production audit. The
-  stylesheet has no visible borders or dividers; the navigation action block is a menu surface and section
-  labels are bold. The frontend-design skill owns the visual review; do not add a second convention.
+- The generated chat page is the empty shell. The dev-only `/review/` artifact uses the same empty shell
+  and injects the deterministic mock rooms, account and messages from the client; it is not part of
+  `renderPages()` or the production audit. The stylesheet has no visible borders or dividers; the navigation
+  action block is a menu surface and section labels are bold. The frontend-design skill owns the visual
+  review; do not add a second convention.
 - The client is a mock: `Load older` emits an empty older window and `Copy link` points at addresses the
   build does not serve. They are kept as review artifacts, not shipped behavior.
 

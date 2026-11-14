@@ -277,7 +277,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
     retryMessage(messageId) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       if (message === undefined || message.status !== "failed") return;
-      const retried = Object.assign({}, message, { status: "sending" as const, error: null });
+      const retried = { ...message, status: "sending" as const, error: null };
       store.write(
         "messages",
         store.read("messages").map((entry) => (entry.id === messageId ? retried : entry)),

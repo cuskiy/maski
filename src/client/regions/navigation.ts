@@ -71,14 +71,22 @@ function reconcile(current: HTMLElement, next: HTMLElement): void {
     currentSection.open = nextSection.open;
     const nextCount = nextSection.querySelector(".section-count");
     const currentCount = currentSection.querySelector(".section-count");
-    if (nextCount !== null && currentCount !== null) currentCount.textContent = nextCount.textContent;
+    if (nextCount === null) currentCount?.remove();
+    else if (currentCount === null) {
+      const count = document.createElement("span");
+      count.className = "section-count";
+      count.textContent = nextCount.textContent;
+      currentSection.querySelector(".section-chevron")?.before(count);
+    } else {
+      currentCount.textContent = nextCount.textContent;
+    }
     const nextRows = nextSection.querySelector<HTMLOListElement>(":scope > ol.section-rows");
     const currentRows = currentSection.querySelector<HTMLOListElement>(":scope > ol.section-rows");
     if (nextRows !== null && currentRows !== null) reconcileRows(currentRows, nextRows);
   }
   for (const field of ["avatar", "name", "userId"] as const) {
-    const source = next.querySelector<HTMLElement>(`[data-field="${field}"]`);
-    const target = current.querySelector<HTMLElement>(`[data-field="${field}"]`);
+    const source = next.querySelector<HTMLElement>(`.nav-account [data-field="${field}"]`);
+    const target = current.querySelector<HTMLElement>(`.nav-account [data-field="${field}"]`);
     if (source !== null && target !== null) {
       target.textContent = source.textContent;
       target.hidden = source.hidden;

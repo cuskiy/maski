@@ -70,10 +70,11 @@ function sectionView(state: ChatState, c: Catalog, id: SectionId, key: Parameter
   const rooms = state.rooms.filter((room) => belongs(room, id));
   const open = state.sections[id].open;
   const loading = state.roomsLoading && id === "rooms";
+  const booted = state.phase !== "boot";
   return html`<details class="section" data-section="${id}" ${open ? html` open` : html``}>
     <summary class="section-head">
       <span class="section-name">${t(c, key)}</span>
-      ${loading ? html`` : html`<span class="section-count">${String(rooms.length)}</span>`}
+      ${!loading && booted ? html`<span class="section-count">${String(rooms.length)}</span>` : html``}
       <span class="section-chevron" aria-hidden="true">${icons.chevron}</span>
     </summary>
     <ol class="section-rows" role="list" data-rows="${id}">

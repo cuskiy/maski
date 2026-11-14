@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-const css = readFileSync(new URL("../src/styles/style.css", import.meta.url), "utf8");
+const styles = new URL("../src/styles/", import.meta.url);
+const css = readdirSync(styles)
+  .filter((file) => file.endsWith(".css"))
+  .map((file) => readFileSync(new URL(file, styles), "utf8"))
+  .join("\n");
 
 void test("every declared custom property is used", () => {
   const definitions = [...css.matchAll(/^\s*(--[a-z0-9-]+):/gmu)].map((match) => match[1]);
@@ -74,7 +78,7 @@ void test("the topbar and navigation keep their papers and floating surfaces sha
   assert.match(css, /\.room-header\s*\{[^}]*background:\s*var\(--chrome\)/u);
   assert.match(
     css,
-    /\.surface\.floating\s*\{[^}]*background:\s*var\(--float\)[^}]*backdrop-filter:\s*blur\(var\(--float-blur\)\)/u,
+    /\.surface\.floating\s*\{[^}]*background:\s*var\(--menu-bg\)[^}]*color:\s*var\(--menu-ink\)[^}]*backdrop-filter:\s*blur\(var\(--float-blur\)\)/u,
   );
 });
 
@@ -104,4 +108,51 @@ void test("grouped bubbles chain their inner corners and keep the avatars on the
     /\.message\.is-own\.is-group-end:not\(\.is-group-start\)\s*\{[^}]*--bubble-start-end:\s*var\(--bubble-inner\);[^}]*\}/u,
   );
   assert.match(css, /\.message:not\(\.is-group-end\)\s+\.message-avatar\s*\{[^}]*visibility:\s*hidden;/u);
+});
+
+void test("each paper declares its own text and state roles", () => {
+  for (const token of [
+    "--nav-ink",
+    "--nav-muted",
+    "--nav-faint",
+    "--nav-hover-bg",
+    "--nav-active-bg",
+    "--nav-active-ink",
+    "--nav-active-muted",
+    "--account-bg",
+    "--account-ink",
+    "--account-muted",
+    "--topbar-title-ink",
+    "--topbar-topic-ink",
+    "--topbar-control-ink",
+    "--bubble-bg",
+    "--bubble-meta-ink",
+    "--menu-bg",
+    "--menu-ink",
+    "--menu-muted",
+    "--dialog-bg",
+    "--dialog-ink",
+    "--dialog-muted",
+    "--field-bg",
+    "--field-ink",
+    "--field-placeholder",
+    "--composer-ink",
+    "--composer-muted",
+    "--card-bg",
+    "--card-ink",
+    "--card-muted",
+  ]) {
+    assert.match(css, new RegExp(`${token}:`, "u"), token);
+  }
+  assert.match(css, /\.room\.is-active \.room-name\s*\{[^}]*color:\s*var\(--nav-active-ink\)/u);
+  assert.match(css, /\.bubble-meta\s*\{[^}]*color:\s*var\(--bubble-meta-ink\)/u);
+  assert.match(css, /\.surface-item\s*\{[^}]*color:\s*var\(--menu-ink\)/u);
+  assert.match(css, /\.setting-line\s*\{[^}]*color:\s*var\(--dialog-ink\)/u);
+  assert.match(css, /\.composer-field\s*\{[^}]*background:\s*var\(--field-bg\)/u);
+});
+
+void test("the scriptless shell lays out both frames", () => {
+  assert.match(css, /\.app\[data-view="shell"\]\s*\{/u);
+  assert.match(css, /\.app\[data-view="shell"\] > \.nav\s*\{/u);
+  assert.match(css, /\.app\[data-view="shell"\] > \.content\s*\{/u);
 });

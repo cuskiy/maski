@@ -117,12 +117,16 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
       return html`<div class="picker">
         <p class="pack-head">${t(c, "surface.sticker")}</p>
         <div class="pack-grid">
-          ${STICKERS.map(
-            (sticker) =>
-              html`<button class="pack-item" type="button" data-sticker="${sticker}" aria-label="${sticker}">
-                ${sticker}
-              </button>`,
-          )}
+          ${
+            state.phase === "boot"
+              ? html``
+              : STICKERS.map(
+                  (sticker) =>
+                    html`<button class="pack-item" type="button" data-sticker="${sticker}" aria-label="${sticker}">
+                      ${sticker}
+                    </button>`,
+                )
+          }
         </div>
       </div>`;
     case SURFACE.emoji:

@@ -63,6 +63,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let rendered = new Map<string, MessageRow>();
   let revealTimer: number | null = null;
   let revealUnread = false;
+  let firstRender = true;
 
   const updateJump = (): void => {
     const jump = region.querySelector<HTMLButtonElement>(".jump-newest");
@@ -168,9 +169,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       .querySelector<HTMLElement>(`[data-region="${REGION.timeline}"]`);
     if (next !== null) reconcile(next);
     markMultilineBubbles(list);
-    requestAnimationFrame(() => {
-      markMultilineBubbles(list);
-    });
 
     if (pendingRoomId !== null && state.messages.length > 0 && state.messages[0]?.roomId === pendingRoomId) {
       const roomId = pendingRoomId;
@@ -202,12 +200,13 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         pinned = true;
       }
       revealUnread = false;
-      actions.markRead(roomId);
+      if (!firstRender) actions.markRead(roomId);
     } else if (pinned) {
       wrap.scrollTop = wrap.scrollHeight;
     } else if (anchor !== null) {
       restoreAnchor(anchor);
     }
+    firstRender = false;
     updateJump();
   };
 

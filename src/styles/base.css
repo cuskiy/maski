@@ -1,0 +1,87 @@
+@layer base {
+  html {
+    overflow-x: clip;
+    background: var(--page);
+  }
+
+  body {
+    overflow-x: clip;
+    overflow-wrap: anywhere;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    text-rendering: optimizeLegibility;
+  }
+
+  html[data-page="chat"] body,
+  html[data-page="review"] body {
+    overflow: hidden;
+  }
+
+  body:has(.surface.modal[open]) {
+    overflow: hidden;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-tight);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: wrap;
+  }
+
+  strong {
+    font-weight: var(--weight-strong);
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .note {
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+  }
+
+  .link {
+    color: var(--ink-2);
+    text-decoration: underline;
+    text-decoration-color: var(--ink-4);
+    text-underline-offset: var(--underline-offset);
+  }
+
+  .link:hover {
+    color: var(--ink);
+  }
+
+  [data-storage-note] {
+    position: sticky;
+    z-index: 20;
+    inset-block-start: 0;
+    inset-inline: 0;
+    padding: var(--space-2) var(--space-4);
+    background: var(--danger-soft);
+    color: var(--ink);
+    font-size: var(--text-sm);
+    text-align: center;
+  }
+}

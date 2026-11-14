@@ -1,0 +1,17 @@
+@layer motion {
+  @keyframes router-turn {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  .router-spinner {
+    animation: router-turn var(--spin-duration) linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .router-spinner {
+      animation: none;
+    }
+  }
+}

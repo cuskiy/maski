@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { minify } from "html-minifier-terser";
 import { base } from "../src/layouts/base.ts";
-import { reviewView } from "../src/pages/review.ts";
+import { chatView } from "../src/pages/chat.ts";
 import { en } from "../src/catalogs/en.ts";
 import { zhCN } from "../src/catalogs/zh-CN.ts";
 import { minifyOptions } from "./build.ts";
@@ -21,7 +21,7 @@ const REVIEW_LOCALES: ReadonlyArray<{ locale: Locale; path: string }> = [
 export async function writeReview(): Promise<void> {
   const assets = JSON.parse(await readFile(join(root, "build", "manifest.json"), "utf8")) as Assets;
   for (const { locale, path } of REVIEW_LOCALES) {
-    const view = reviewView({ locale, assets, path, localePath: locale.path, alternates: [] });
+    const view = chatView({ locale, assets, path, localePath: locale.path, alternates: [] });
     const document = base({
       c: locale.catalog,
       page: "review",

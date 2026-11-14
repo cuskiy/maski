@@ -1,0 +1,174 @@
+@layer layout {
+  body {
+    container-type: inline-size;
+  }
+
+  body:has(.app) {
+    block-size: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .auth,
+  .router {
+    display: grid;
+    place-items: center;
+    min-block-size: 100dvh;
+    padding: var(--space-7) var(--space-4);
+    background: var(--page);
+    color: var(--ink);
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: var(--nav-width) minmax(0, 1fr);
+    inline-size: 100%;
+    block-size: 100dvh;
+    overflow: hidden;
+    background: var(--page);
+  }
+
+  .app > .nav {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .app > .content {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .nav {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-inline-size: 0;
+    min-block-size: 0;
+    block-size: 100%;
+    padding: var(--space-3) var(--space-3) var(--space-2);
+    container-type: inline-size;
+    background: var(--nav);
+    backdrop-filter: blur(var(--float-blur));
+    color: var(--ink);
+  }
+
+  .content {
+    position: relative;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-inline-size: 0;
+    min-block-size: 0;
+    block-size: 100%;
+    overflow: hidden;
+    background: var(--page);
+  }
+
+  .content::before {
+    position: absolute;
+    z-index: 0;
+    inset-block-start: var(--topbar-height);
+    inset-inline: 0;
+    inset-block-end: 0;
+    content: "";
+    background-image: url("./watermark.svg");
+    background-size: 1600px auto;
+    background-position: center;
+    background-repeat: repeat;
+    opacity: 0.08;
+    filter: blur(0.25px);
+    pointer-events: none;
+  }
+
+  .content > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .content::before {
+      opacity: 0.05;
+      filter: invert(1) blur(0.3px);
+    }
+  }
+
+  @container (inline-size < 44rem) {
+    .content::before {
+      background-size: 1500px auto;
+    }
+  }
+
+  .timeline-region {
+    position: relative;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    min-block-size: 0;
+    overflow: hidden;
+  }
+
+  .timeline-wrap {
+    position: relative;
+    block-size: 100%;
+    min-block-size: 0;
+    overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+    padding: calc(var(--topbar-height) + var(--space-4)) var(--timeline-pad) var(--space-3);
+  }
+
+  @container (inline-size < 30rem) {
+    .auth,
+    .router {
+      padding: var(--space-5) var(--space-4);
+    }
+  }
+
+  @container (inline-size < 44rem) {
+    .app {
+      grid-template-columns: minmax(0, 1fr);
+      --topbar-height: 3.5rem;
+    }
+
+    .app > .nav,
+    .app > .content {
+      grid-column: 1;
+    }
+
+    .app[data-view="list"] .nav {
+      display: grid;
+    }
+
+    .app[data-view="list"] .content {
+      display: none;
+    }
+
+    .app[data-view="room"] .nav {
+      display: none;
+    }
+
+    .app[data-view="room"] .content {
+      display: grid;
+    }
+
+    .app[data-view="shell"] {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
+    }
+
+    .app[data-view="shell"] > .nav {
+      grid-column: 1;
+      grid-row: 1;
+      max-block-size: 45dvh;
+      block-size: auto;
+    }
+
+    .app[data-view="shell"] > .content {
+      grid-column: 1;
+      grid-row: 2;
+      display: grid;
+      min-block-size: 0;
+      block-size: auto;
+    }
+  }
+}

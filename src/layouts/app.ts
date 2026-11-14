@@ -1,7 +1,7 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
-import type { ChatState } from "../core/types.ts";
+import { emptyChatState } from "../core/state.ts";
 import { REGION } from "../core/regions.ts";
 import { CHAT_SURFACES } from "../core/surfaces.ts";
 import { composer } from "../components/composer.ts";
@@ -11,8 +11,9 @@ import { surfaceBodyFor } from "../components/surfaces.ts";
 import { timeline } from "../components/timeline.ts";
 import { topbar } from "../components/topbar.ts";
 
-export function appShell(state: ChatState, c: Catalog, locale: string): Html {
-  return html`<div class="app" data-region="${REGION.shell}" data-view="list">
+export function appShell(c: Catalog, locale: string): Html {
+  const state = emptyChatState();
+  return html`<div class="app" data-region="${REGION.shell}" data-view="shell">
       ${nav(state, c)}
       <main class="content" id="${REGION.content}" data-region="${REGION.content}">
         <h1 class="visually-hidden">${t(c, "chat.title")}</h1>

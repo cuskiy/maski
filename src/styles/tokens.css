@@ -1,0 +1,166 @@
+@layer tokens {
+  :root {
+    color-scheme: light dark;
+
+    --page: light-dark(rgb(255 255 255), rgb(24 23 21));
+    --ink: light-dark(rgb(20 20 20), rgb(228 225 220));
+    --ink-2: light-dark(rgb(77 77 77), rgb(169 166 161));
+    --ink-3: light-dark(rgb(102 102 102), rgb(137 134 129));
+    --ink-4: light-dark(rgb(130 130 130), rgb(105 102 98));
+    --surface: light-dark(rgb(244 244 244), rgb(32 31 29));
+    --surface-hover: light-dark(rgb(236 236 236), rgb(41 39 37));
+    --surface-active: light-dark(rgb(226 226 226), rgb(49 47 44));
+    --bubble: light-dark(rgb(241 241 241), rgb(34 33 31));
+    --bubble-hover: light-dark(rgb(233 233 233), rgb(42 40 38));
+    --bubble-ink: light-dark(rgb(20 20 20), rgb(222 218 210));
+    --menu-hover: light-dark(rgb(238 238 238), rgb(41 39 37));
+    --menu-active: light-dark(rgb(228 228 228), rgb(49 47 44));
+    --float: light-dark(rgb(253 253 253 / 88%), rgb(32 31 29 / 88%));
+    --chrome: light-dark(rgb(251 251 251 / 82%), rgb(29 28 26 / 82%));
+    --nav: light-dark(rgb(241 241 241 / 94%), rgb(30 29 27 / 94%));
+    --focus: light-dark(rgb(102 102 102), rgb(137 134 129));
+    --danger: light-dark(rgb(150 97 92), rgb(217 167 161));
+    --danger-soft: light-dark(rgb(150 97 92 / 10%), rgb(217 167 161 / 14%));
+    --mark: light-dark(rgb(232 232 232), rgb(64 62 59));
+    --selection: light-dark(rgb(20 20 20 / 14%), rgb(228 225 220 / 16%));
+    --scrim: rgb(0 0 0 / 46%);
+    --scrollbar: light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%));
+    --code: light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%));
+    --media-ink: rgb(255 255 255);
+    --media-bg: rgb(0 0 0 / 55%);
+
+    --nav-ink: var(--ink);
+    --nav-muted: color-mix(in srgb, var(--ink) 66%, var(--nav) 34%);
+    --nav-faint: color-mix(in srgb, var(--ink) 48%, var(--nav) 52%);
+    --nav-hover-bg: var(--surface-hover);
+    --nav-active-bg: var(--surface-active);
+    --nav-active-ink: var(--ink);
+    --nav-active-muted: color-mix(in srgb, var(--ink) 74%, var(--nav) 26%);
+    --nav-avatar-bg: var(--surface-active);
+    --nav-avatar-ink: var(--ink-2);
+    --nav-badge-bg: color-mix(in srgb, var(--ink) 70%, var(--nav) 30%);
+    --nav-badge-ink: var(--page);
+
+    --account-bg: color-mix(in srgb, var(--surface) 93%, var(--ink) 7%);
+    --account-ink: var(--ink);
+    --account-muted: var(--ink-3);
+    --account-hover-bg: var(--surface-hover);
+    --account-active-bg: var(--surface-active);
+
+    --topbar-title-ink: var(--ink);
+    --topbar-topic-ink: color-mix(in srgb, var(--ink) 62%, var(--chrome) 38%);
+    --topbar-control-ink: var(--ink-2);
+    --topbar-hover-bg: var(--surface-hover);
+    --topbar-active-bg: var(--surface-active);
+
+    --bubble-bg: color-mix(in srgb, var(--bubble) 86%, transparent);
+    --bubble-hover-bg: color-mix(in srgb, var(--bubble-hover) 86%, transparent);
+    --bubble-meta-ink: color-mix(in srgb, var(--bubble-ink) 58%, var(--bubble) 42%);
+
+    --menu-bg: var(--float);
+    --menu-ink: var(--ink);
+    --menu-muted: var(--ink-3);
+    --menu-hover-bg: var(--menu-hover);
+    --menu-active-bg: var(--menu-active);
+
+    --dialog-bg: var(--float);
+    --dialog-ink: var(--ink);
+    --dialog-muted: var(--ink-3);
+    --dialog-hover-bg: var(--surface-hover);
+    --dialog-active-bg: var(--surface-active);
+
+    --field-bg: var(--surface);
+    --field-ink: var(--ink);
+    --field-placeholder: var(--ink-3);
+    --field-focus: var(--ink-4);
+    --composer-ink: var(--ink);
+    --composer-muted: var(--ink-2);
+    --composer-hover-bg: var(--surface-hover);
+    --composer-active-bg: var(--surface-active);
+
+    --card-bg: color-mix(in srgb, var(--surface) 92%, var(--ink) 8%);
+    --card-ink: var(--ink);
+    --card-muted: var(--ink-3);
+    --card-hover-bg: var(--surface-hover);
+    --card-active-bg: var(--surface-active);
+
+    --font:
+      system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+      sans-serif;
+    --font-mono:
+      ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Mono CJK SC",
+      monospace;
+    --weight-medium: 500;
+    --weight-strong: 600;
+    --leading-tight: 1.2;
+    --leading-snug: 1.35;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.6;
+    --underline-offset: 0.18em;
+
+    --text-xs: clamp(0.6875rem, 0.67rem + 0.1vi, 0.75rem);
+    --text-sm: clamp(0.75rem, 0.73rem + 0.12vi, 0.8125rem);
+    --text-base: clamp(0.8125rem, 0.79rem + 0.12vi, 0.8438rem);
+    --text-md: clamp(0.875rem, 0.85rem + 0.12vi, 0.9rem);
+    --text-lg: clamp(1rem, 0.95rem + 0.22vi, 1.125rem);
+    --text-xl: clamp(1.125rem, 1.05rem + 0.35vi, 1.375rem);
+    --text-2xl: clamp(1.5rem, 1.3rem + 0.8vi, 2rem);
+
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-7: 3rem;
+
+    --radius-xs: 0.375rem;
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-pill: 999px;
+
+    --nav-width: clamp(15rem, 22vw, 19rem);
+    --topbar-height: 3.75rem;
+    --timeline-pad: clamp(1rem, 2.4vw, 2rem);
+    --auth-width: 23rem;
+    --dialog-width: 24rem;
+    --sas-width: 22rem;
+    --float-width: 14rem;
+    --send-width: 11rem;
+    --overlay-inset: 2rem;
+    --bubble-max: 36rem;
+    --media-max-block: 24rem;
+    --composer-max: 12rem;
+    --composer-height: 2.375rem;
+    --composer-gap: var(--space-2);
+    --composer-send-gap: 0.75rem;
+
+    --avatar: 2rem;
+    --control: 2rem;
+    --control-sm: 1.75rem;
+    --field-height: 2.5rem;
+    --icon: 1rem;
+    --icon-sm: 0.875rem;
+    --icon-lg: 1.125rem;
+
+    --outline-width: 2px;
+    --outline-offset: 2px;
+    --context-x: 0px;
+    --context-y: 0px;
+    --float-blur: 8px;
+    --scrim-blur: 6px;
+    --spin-duration: 800ms;
+
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --duration: 120ms;
+    --control-transition:
+      background-color var(--duration) var(--ease), color var(--duration) var(--ease),
+      border-color var(--duration) var(--ease);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --duration: 0s;
+    }
+  }
+}
