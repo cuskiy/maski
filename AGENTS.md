@@ -156,6 +156,9 @@ Raising one is a change to this file with the reason.
 
 - Before a multi-file change is reported, it is read once against this file by a reader with no
   memory of writing it. The answer is a list of blockers.
+- A layout refactor is compared with a before crop at the claimed width before it is reported. A moved
+  message avatar anchor, a closed avatar/bubble gutter, a lost glass layer or a lost watermark is a
+  blocker, not a style preference.
 - One commit is one coherent change, imperative, reason in the body, the contract or section named
   when not obvious. History is never rewritten. A mistake is corrected by the next commit.
 - Every commit is a place a reader can stop: the tree builds, the gate passes, the documents agree.
@@ -707,3 +710,24 @@ deferred until the UI is complete, not raised.
    complete; the current sizes are reported by the build rather than failing the gate.
 4. **Settings reset is absent.** A reset needs the worker's crypto/session command; until then the control
    is not rendered rather than being a second destructive action.
+5. **The review message row regressed.** Before the chat refactor, Alice's grouped avatar sat lower in the
+   group with a visible gutter to the bubble; after, the avatar sits on the first line and the bubble
+   touches it. Known: the two `/review/` crops at 390; ruled out: scaling and scroll, because the same
+   crop changes only the avatar anchor and gutter. Next: restore the before geometry and compare the same
+   390 crop before landing.
+
+## Visual regression log
+
+Every layout refactor re-checks these against the before crop. They have regressed before:
+
+| area | reference that must survive |
+|---|---|
+| grouped message | avatar anchor within the group and the visible avatar/bubble gutter |
+| bubble | content fit to `--bubble-max`, message spacing, unread reveal, faint reaction chip |
+| page | watermark tile under the chat, unchanged opacity and placement |
+| chrome | topbar/navigation glass, account card, popover and context-menu glass |
+| composer | action alignment, tray height, send button and input growth |
+
+- **2026-11-14, `/review/` message row.** The chat refactor moved Alice's grouped avatar from the lower
+  group anchor to the first line and closed the visible gutter. The before crop is the reference:
+  restore the anchor and gutter, then compare the same 390 crop before landing.
