@@ -89,6 +89,7 @@ export interface Reaction {
 }
 
 export interface ReplyRef {
+  readonly messageId: string;
   readonly senderName: string;
   readonly body: string;
 }

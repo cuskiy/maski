@@ -94,9 +94,9 @@ function messageRow(
   const reply =
     message.reply === null
       ? html``
-      : html`<blockquote class="bubble-reply">
+      : html`<a class="quote" href="#${message.reply.messageId}">
           <strong>${message.reply.senderName}</strong><span>${message.reply.body}</span>
-        </blockquote>`;
+        </a>`;
   const pending = message.status !== "sent";
   const failure = `${t(c, "message.failed")}${message.error === null ? "" : `: ${message.error}`}`;
   const status = pending
@@ -119,7 +119,7 @@ function messageRow(
         ? html`<div class="bubble">${sender}${reply}${messageText(message)}${meta}</div>`
         : html`<div class="message-media-wrap">${reply}${mediaView(message, c, meta)}</div>`;
   return html`${dayStart ? html`<li class="row-day"><time datetime="${new Date(message.ts).toISOString()}">${day.format(message.ts)}</time></li>` : html``}
-    <li class="message${message.own ? " is-own" : ""}${groupStart ? " is-group-start" : ""}${groupEnd ? " is-group-end" : ""}${system ? " is-system" : ""}${message.encryption.state === "undecryptable" ? " is-unreadable" : ""}" data-id="${message.id}">
+    <li class="message${message.own ? " is-own" : ""}${groupStart ? " is-group-start" : ""}${groupEnd ? " is-group-end" : ""}${system ? " is-system" : ""}${message.encryption.state === "undecryptable" ? " is-unreadable" : ""}" id="${message.id}" data-id="${message.id}">
       <article
         class="message-inner"
         ${showSender ? html`aria-labelledby="${message.id}-sender"` : html`aria-label="${message.senderName}"`}

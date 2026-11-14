@@ -318,7 +318,7 @@ const designMessages: readonly MessageRow[] = [
     kind: "file",
     body: "",
     media: file,
-    reply: { senderName: "You", body: "Looks calm. The topbar no longer moves." },
+    reply: { messageId: "d3", senderName: "You", body: "Looks calm. The topbar no longer moves." },
   }),
   row({
     id: "d7",

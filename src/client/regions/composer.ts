@@ -268,6 +268,7 @@ export class Composer {
       this.replyTo === null
         ? null
         : {
+            messageId: this.replyTo.id,
             senderName: this.replyTo.senderName,
             body: this.replyTo.body === "" ? (this.replyTo.media?.name ?? "") : this.replyTo.body,
           };

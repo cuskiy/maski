@@ -1105,6 +1105,7 @@
 
   .message {
     list-style: none;
+    scroll-margin-block-start: 4rem;
     --bubble-radius: 0.875rem;
     --bubble-inner: 0.25rem;
     --bubble-start-start: var(--bubble-radius);
@@ -1376,25 +1377,26 @@
     }
   }
 
-  .bubble-reply {
+  .quote {
+    position: relative;
     display: grid;
     grid-column: 1 / -1;
-    gap: 1px;
     margin-block-end: var(--space-1);
-    padding: 5px var(--space-2);
+    padding: 5px var(--space-2) 5px var(--space-3);
     border-radius: var(--radius-sm);
-    background: var(--surface);
+    background: var(--surface-hover);
     color: var(--ink-3);
-    font-size: var(--text-sm);
-    line-height: var(--leading-snug);
   }
 
-  .bubble-reply strong {
-    color: var(--ink-2);
-    font-weight: var(--weight-strong);
+  .quote::before {
+    position: absolute;
+    inset: 4px auto 4px 4px;
+    inline-size: 2px;
+    background: currentColor;
+    content: "";
   }
 
-  .bubble-reply span {
+  .quote span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1413,13 +1415,9 @@
 
   .message-media-wrap {
     display: grid;
-    justify-items: start;
+    justify-items: stretch;
     gap: var(--space-1);
     max-inline-size: min(100%, var(--bubble-max));
-  }
-
-  .message.is-own .message-media-wrap {
-    justify-items: end;
   }
 
   .message-media {
