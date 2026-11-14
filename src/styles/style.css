@@ -1350,13 +1350,15 @@
 
   .message-failed {
     display: inline-grid;
-    inline-size: 0.5rem;
-    block-size: 0.5rem;
+    inline-size: 0.625rem;
+    block-size: 0.625rem;
     place-items: center;
+    border: 1px solid var(--danger);
     border-radius: 50%;
-    background: var(--danger);
-    color: var(--page);
-    font-size: clamp(0.4375rem, 0.4rem + 0.1vi, 0.5rem);
+    color: var(--danger);
+    font-size: clamp(0.5rem, 0.45rem + 0.1vi, 0.5625rem);
+    font-weight: var(--weight-strong);
+    line-height: 1;
   }
 
   .tip {
