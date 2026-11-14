@@ -1638,8 +1638,8 @@
     display: grid;
     gap: 6px;
     padding: var(--space-2) var(--timeline-pad) var(--space-3);
-    background: color-mix(in srgb, var(--surface) 70%, transparent);
-    backdrop-filter: blur(10px) saturate(1.08);
+    background: transparent;
+    backdrop-filter: blur(6px);
   }
 
   .tray {
