@@ -148,6 +148,7 @@ and the paragraph that owns it.
 | C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
 | C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
 | C12 | the review shell and booted store start from one read state; boot removes no active badge, scroll target, or media chrome | review test |
+| C13 | a grouped message carries its avatar on the last row and chains its inner bubble corners | timeline and style tests |
 
 Current budgets: the client and stylesheet budgets are deferred until the UI is complete; C6 enforces neither in this phase. A budget is a decision, not a target.
 Raising one is a change to this file with the reason.
@@ -230,7 +231,7 @@ Raising one is a change to this file with the reason.
 - **左导航**：菜单区是一张 raised surface 卡片（搜索、新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、频道四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。频道是 space，点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
 - **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
 - **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
-- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只显示一次头像和名字。头像与昵称中心对齐，头像完整圆形。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
+- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
 - **输入框**：附件、贴纸、输入框、表情、发送。附件支持多选和粘贴，同一缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。
 - 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。
 
@@ -396,8 +397,11 @@ rows share one message body column between the two avatar gutters; other bubbles
 every bubble's right edge lines up, and own bubbles align to the same right edge. Text bubbles fit their
 content up to `--bubble-max` and break at any character rather than leaving a ragged right edge; message
 spacing is `space-3`; media timestamps sit inside the media at the bottom right as a span. The first unread message gets a full-row reveal background that clears after the
-reveal. The message avatar is a complete circle, centered on the nickname line, never clipped by
-`content-visibility` paint containment. Every timestamp uses the `--text-xs` tier. A queued or sending row
+reveal. The message avatar is a complete circle on the last message of a sender group, while the sender
+name is on the first, never clipped by `content-visibility` paint containment. A group chains its inner
+bubble corners: the first bubble's bottom-left, the middle bubbles' top-left and bottom-left, and the last
+bubble's top-left use `--bubble-inner`; every other corner is the normal radius, mirrored on the right for
+own messages. Every timestamp uses the `--text-xs` tier. A queued or sending row
 places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge
 there, whose title carries the error. The timestamp, edited mark and status are not selectable; copying a
 message reads its body, not the meta.
@@ -606,6 +610,7 @@ transitions, and Temporal, because at least one of the three engines does not sh
 | a topbar menu at an anchor edge overlaps the chrome | fixed inset below the bar with equal gaps |
 | active and hover at adjacent ink steps are indistinguishable | active is a deeper step; nested space rows use a middle step |
 | a static review frame showed unread badges and media chrome boot removes | one read-first snapshot, prepared anchor and C12 |
+| a grouped message avatar moved to the first row and lost its corner chain | avatar on the group end; inner corners use `--bubble-inner`; C13 |
 
 ## 3.12 Phases
 
@@ -693,7 +698,8 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
 
 The gate is the whole operational contract: a claim names the rung it was verified at, and a stylesheet
 read is not a browser run. C9 is the feature check plus `features.md`; C10 is the browser first-paint run
-and is not part of `npm run check`; C12 is the pure review-state contract and is part of it. The mock UI has
+and is not part of `npm run check`; C12 is the pure review-state contract and C13 is the grouped-message
+contract, both part of it. The mock UI has
 a Chromium surface pass at 390, 856 and 1280, light and dark, plus the generated scriptless structure and
 the pure tests. Worker and real-server claims wait for Matrix. The client and stylesheet budgets are
 deferred until the UI is complete, not raised.
@@ -710,11 +716,6 @@ deferred until the UI is complete, not raised.
    complete; the current sizes are reported by the build rather than failing the gate.
 4. **Settings reset is absent.** A reset needs the worker's crypto/session command; until then the control
    is not rendered rather than being a second destructive action.
-5. **The review message row regressed.** Before the chat refactor, Alice's grouped avatar sat lower in the
-   group with a visible gutter to the bubble; after, the avatar sits on the first line and the bubble
-   touches it. Known: the two `/review/` crops at 390; ruled out: scaling and scroll, because the same
-   crop changes only the avatar anchor and gutter. Next: restore the before geometry and compare the same
-   390 crop before landing.
 
 ## Visual regression log
 
@@ -722,12 +723,12 @@ Every layout refactor re-checks these against the before crop. They have regress
 
 | area | reference that must survive |
 |---|---|
-| grouped message | avatar anchor within the group and the visible avatar/bubble gutter |
+| grouped message | avatar on the last row; sender name on the first; inner bubble corners chain |
 | bubble | content fit to `--bubble-max`, message spacing, unread reveal, faint reaction chip |
 | page | watermark tile under the chat, unchanged opacity and placement |
 | chrome | topbar/navigation glass, account card, popover and context-menu glass |
 | composer | action alignment, tray height, send button and input growth |
 
-- **2026-11-14, `/review/` message row.** The chat refactor moved Alice's grouped avatar from the lower
-  group anchor to the first line and closed the visible gutter. The before crop is the reference:
-  restore the anchor and gutter, then compare the same 390 crop before landing.
+- **2026-11-14, `/review/` message row.** The chat refactor moved Alice's grouped avatar from the last
+  group row to the first line and dropped the inner corner chain. Resolved: the avatar is on the group end,
+  the bubble chain uses `--bubble-inner`, and C13 guards both. The before crop stays the reference.

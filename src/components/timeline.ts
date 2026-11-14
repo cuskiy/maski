@@ -111,7 +111,7 @@ function messageRow(
         </button>
       </h3>`
     : html``;
-  const avatar = groupStart
+  const avatar = groupEnd
     ? html`<button
         class="message-avatar"
         type="button"

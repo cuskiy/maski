@@ -70,10 +70,38 @@ void test("the color palette keeps the backup values", () => {
 });
 
 void test("the topbar and navigation keep their papers and floating surfaces share one blur", () => {
-  assert.match(css, /\.nav\s*\{[^}]*background:\s*var\(--nav\)/su);
-  assert.match(css, /\.room-header\s*\{[^}]*background:\s*var\(--chrome\)/su);
+  assert.match(css, /\.nav\s*\{[^}]*background:\s*var\(--nav\)/u);
+  assert.match(css, /\.room-header\s*\{[^}]*background:\s*var\(--chrome\)/u);
   assert.match(
     css,
-    /\.surface\.floating\s*\{[^}]*background:\s*var\(--float\)[^}]*backdrop-filter:\s*blur\(var\(--float-blur\)\)/su,
+    /\.surface\.floating\s*\{[^}]*background:\s*var\(--float\)[^}]*backdrop-filter:\s*blur\(var\(--float-blur\)\)/u,
   );
+});
+
+void test("grouped bubbles chain their inner corners and keep the avatars on the end", () => {
+  assert.match(
+    css,
+    /\.message:not\(\.is-own\)\.is-group-start:not\(\.is-group-end\)\s*\{[^}]*--bubble-end-start:\s*var\(--bubble-inner\);[^}]*\}/u,
+  );
+  assert.match(
+    css,
+    /\.message:not\(\.is-own, \.is-group-start, \.is-group-end\)\s*\{[^}]*--bubble-start-start:\s*var\(--bubble-inner\);[^}]*--bubble-end-start:\s*var\(--bubble-inner\);/u,
+  );
+  assert.match(
+    css,
+    /\.message:not\(\.is-own\)\.is-group-end:not\(\.is-group-start\)\s*\{[^}]*--bubble-start-start:\s*var\(--bubble-inner\);[^}]*\}/u,
+  );
+  assert.match(
+    css,
+    /\.message\.is-own\.is-group-start:not\(\.is-group-end\)\s*\{[^}]*--bubble-end-end:\s*var\(--bubble-inner\);[^}]*\}/u,
+  );
+  assert.match(
+    css,
+    /\.message\.is-own:not\(\.is-group-start, \.is-group-end\)\s*\{[^}]*--bubble-start-end:\s*var\(--bubble-inner\);[^}]*--bubble-end-end:\s*var\(--bubble-inner\);/u,
+  );
+  assert.match(
+    css,
+    /\.message\.is-own\.is-group-end:not\(\.is-group-start\)\s*\{[^}]*--bubble-start-end:\s*var\(--bubble-inner\);[^}]*\}/u,
+  );
+  assert.match(css, /\.message:not\(\.is-group-end\)\s+\.message-avatar\s*\{[^}]*visibility:\s*hidden;/u);
 });

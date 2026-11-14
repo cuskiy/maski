@@ -1167,11 +1167,21 @@
     --bubble-end-start: var(--bubble-inner);
   }
 
+  .message:not(.is-own, .is-group-start, .is-group-end) {
+    --bubble-start-start: var(--bubble-inner);
+    --bubble-end-start: var(--bubble-inner);
+  }
+
   .message:not(.is-own).is-group-end:not(.is-group-start) {
     --bubble-start-start: var(--bubble-inner);
   }
 
   .message.is-own.is-group-start:not(.is-group-end) {
+    --bubble-end-end: var(--bubble-inner);
+  }
+
+  .message.is-own:not(.is-group-start, .is-group-end) {
+    --bubble-start-end: var(--bubble-inner);
     --bubble-end-end: var(--bubble-inner);
   }
 
@@ -1210,7 +1220,7 @@
     line-height: 1;
   }
 
-  .message:not(.is-group-start) .message-avatar {
+  .message:not(.is-group-end) .message-avatar {
     visibility: hidden;
   }
 
