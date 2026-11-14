@@ -1363,13 +1363,13 @@
 
   .message-failed {
     display: inline-grid;
-    inline-size: 0.625rem;
-    block-size: 0.625rem;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
     place-items: center;
-    border: 1px solid var(--danger);
+    border: 1px solid var(--ink-3);
     border-radius: 50%;
-    color: var(--danger);
-    font-size: clamp(0.5rem, 0.45rem + 0.1vi, 0.5625rem);
+    color: var(--ink-3);
+    font-size: clamp(0.4375rem, 0.4rem + 0.1vi, 0.5rem);
     font-weight: var(--weight-strong);
     line-height: 1;
   }
