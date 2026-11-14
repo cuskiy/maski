@@ -6,6 +6,7 @@
   "description": "A fast, local-first Matrix client",
   "scripts": {
     "dev": "node scripts/dev.ts",
+    "review": "node scripts/review.ts",
     "build": "npm run types && npm run format:check && npm run lint && npm run test && npm run bundle && npm run audit && npm run contracts",
     "check": "npm run build",
     "bundle": "node scripts/build.ts",
