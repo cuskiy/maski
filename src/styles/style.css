@@ -97,7 +97,7 @@
     --outline-offset: 2px;
     --hairline-width: 1px;
     --float-blur: 8px;
-    --scrim-blur: 6px;
+    --scrim-blur: 5px;
     --spin-duration: 800ms;
 
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
