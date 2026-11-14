@@ -158,6 +158,10 @@
     color: var(--card-ink);
   }
 
+  .settings-panels .profile-line .note {
+    color: var(--card-muted);
+  }
+
   .settings-panels > .surface-section:first-of-type,
   .settings-panels > .surface-section:target {
     display: grid;
@@ -428,16 +432,16 @@
     color: var(--dialog-ink);
   }
 
-  .surface .button-quiet {
+  .surface .button-quiet:not(.is-danger) {
     color: var(--dialog-muted);
   }
 
-  .surface .button-quiet:hover {
+  .surface .button-quiet:not(.is-danger):hover {
     background: var(--dialog-hover-bg);
     color: var(--dialog-ink);
   }
 
-  .surface .button-quiet:active {
+  .surface .button-quiet:not(.is-danger):active {
     background: var(--dialog-active-bg);
   }
 

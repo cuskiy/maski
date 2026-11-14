@@ -63,7 +63,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let rendered = new Map<string, MessageRow>();
   let revealTimer: number | null = null;
   let revealUnread = false;
-  let firstRender = true;
+  let readOnLoad = false;
 
   const updateJump = (): void => {
     const jump = region.querySelector<HTMLButtonElement>(".jump-newest");
@@ -161,6 +161,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       pendingRoomId = state.roomId;
       pinned = true;
       revealUnread = true;
+      readOnLoad = state.roomId !== null;
     }
     if (state.messages.length === 0 && state.roomId !== null) pendingRoomId = state.roomId;
     const anchor = pinned ? null : captureAnchor();
@@ -200,13 +201,15 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         pinned = true;
       }
       revealUnread = false;
-      if (!firstRender) actions.markRead(roomId);
+      if (readOnLoad) {
+        actions.markRead(roomId);
+        readOnLoad = false;
+      }
     } else if (pinned) {
       wrap.scrollTop = wrap.scrollHeight;
     } else if (anchor !== null) {
       restoreAnchor(anchor);
     }
-    firstRender = false;
     updateJump();
   };
 

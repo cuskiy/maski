@@ -11,6 +11,10 @@
     scrollbar-color: var(--scrollbar) transparent;
   }
 
+  .nav .note {
+    color: var(--nav-muted);
+  }
+
   .section + .section {
     margin-block-start: var(--space-1);
   }
