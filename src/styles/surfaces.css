@@ -71,6 +71,14 @@
     inline-size: min(100% - 2 * var(--space-4), 64rem);
   }
 
+  #surface-settings {
+    background: var(--card-bg);
+  }
+
+  #surface-settings .surface-body {
+    background: var(--dialog-bg);
+  }
+
   #surface-settings,
   #surface-room-settings {
     inline-size: min(100% - 2 * var(--space-4), 46rem);
@@ -115,14 +123,15 @@
     align-self: stretch;
     overflow-y: auto;
     padding: var(--space-4) var(--space-2);
-    background: var(--dialog-bg);
+    background: var(--card-bg);
+    color: var(--card-ink);
   }
 
   .settings-tabs a {
     flex: none;
     padding: var(--space-2);
     border-radius: var(--radius-sm);
-    color: var(--dialog-muted);
+    color: var(--card-muted);
     white-space: nowrap;
   }
 
@@ -135,15 +144,15 @@
   :root:has(#room-settings-members:target) .settings-tabs a[href="#room-settings-members"],
   :root:has(#room-settings-notifications:target) .settings-tabs a[href="#room-settings-notifications"],
   :root:not(:has(.surface-section:target)) .settings-tabs a:first-child {
-    background: var(--dialog-active-bg);
-    color: var(--dialog-ink);
+    background: var(--dialog-bg);
+    color: var(--card-ink);
     font-weight: var(--weight-strong);
   }
 
   .settings-tabs a:hover,
   .settings-tabs a:focus-visible {
     background: var(--dialog-hover-bg);
-    color: var(--dialog-ink);
+    color: var(--card-ink);
   }
 
   .settings-panels {
@@ -193,6 +202,17 @@
     padding-inline: var(--space-3);
     background: var(--danger-soft);
     color: var(--danger);
+  }
+
+  #surface-settings .settings-panels > .surface-section {
+    padding: 0;
+    background: transparent;
+    color: var(--dialog-ink);
+  }
+
+  #surface-settings .settings-panels .profile-line {
+    background: var(--card-bg);
+    color: var(--card-ink);
   }
 
   .settings-panels .profile-line {
