@@ -231,6 +231,7 @@ function row(input: RowInput): MessageRow {
     redacted: input.redacted ?? false,
     status: input.status ?? "sent",
     error: input.error ?? null,
+    retryable: false,
     system: input.system ?? false,
     encryption: input.encryption ?? { state: "ok" },
   };

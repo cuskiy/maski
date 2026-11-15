@@ -1,5 +1,6 @@
-import type { CommandMap, CommandName, Event, FailureCode, Reply, ReplyData } from "../protocol/index.ts";
+import type { Command, Event, FailureCode, Reply } from "../protocol/index.ts";
 import { parseCommand } from "../protocol/index.ts";
+import { isRecord } from "../lib/json.ts";
 import { WorkerFailure } from "./failure.ts";
 import type { SessionPort } from "./ports.ts";
 
@@ -11,64 +12,86 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled command ${String(value)}`);
 }
 
-export function createWorkerApi(
-  session: SessionPort,
-  emit?: (event: Event) => void,
-): {
+function invalidId(raw: unknown): number {
+  if (!isRecord(raw)) return 0;
+  const value = raw["id"];
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+export interface WorkerApi {
   handle(raw: unknown): Promise<Reply>;
   dispose(): void;
-} {
+}
+
+export function createWorkerApi(session: SessionPort, emit?: (event: Event) => void): WorkerApi {
   const unsubscribe = emit === undefined ? undefined : session.onEvent(emit);
 
-  async function run<K extends CommandName>(type: K, payload: CommandMap[K]): Promise<ReplyData[K]> {
-    switch (type) {
+  async function run(id: number, command: Command): Promise<Reply> {
+    switch (command.type) {
       case "start":
-        return session.start(payload as CommandMap["start"]) as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.start(command.payload) };
       case "login":
-        return session.login(payload as CommandMap["login"]) as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.login(command.payload) };
       case "logout":
-        return session.logout() as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.logout() };
       case "keyStatus":
-        return session.keyStatus() as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.keyStatus() };
+      case "recover":
+        return { id, ok: true, data: await session.recover(command.payload) };
       case "open":
-        return session.open((payload as CommandMap["open"]).roomId) as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.open(command.payload.roomId) };
       case "older":
-        return session.older((payload as CommandMap["older"]).roomId) as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.older(command.payload.roomId) };
       case "send": {
-        const input = payload as CommandMap["send"];
-        return session.send(
-          input.roomId,
-          input.body,
-          input.html,
-          input.replyTo,
-          input.transactionId,
-          input.messageId,
-        ) as Promise<ReplyData[K]>;
+        const input = command.payload;
+        return {
+          id,
+          ok: true,
+          data: await session.send(
+            input.roomId,
+            input.body,
+            input.html,
+            input.replyTo,
+            input.transactionId,
+            input.messageId,
+            input.kind,
+            input.media,
+          ),
+        };
       }
-      case "markRead": {
-        const input = payload as CommandMap["markRead"];
-        return session.markRead(input.roomId, input.eventId) as Promise<ReplyData[K]>;
-      }
+      case "retrySend":
+        return {
+          id,
+          ok: true,
+          data: await session.retrySend(command.payload.roomId, command.payload.messageId),
+        };
+      case "discardSend":
+        return {
+          id,
+          ok: true,
+          data: await session.discardSend(command.payload.roomId, command.payload.messageId),
+        };
+      case "markRead":
+        return {
+          id,
+          ok: true,
+          data: await session.markRead(command.payload.roomId, command.payload.eventId),
+        };
       case "members":
-        return session.members((payload as CommandMap["members"]).roomId) as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.members(command.payload.roomId) };
       case "resetIdentity":
-        return session.resetIdentity((payload as CommandMap["resetIdentity"]).password) as Promise<ReplyData[K]>;
+        return { id, ok: true, data: await session.resetIdentity(command.payload.password) };
       default:
-        return assertNever(type);
+        return assertNever(command);
     }
   }
 
   return {
     async handle(raw) {
       const command = parseCommand(raw);
-      if (command === null) {
-        const value = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>)["id"] : null;
-        const id = typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0;
-        return fail(id, "invalid");
-      }
+      if (command === null) return fail(invalidId(raw), "invalid");
       try {
-        const data = await run(command.type, command.payload);
-        return { id: command.id, ok: true, data };
+        return await run(command.id, command);
       } catch (error) {
         if (error instanceof WorkerFailure) return fail(command.id, error.code);
         return fail(command.id, "unavailable");

@@ -1,17 +1,18 @@
-import {
-  EventTimeline,
-  EventType,
-  NotificationCountType,
-  type MatrixClient,
-  type MatrixEvent,
-  type Room,
-} from "matrix-js-sdk";
-import type { Member, MessageEncryption, MessageKind, MessageRow, RoomSummary } from "../core/types.ts";
+import { EventTimeline, EventType, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
+import type { Member, MessageEncryption, MessageKind, MessageRow, Membership, RoomSummary } from "../core/types.ts";
 import { DEFAULT_POWER_LEVELS } from "../core/permissions.ts";
-import { createRoom } from "../core/rooms.ts";
+import { createRoom, isRoomJoinRule } from "../core/rooms.ts";
+import { isRecord } from "../lib/json.ts";
 
 function content(event: MatrixEvent): Record<string, unknown> {
-  return event.getContent() as Record<string, unknown>;
+  const value: unknown = event.getContent();
+  return isRecord(value) ? value : {};
+}
+
+const MEMBERSHIPS: ReadonlySet<string> = new Set<Membership>(["join", "invite", "leave", "ban", "knock"]);
+
+function isMembership(value: unknown): value is Membership {
+  return typeof value === "string" && MEMBERSHIPS.has(value);
 }
 
 function messageKind(event: MatrixEvent): MessageKind {
@@ -75,6 +76,7 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
   if (event.getRelation()?.rel_type === "m.replace") return null;
   const encryption = messageEncryption(event);
   const body = encryption.state === "undecryptable" ? "" : content(event)["body"];
+  const formatted = content(event)["formatted_body"];
   const unsigned = event.getUnsigned();
   const transactionId =
     typeof unsigned["transaction_id"] === "string" ? unsigned["transaction_id"] : (event.getTxnId() ?? null);
@@ -93,10 +95,7 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
     own: sender === ownUserId,
     kind,
     body: typeof body === "string" ? body : "",
-    html:
-      encryption.state === "ok" && typeof content(event)["formatted_body"] === "string"
-        ? (content(event)["formatted_body"] as string)
-        : null,
+    html: encryption.state === "ok" && typeof formatted === "string" ? formatted : null,
     media: encryption.state === "ok" ? messageMedia(event, kind) : null,
     reactions: [],
     reply: null,
@@ -105,6 +104,7 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
     redacted: event.isRedacted(),
     status: messageStatus(event),
     error: null,
+    retryable: false,
     system: false,
     encryption,
   };
@@ -147,16 +147,24 @@ function previewFor(room: Room, ownUserId: string): RoomSummary["preview"] {
   return null;
 }
 
+function numberRecord(value: unknown): Readonly<Record<string, number>> {
+  if (!isRecord(value)) return {};
+  const result: Record<string, number> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "number") result[key] = entry;
+  }
+  return result;
+}
+
 function powerLevels(room: Room): RoomSummary["powerLevels"] {
   const event = room.currentState.getStateEvents(EventType.RoomPowerLevels, "");
-  const value = event?.getContent() ?? {};
-  const users = value["users"];
-  const events = value["events"];
+  const value: Record<string, unknown> = event === null ? {} : content(event);
   const notifications = value["notifications"];
+  const notificationsRoom = isRecord(notifications) ? notifications["room"] : undefined;
   return {
-    users: (typeof users === "object" && users !== null ? users : {}) as Record<string, number>,
+    users: numberRecord(value["users"]),
     usersDefault: typeof value["users_default"] === "number" ? value["users_default"] : 0,
-    events: (typeof events === "object" && events !== null ? events : {}) as Record<string, number>,
+    events: numberRecord(value["events"]),
     eventsDefault:
       typeof value["events_default"] === "number" ? value["events_default"] : DEFAULT_POWER_LEVELS.eventsDefault,
     stateDefault:
@@ -166,11 +174,7 @@ function powerLevels(room: Room): RoomSummary["powerLevels"] {
     ban: typeof value["ban"] === "number" ? value["ban"] : DEFAULT_POWER_LEVELS.ban,
     redact: typeof value["redact"] === "number" ? value["redact"] : DEFAULT_POWER_LEVELS.redact,
     notificationsRoom:
-      typeof notifications === "object" &&
-      notifications !== null &&
-      typeof (notifications as Record<string, unknown>)["room"] === "number"
-        ? ((notifications as Record<string, unknown>)["room"] as number)
-        : DEFAULT_POWER_LEVELS.notificationsRoom,
+      typeof notificationsRoom === "number" ? notificationsRoom : DEFAULT_POWER_LEVELS.notificationsRoom,
   };
 }
 
@@ -179,11 +183,12 @@ export function projectRoom(room: Room, ownUserId: string, direct: ReadonlyMap<s
   if (membership !== "join" && membership !== "invite") return null;
   const topic = room.currentState.getStateEvents(EventType.RoomTopic, "")?.getContent()["topic"];
   const createEvent = room.currentState.getStateEvents(EventType.RoomCreate, "");
-  const create = createEvent?.getContent() as Record<string, unknown> | undefined;
-  const aliases =
-    room.getCanonicalAlias() === null ? [] : [room.getCanonicalAlias() as string, ...room.getAltAliases()];
-  const creators = Array.isArray(create?.["additional_creators"])
-    ? (create["additional_creators"] as unknown[]).filter((id): id is string => typeof id === "string")
+  const create = createEvent === null ? undefined : content(createEvent);
+  const canonical = room.getCanonicalAlias();
+  const aliases = canonical === null ? [] : [canonical, ...room.getAltAliases()];
+  const additionalCreators = create?.["additional_creators"];
+  const creators = Array.isArray(additionalCreators)
+    ? additionalCreators.filter((id: unknown): id is string => typeof id === "string")
     : [];
   const creator = createEvent?.getSender();
   if (creator !== undefined && !creators.includes(creator)) creators.push(creator);
@@ -192,6 +197,7 @@ export function projectRoom(room: Room, ownUserId: string, direct: ReadonlyMap<s
     tags[name] = info["order"] === undefined ? {} : { order: String(info["order"]) };
   }
   const readReceipt = room.getEventReadUpTo(ownUserId, true) ?? null;
+  const joinRuleValue = room.getJoinRule();
   const events = room.getLiveTimeline().getEvents();
   const lastEvent = events[events.length - 1];
   const base = createRoom({
@@ -205,7 +211,7 @@ export function projectRoom(room: Room, ownUserId: string, direct: ReadonlyMap<s
     membership,
     notification: "default",
     encryption: room.currentState.getStateEvents(EventType.RoomEncryption, "") === undefined ? "none" : "encrypted",
-    joinRule: room.getJoinRule() as RoomSummary["joinRule"],
+    joinRule: isRoomJoinRule(joinRuleValue) ? joinRuleValue : "invite",
     guestAccess: room.getGuestAccess(),
     historyVisibility: room.getHistoryVisibility(),
     directoryPublished: aliases.length > 0,
@@ -221,8 +227,8 @@ export function projectRoom(room: Room, ownUserId: string, direct: ReadonlyMap<s
   return Object.assign(base, {
     preview: previewFor(room, ownUserId),
     lastTs: lastEvent?.getTs() ?? Date.now(),
-    unread: room.getUnreadNotificationCount(NotificationCountType.Total),
-    highlight: room.getUnreadNotificationCount(NotificationCountType.Highlight),
+    unread: 0,
+    highlight: 0,
   });
 }
 
@@ -232,12 +238,13 @@ export function projectMembers(room: Room): readonly Member[] {
     displayName: member.name,
     avatar: null,
     profile: true,
-    membership: (member.membership ?? "leave") as Member["membership"],
+    membership: isMembership(member.membership) ? member.membership : "leave",
   }));
 }
 
 export function directRooms(client: MatrixClient): ReadonlyMap<string, string> {
-  const direct = client.getAccountData(EventType.Direct)?.getContent() as Record<string, unknown> | undefined;
+  const event = client.getAccountData(EventType.Direct);
+  const direct = event === undefined ? undefined : content(event);
   const result = new Map<string, string>();
   for (const [userId, rooms] of Object.entries(direct ?? {})) {
     if (!Array.isArray(rooms)) continue;

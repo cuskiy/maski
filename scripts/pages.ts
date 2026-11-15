@@ -36,6 +36,7 @@ export interface Emit {
 export interface GeneratedPage {
   readonly id: string;
   readonly file: string;
+  readonly url: string;
   readonly locale: string;
 }
 
@@ -70,15 +71,24 @@ function documentFor(
   }).value;
 }
 
+function pageUrl(file: string): string {
+  const normalized = file.replaceAll("\\", "/");
+  return `/${normalized.replace(/index\.html$/u, "").replace(/^\/+/u, "")}`;
+}
+
 export function generatedPages(): GeneratedPage[] {
   return [
-    { id: ROUTER.id, file: "index.html", locale: "en" },
+    { id: ROUTER.id, file: "index.html", url: pageUrl("index.html"), locale: "en" },
     ...locales.flatMap((locale) =>
-      PAGES.map((page) => ({
-        id: page.id,
-        file: join(address(locale, page.path).replace(/^\//u, ""), "index.html"),
-        locale: locale.id,
-      })),
+      PAGES.map((page) => {
+        const file = join(address(locale, page.path).replace(/^\//u, ""), "index.html");
+        return {
+          id: page.id,
+          file,
+          url: pageUrl(file),
+          locale: locale.id,
+        };
+      }),
     ),
   ];
 }

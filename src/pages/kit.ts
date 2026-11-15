@@ -1,9 +1,10 @@
 import type { Assets } from "../lib/assets.ts";
 import type { Html } from "../lib/html.ts";
 import type { Locale } from "../catalogs/index.ts";
+import type { LocaleId } from "../core/locales.ts";
 
 export interface Alternate {
-  readonly lang: string;
+  readonly lang: LocaleId;
   readonly href: string;
 }
 

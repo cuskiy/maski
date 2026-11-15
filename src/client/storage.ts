@@ -3,11 +3,9 @@ export const STORAGE = {
   locale: "maski.locale",
   server: "maski.server",
   account: "maski.account",
-  registered: "maski.registered",
-  key: "maski.key",
+  gate: "maski.gate",
   sections: (account: string) => `maski.sections.${account}`,
   spaces: (account: string) => `maski.spaces.${account}`,
-  draft: (account: string, roomId: string) => `maski.draft.${account}.${roomId}`,
   notifications: (account: string) => `maski.notifications.${account}`,
   backup: (account: string) => `maski.backup.${account}`,
   recentEmoji: (account: string) => `maski.recent-emoji.${account}`,
@@ -15,7 +13,6 @@ export const STORAGE = {
   recentStickers: (account: string) => `maski.recent-stickers.${account}`,
   legacySections: "maski.sections",
   legacySpaces: "maski.spaces",
-  legacyDraft: (roomId: string) => `maski.draft.${roomId}`,
 } as const;
 
 const PROBE = "maski.storage-check";

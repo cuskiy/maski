@@ -41,6 +41,34 @@
     padding: 4px;
   }
 
+  .tray-text {
+    display: grid;
+    min-inline-size: 0;
+    gap: 1px;
+  }
+
+  .tray-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tray-remove {
+    display: grid;
+    flex: none;
+    inline-size: var(--control-sm);
+    block-size: var(--control-sm);
+    place-items: center;
+    border-radius: 50%;
+    color: var(--composer-tray-ink);
+    transition: var(--control-transition);
+  }
+
+  .tray-remove:hover {
+    background: var(--card-hover-bg);
+    color: var(--composer-tray-ink);
+  }
+
   .tray-item.has-thumb .tray-text {
     padding-inline-end: var(--space-4);
   }
@@ -52,12 +80,6 @@
     border-radius: var(--radius-sm);
     background: var(--tray-thumb-bg);
     object-fit: cover;
-  }
-
-  .tray-text {
-    display: grid;
-    min-inline-size: 0;
-    gap: 1px;
   }
 
   .tray-item.has-thumb .tray-name {
@@ -83,28 +105,6 @@
     font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
     line-height: 1;
-  }
-
-  .tray-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .tray-remove {
-    display: grid;
-    flex: none;
-    inline-size: var(--control-sm);
-    block-size: var(--control-sm);
-    place-items: center;
-    border-radius: 50%;
-    color: var(--composer-tray-ink);
-    transition: var(--control-transition);
-  }
-
-  .tray-remove:hover {
-    background: var(--card-hover-bg);
-    color: var(--composer-tray-ink);
   }
 
   .tray-remove .icon {
@@ -172,6 +172,24 @@
 
   .composer-emoji {
     anchor-name: --composer-emoji;
+  }
+
+  .composer-send {
+    display: grid;
+    flex: none;
+    inline-size: var(--control);
+    block-size: var(--control);
+    margin-inline-start: calc(var(--composer-send-gap) - var(--composer-gap));
+    margin-block-end: 3px;
+    padding: 0;
+    place-content: center;
+    place-items: center;
+    border-radius: 50%;
+    background: none;
+    color: var(--composer-muted);
+    line-height: 0;
+    anchor-name: --composer-send;
+    transition: var(--control-transition);
   }
 
   .composer-action:hover,
@@ -357,24 +375,6 @@
   .mention-option-id {
     color: var(--menu-muted);
     font-size: var(--text-xs);
-  }
-
-  .composer-send {
-    display: grid;
-    flex: none;
-    inline-size: var(--control);
-    block-size: var(--control);
-    margin-inline-start: calc(var(--composer-send-gap) - var(--composer-gap));
-    margin-block-end: 3px;
-    padding: 0;
-    place-content: center;
-    place-items: center;
-    border-radius: 50%;
-    background: none;
-    color: var(--composer-muted);
-    line-height: 0;
-    anchor-name: --composer-send;
-    transition: var(--control-transition);
   }
 
   .composer-action:disabled,

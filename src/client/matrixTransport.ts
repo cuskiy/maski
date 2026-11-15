@@ -1,18 +1,17 @@
-import type { SessionSummary } from "../core/types.ts";
+import type { MessageRow, SessionSummary } from "../core/types.ts";
 import type {
-  Command,
   CommandMap,
   CommandName,
   Event,
   KeyStatus,
-  Reply,
   ReplyData,
+  ReplyEnvelope,
   StartData,
 } from "../protocol/index.ts";
-import { parseEvent, parseReply } from "../protocol/index.ts";
+import { parseEvent, parseReply, REPLY_DATA_GUARDS } from "../protocol/index.ts";
 
 type Pending = {
-  readonly resolve: (reply: Reply) => void;
+  readonly resolve: (reply: ReplyEnvelope) => void;
   readonly reject: (error: Error) => void;
 };
 
@@ -67,6 +66,10 @@ export class MatrixTransport {
     return this.request("keyStatus", {});
   }
 
+  async recover(input: CommandMap["recover"]): Promise<KeyStatus> {
+    return this.request("recover", input);
+  }
+
   open(roomId: string): void {
     void this.request("open", { roomId }).catch(() => undefined);
   }
@@ -82,8 +85,27 @@ export class MatrixTransport {
     replyTo: string | null,
     transactionId: string,
     messageId: string,
-  ): void {
-    void this.request("send", { roomId, body, html, replyTo, transactionId, messageId }).catch(() => undefined);
+    kind: CommandMap["send"]["kind"],
+    media: CommandMap["send"]["media"],
+  ): Promise<MessageRow> {
+    return this.request("send", {
+      roomId,
+      body,
+      html,
+      replyTo,
+      transactionId,
+      messageId,
+      kind,
+      media,
+    });
+  }
+
+  retrySend(roomId: string, messageId: string): Promise<MessageRow> {
+    return this.request("retrySend", { roomId, messageId });
+  }
+
+  discardSend(roomId: string, messageId: string): void {
+    void this.request("discardSend", { roomId, messageId }).catch(() => undefined);
   }
 
   markRead(roomId: string, eventId: string): void {
@@ -94,6 +116,10 @@ export class MatrixTransport {
     void this.request("members", { roomId }).catch(() => undefined);
   }
 
+  resetIdentity(password: string): Promise<string | null> {
+    return this.request("resetIdentity", { password });
+  }
+
   dispose(): void {
     this.fail();
     this.worker.terminate();
@@ -102,8 +128,8 @@ export class MatrixTransport {
 
   private request<K extends CommandName>(type: K, payload: CommandMap[K]): Promise<ReplyData[K]> {
     const id = ++this.sequence;
-    const command: Command = { id, type, payload } as Command;
-    const promise = new Promise<Reply>((resolve, reject) => {
+    const guard = REPLY_DATA_GUARDS[type];
+    const promise = new Promise<ReplyEnvelope>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.timers.set(
         id,
@@ -114,11 +140,13 @@ export class MatrixTransport {
         }, 30_000),
       );
     });
-    this.worker.postMessage(command);
+    this.worker.postMessage({ id, type, payload });
     return promise
       .then((reply) => {
         if (!reply.ok) throw new Error(reply.code);
-        return reply.data as ReplyData[K];
+        const data = reply.data;
+        if (!guard(data)) throw new Error("worker reply");
+        return data;
       })
       .finally(() => {
         const timer = this.timers.get(id);

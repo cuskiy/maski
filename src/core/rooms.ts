@@ -102,3 +102,40 @@ export function hasTag(room: RoomSummary, tag: "m.favourite" | "m.lowpriority"):
 export function isMuted(room: RoomSummary): boolean {
   return room.notification === "mute";
 }
+
+const NOTIFICATION_LEVELS: ReadonlySet<string> = new Set<NotificationLevel>(["all", "mentions", "mute"]);
+
+const JOIN_RULES: ReadonlySet<string> = new Set<RoomJoinRule>([
+  "public",
+  "invite",
+  "knock",
+  "restricted",
+  "knock_restricted",
+]);
+
+const HISTORY_VISIBILITIES: ReadonlySet<string> = new Set<RoomHistoryVisibility>([
+  "world_readable",
+  "shared",
+  "invited",
+  "joined",
+]);
+
+/** A global notification level from a select value. */
+export function isNotificationLevel(value: unknown): value is NotificationLevel {
+  return typeof value === "string" && NOTIFICATION_LEVELS.has(value);
+}
+
+/** A room notification level from a select value, including the account default. */
+export function isRoomNotification(value: unknown): value is NotificationLevel | "default" {
+  return value === "default" || isNotificationLevel(value);
+}
+
+/** A join rule from a select value or the SDK. */
+export function isRoomJoinRule(value: unknown): value is RoomJoinRule {
+  return typeof value === "string" && JOIN_RULES.has(value);
+}
+
+/** A history visibility from a select value. */
+export function isHistoryVisibility(value: unknown): value is RoomHistoryVisibility {
+  return typeof value === "string" && HISTORY_VISIBILITIES.has(value);
+}

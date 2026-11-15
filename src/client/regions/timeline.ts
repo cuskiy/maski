@@ -3,6 +3,7 @@ import { timeline } from "../../components/timeline.ts";
 import { t } from "../../lib/catalog.ts";
 import type { Catalog } from "../../lib/catalog.ts";
 import { REGION } from "../../core/regions.ts";
+import { isRecord } from "../../lib/json.ts";
 import type { ChatState, MessageRow, RoomSummary } from "../../core/types.ts";
 import type { Actions } from "../actions.ts";
 import type { LocaleId } from "../../core/locales.ts";
@@ -57,6 +58,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
   let readOnLoad = false;
+  let readRequest: string | null = null;
 
   const selectionBar = region.querySelector<HTMLElement>("[data-selection-bar]");
   const selectionCount = selectionBar?.querySelector<HTMLElement>("[data-selection-count]") ?? null;
@@ -127,6 +129,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       return;
     }
     if (action === "delete") {
+      if (!actions.capabilities.redact) return;
       const snapshot = store.snapshot();
       const currentRoom = snapshot.rooms.find((room) => room.roomId === snapshot.roomId) ?? null;
       const ids = selectedIds().filter((id) => {
@@ -163,7 +166,14 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
 
   const markAtBottom = (): void => {
     const room = stateRoom(store.snapshot());
-    if (room !== null && (room.unread > 0 || room.highlight > 0) && isNearBottom(wrap)) {
+    if (
+      room !== null &&
+      room.latestEventId !== null &&
+      room.readReceipt !== room.latestEventId &&
+      readRequest !== room.latestEventId &&
+      isNearBottom(wrap)
+    ) {
+      readRequest = room.latestEventId;
       actions.markRead(room.roomId);
     }
   };
@@ -290,14 +300,16 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       readOnLoad =
         state.roomId !== null &&
         room !== null &&
-        room.readReceipt !== room.latestEventId &&
-        room.unread + room.highlight > 0;
+        room.latestEventId !== null &&
+        room.readReceipt !== room.latestEventId;
+      readRequest = null;
       stopSelection();
     }
+    if (room !== null && readRequest !== null && room.readReceipt === readRequest) readRequest = null;
     if (state.messages.length === 0 && state.roomId !== null) pendingRoomId = state.roomId;
     const anchor = pinned ? null : captureAnchor();
     const next = new DOMParser()
-      .parseFromString(timeline(state, c, locale).value, "text/html")
+      .parseFromString(timeline(state, c, locale, actions.capabilities).value, "text/html")
       .querySelector<HTMLElement>(`[data-region="${REGION.timeline}"]`);
     if (next !== null) reconcile(next);
     layout();
@@ -307,12 +319,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       pendingRoomId = null;
       const receipt = room?.readReceipt ?? null;
       const receiptIndex = receipt === null ? -1 : state.messages.findIndex((message) => message.eventId === receipt);
-      const target =
-        receiptIndex >= 0
-          ? state.messages[receiptIndex]
-          : (room?.unread ?? 0) > 0
-            ? state.messages[state.messages.length - (room?.unread ?? 0)]
-            : undefined;
+      const target = receiptIndex >= 0 ? state.messages[receiptIndex] : undefined;
       if (target !== undefined) {
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(target.id)}"]`);
         if (row !== null) {
@@ -389,8 +396,11 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   };
 
   const onSelectMessage = (event: Event): void => {
-    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
-    if (id !== undefined) startSelection(id);
+    if (!(event instanceof CustomEvent)) return;
+    const detail: unknown = event.detail;
+    if (!isRecord(detail)) return;
+    const id = detail["id"];
+    if (typeof id === "string") startSelection(id);
   };
 
   const onSelectionClear = (): void => stopSelection();

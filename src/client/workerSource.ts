@@ -1,12 +1,27 @@
-import type { MessageRow, NotificationPrefs, RoomSummary } from "../core/types.ts";
+import type { KeyGate, MessageRow, Phase } from "../core/types.ts";
 import type { Event } from "../protocol/index.ts";
-import type { ChatSource, RoomStatePatch, SourceEvent, SourceEvents } from "./source.ts";
+import { PRODUCTION_CAPABILITIES } from "../core/types.ts";
+import type { ChatSource, SourceEvent, SourceEvents } from "./source.ts";
+import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
-import { clearSession } from "./session.ts";
+import { localeForPath, localeRoot } from "../core/locales.ts";
+import { clearSession, setGate } from "./session.ts";
+
+function loginPath(): string {
+  const locale = localeForPath(location.pathname) ?? "en";
+  return `${localeRoot(locale)}login/`;
+}
+
+function phaseFor(gate: KeyGate): Phase {
+  if (gate === "missing") return "signedOut";
+  if (gate === "ready" || gate === "unknown") return "ready";
+  return "locked";
+}
 
 export class WorkerSource implements ChatSource {
+  readonly capabilities = PRODUCTION_CAPABILITIES;
   private readonly transport: MatrixTransport;
-  private readonly listeners = new Map<SourceEvent, Set<(payload: unknown) => void>>();
+  private readonly listeners = createSourceListeners();
   private readonly unlisten: () => void;
   private disposed = false;
 
@@ -21,15 +36,10 @@ export class WorkerSource implements ChatSource {
   }
 
   on<K extends SourceEvent>(event: K, listener: (payload: SourceEvents[K]) => void): () => void {
-    let set = this.listeners.get(event);
-    if (set === undefined) {
-      set = new Set();
-      this.listeners.set(event, set);
-    }
-    const wrapped = (payload: unknown): void => listener(payload as SourceEvents[K]);
-    set.add(wrapped);
+    const channel = this.listeners[event];
+    channel.add(listener);
     return () => {
-      set?.delete(wrapped);
+      channel.delete(listener);
     };
   }
 
@@ -41,13 +51,21 @@ export class WorkerSource implements ChatSource {
           this.emit("phase", "signedOut");
           this.emit("connection", "offline");
           this.emit("rooms", { rooms: [], loading: false });
+          if (new URL(location.href).pathname !== loginPath()) location.assign(loginPath());
           return;
         }
         this.emit("session", data.session);
+        setGate(data.key);
+        this.emit("keys", data.key);
         this.emit("connection", data.connection);
-        this.emit("phase", "ready");
+        this.emit("phase", phaseFor(data.key));
       },
-      () => {
+      (error: unknown) => {
+        if (error instanceof Error && error.message === "locked") {
+          this.emit("phase", "locked");
+          this.emit("connection", "offline");
+          return;
+        }
         this.emit("phase", "signedOut");
         this.emit("connection", "offline");
         this.emit("rooms", { rooms: [], loading: false });
@@ -63,22 +81,29 @@ export class WorkerSource implements ChatSource {
     this.transport.older(roomId);
   }
 
-  send(roomId: string, row: MessageRow): void {
-    if (row.media !== null) {
-      this.emit("outbox", {
-        roomId,
-        messageId: row.id,
-        eventId: row.eventId,
-        status: "failed",
-        error: null,
-      });
-      return;
-    }
-    this.transport.send(roomId, row.body, row.html, row.reply?.messageId ?? null, row.transactionId ?? row.id, row.id);
+  send(roomId: string, row: MessageRow): Promise<MessageRow> {
+    return this.transport.send(
+      roomId,
+      row.body,
+      row.html,
+      row.reply?.messageId ?? null,
+      row.transactionId ?? row.id,
+      row.id,
+      row.kind,
+      row.media,
+    );
   }
 
-  markRead(_roomId: string, _eventId: string | null): void {
-    if (_eventId !== null) this.transport.markRead(_roomId, _eventId);
+  retrySend(roomId: string, messageId: string): Promise<MessageRow> {
+    return this.transport.retrySend(roomId, messageId);
+  }
+
+  discardSend(roomId: string, messageId: string): void {
+    this.transport.discardSend(roomId, messageId);
+  }
+
+  markRead(roomId: string, eventId: string): void {
+    this.transport.markRead(roomId, eventId);
   }
 
   members(roomId: string): void {
@@ -89,44 +114,43 @@ export class WorkerSource implements ChatSource {
     await this.transport.logout();
   }
 
-  search(): readonly MessageRow[] {
-    return [];
+  resetIdentity(password: string): void {
+    void this.transport
+      .resetIdentity(password)
+      .then((value) => {
+        if (value !== null) this.emit("recoveryKey", { value, copy: true, download: true });
+      })
+      .catch(() => undefined);
   }
 
-  react(): void {}
-  edit(): void {}
-  redact(): void {}
-  forward(): void {}
-  typing(): void {}
-  memberAction(): void {}
-  inviteUser(): void {}
-  addRoom(): void {}
-  leaveRoom(): void {}
-  setRoomState(_roomId: string, _patch: RoomStatePatch): void {}
-  setRoomTag(_roomId: string, _tag: "m.favourite" | "m.lowpriority", _enabled: boolean): void {}
-  setNotification(_roomId: string, _mode: RoomSummary["notification"]): void {}
-  resetRecoveryKey(): void {}
-  resetIdentity(): void {}
-  signOutDevice(): void {}
-  signOutOthers(): void {}
-  answerInvite(): void {}
-  saveNotifications(_prefs: NotificationPrefs): void {}
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.unlisten();
     this.transport.dispose();
-    this.listeners.clear();
+    clearSourceListeners(this.listeners);
   }
 
   private emit<K extends SourceEvent>(event: K, payload: SourceEvents[K]): void {
-    this.listeners.get(event)?.forEach((listener) => listener(payload));
+    for (const listener of this.listeners[event]) listener(payload);
   }
 
   private dispatch(event: Event): void {
     switch (event.type) {
       case "session":
+        if (event.payload === null) {
+          clearSession();
+          this.emit("session", null);
+          this.emit("phase", "signedOut");
+          location.assign(loginPath());
+          break;
+        }
         this.emit("session", event.payload);
+        break;
+      case "keys":
+        setGate(event.payload);
+        this.emit("keys", event.payload);
+        this.emit("phase", phaseFor(event.payload));
         break;
       case "rooms":
         this.emit("rooms", event.payload);

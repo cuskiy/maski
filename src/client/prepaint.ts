@@ -1,5 +1,6 @@
 import * as prefs from "./prefs.ts";
 import * as storage from "./storage.ts";
+import { isSectionId } from "../core/state.ts";
 
 const page = document.documentElement.dataset["page"] ?? "";
 if (page === "chat" || page === "review") {
@@ -11,8 +12,8 @@ if (page === "chat" || page === "review") {
   if (sections !== null) {
     for (const details of document.querySelectorAll<HTMLDetailsElement>("details.section[data-section]")) {
       const id = details.dataset["section"];
-      if (id === undefined) continue;
-      const open = sections[id as keyof typeof sections];
+      if (id === undefined || !isSectionId(id)) continue;
+      const open = sections[id];
       if (open !== undefined) details.open = open;
     }
   }

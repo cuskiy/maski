@@ -1,3 +1,5 @@
+import { isRecord } from "../lib/json.ts";
+
 export interface StoredSession {
   readonly baseUrl: string;
   readonly userId: string;
@@ -42,22 +44,21 @@ function transaction<T>(mode: IDBTransactionMode, operation: (store: IDBObjectSt
 export async function readSession(): Promise<StoredSession | null> {
   try {
     const value: unknown = await transaction("readonly", (store) => store.get(KEY));
-    if (typeof value !== "object" || value === null) return null;
-    const record = value as Record<string, unknown>;
+    if (!isRecord(value)) return null;
     if (
-      typeof record["baseUrl"] !== "string" ||
-      typeof record["userId"] !== "string" ||
-      typeof record["deviceId"] !== "string" ||
-      typeof record["accessToken"] !== "string"
+      typeof value["baseUrl"] !== "string" ||
+      typeof value["userId"] !== "string" ||
+      typeof value["deviceId"] !== "string" ||
+      typeof value["accessToken"] !== "string"
     ) {
       return null;
     }
     return {
-      baseUrl: record["baseUrl"],
-      userId: record["userId"],
-      deviceId: record["deviceId"],
-      accessToken: record["accessToken"],
-      refreshToken: typeof record["refreshToken"] === "string" ? record["refreshToken"] : null,
+      baseUrl: value["baseUrl"],
+      userId: value["userId"],
+      deviceId: value["deviceId"],
+      accessToken: value["accessToken"],
+      refreshToken: typeof value["refreshToken"] === "string" ? value["refreshToken"] : null,
     };
   } catch {
     return null;

@@ -17,8 +17,9 @@ const placeholders = (value: string): readonly string[] =>
   [...value.matchAll(/\{([a-z]+)\}/gu)].map((match) => match[1] ?? "").toSorted();
 
 void test("every language uses the same placeholders per key", () => {
-  for (const key of Object.keys(en) as Array<keyof typeof en>) {
-    assert.deepEqual(placeholders(en[key]), placeholders(zhCN[key]), key);
+  const zhEntries = new Map(Object.entries(zhCN));
+  for (const [key, value] of Object.entries(en)) {
+    assert.deepEqual(placeholders(value), placeholders(zhEntries.get(key) ?? ""), key);
   }
 });
 

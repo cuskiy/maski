@@ -1,3 +1,4 @@
+import { workerScope } from "../lib/workerScope.ts";
 import { stripImageMetadata } from "./imageSanitizer.ts";
 
 interface WorkerRequest {
@@ -13,12 +14,7 @@ interface WorkerReply {
   readonly height?: number;
 }
 
-interface WorkerScope {
-  onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
-  postMessage(message: WorkerReply): void;
-}
-
-const scope = globalThis as unknown as WorkerScope;
+const scope = workerScope<WorkerRequest, WorkerReply>();
 
 scope.onmessage = async (event) => {
   const { id, file } = event.data;

@@ -23,6 +23,12 @@ void test("the protocol parses the command set and rejects malformed input", () 
   );
   assert.equal(parseCommand({ id: 3, type: "logout", payload: {} })?.type, "logout");
   assert.equal(parseCommand({ id: 4, type: "keyStatus", payload: {} })?.type, "keyStatus");
+  assert.deepEqual(parseCommand({ id: 6, type: "recover", payload: { recoveryKey: "EsT", passphrase: "" } }), {
+    id: 6,
+    type: "recover",
+    payload: { recoveryKey: "EsT", passphrase: "" },
+  });
+  assert.equal(parseCommand({ id: 6, type: "recover", payload: { recoveryKey: "EsT" } }), null);
   assert.equal(parseCommand({ id: 0, type: "logout", payload: {} }), null);
   assert.equal(parseCommand({ id: 1, type: "unknown", payload: {} }), null);
   assert.equal(parseCommand({ id: 1, type: "start", payload: {} }), null);
@@ -39,6 +45,8 @@ void test("the protocol parses the command set and rejects malformed input", () 
         replyTo: "$event",
         transactionId: "t1",
         messageId: "m1",
+        kind: "text",
+        media: null,
       },
     }),
     {
@@ -51,6 +59,8 @@ void test("the protocol parses the command set and rejects malformed input", () 
         replyTo: "$event",
         transactionId: "t1",
         messageId: "m1",
+        kind: "text",
+        media: null,
       },
     },
   );
@@ -61,6 +71,22 @@ void test("the protocol parses the command set and rejects malformed input", () 
       payload: { roomId: "!a:example.org", body: "hi", transactionId: "t1", messageId: "m1" },
     }),
     null,
+  );
+  assert.deepEqual(
+    parseCommand({
+      id: 7,
+      type: "retrySend",
+      payload: { roomId: "!a:example.org", messageId: "m1" },
+    }),
+    { id: 7, type: "retrySend", payload: { roomId: "!a:example.org", messageId: "m1" } },
+  );
+  assert.deepEqual(
+    parseCommand({
+      id: 8,
+      type: "discardSend",
+      payload: { roomId: "!a:example.org", messageId: "m1" },
+    }),
+    { id: 8, type: "discardSend", payload: { roomId: "!a:example.org", messageId: "m1" } },
   );
 });
 

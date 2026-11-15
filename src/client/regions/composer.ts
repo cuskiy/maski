@@ -9,7 +9,7 @@ import type { ChatState, Media, Member, MessageRow, ReplyRef } from "../../core/
 import { icons } from "../../components/icons.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
-import * as prefs from "../prefs.ts";
+import { readDraft, saveDraft } from "../uiDb.ts";
 import { sanitizeImage } from "../imagePrivacy.ts";
 import { roomPermissions } from "../../core/permissions.ts";
 import { safeAvatarUrl } from "../../lib/safeUrl.ts";
@@ -501,7 +501,7 @@ export class Composer {
           return;
         }
         event.preventDefault();
-        this.addFiles(files);
+        if (this.actions.capabilities.media) this.addFiles(files);
       },
       { signal },
     );
@@ -522,7 +522,7 @@ export class Composer {
     const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
     if (state.roomId !== this.roomId) {
       if (this.editing !== null && this.preDraft !== null && this.roomId !== null) {
-        prefs.saveDraft(this.account, this.roomId, this.preDraft);
+        saveDraft(this.account, this.roomId, this.preDraft);
       } else {
         this.saveDraft();
       }
@@ -546,7 +546,7 @@ export class Composer {
           ? t(this.c, "composer.placeholderRoom", { room: room.name })
           : t(this.c, "composer.noPermission");
     if (!disabled && this.editing === null && this.draftRoom !== room.roomId) {
-      setComposerText(input, prefs.readDraft(this.account, room.roomId));
+      setComposerText(input, readDraft(this.account, room.roomId));
       this.draftRoom = room.roomId;
     }
     updateEmptyState(input);
@@ -579,7 +579,7 @@ export class Composer {
     const input = this.input;
     const roomId = this.roomId;
     if (input === null || roomId === null) return;
-    prefs.saveDraft(this.account, roomId, composerText(input));
+    saveDraft(this.account, roomId, composerText(input));
   }
 
   private clearError(): void {
@@ -647,7 +647,8 @@ export class Composer {
   }
 
   showEditing(message: MessageRow): void {
-    this.preDraft = this.roomId === null ? null : prefs.readDraft(this.account, this.roomId);
+    if (!this.actions.capabilities.edit) return;
+    this.preDraft = this.roomId === null ? null : readDraft(this.account, this.roomId);
     this.editing = message;
     this.replyTo = null;
     this.setReply(t(this.c, "chat.editing"), message.body);
@@ -718,7 +719,7 @@ export class Composer {
   }
 
   addFiles(files: readonly File[]): void {
-    if (files.length === 0) return;
+    if (!this.actions.capabilities.media || files.length === 0) return;
     const entries = files.map((file): TrayEntry => ({
       file,
       kind: fileKind(file),
@@ -761,6 +762,7 @@ export class Composer {
   }
 
   sendSticker(sticker: string): void {
+    if (!this.actions.capabilities.stickers) return;
     const roomId = this.roomId;
     if (sticker === "" || roomId === null) return;
     this.actions.recordSticker(sticker);
@@ -909,7 +911,7 @@ export class Composer {
   private clearComposer(): void {
     const input = this.input;
     if (input !== null) setComposerText(input, "");
-    if (this.roomId !== null) prefs.saveDraft(this.account, this.roomId, "");
+    if (this.roomId !== null) saveDraft(this.account, this.roomId, "");
     this.draftRoom = this.roomId;
     this.clearTray();
     this.clearReplyState();
@@ -941,6 +943,7 @@ export class Composer {
   }
 
   handleFileInput(input: HTMLInputElement): void {
+    if (!this.actions.capabilities.media) return;
     const files = input.files;
     const roomId = this.roomId;
     const selected = files === null ? [] : Array.from(files);
@@ -1000,6 +1003,7 @@ export class Composer {
   handleClick(target: Element): boolean {
     const attach = target.closest<HTMLElement>("[data-attach]");
     if (attach !== null) {
+      if (!this.actions.capabilities.media) return true;
       const input = document.querySelector<HTMLInputElement>("#surface-attach-input");
       if (input !== null) {
         const kind = attach.dataset["attach"];

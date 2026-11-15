@@ -1,11 +1,12 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
-import type { ChatState } from "../core/types.ts";
+import type { ChatState, SourceCapabilities } from "../core/types.ts";
+import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
 
-export function composer(state: ChatState, c: Catalog): Html {
+export function composer(state: ChatState, c: Catalog, capabilities: SourceCapabilities = REVIEW_CAPABILITIES): Html {
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
   const placeholder =
     room === null ? t(c, "composer.placeholder") : t(c, "composer.placeholderRoom", { room: room.name });
@@ -23,22 +24,30 @@ export function composer(state: ChatState, c: Catalog): Html {
     ></div>
     <p class="form-error composer-error" data-composer-error role="alert" hidden></p>
     <div class="composer-bar">
-      <button
-        class="composer-action composer-attach"
-        type="button"
-        popovertarget="${SURFACE.attach}"
-        aria-label="${t(c, "composer.attach")}"
-      >
-        ${icons.attach}
-      </button>
-      <button
-        class="composer-action composer-sticker"
-        type="button"
-        popovertarget="${SURFACE.sticker}"
-        aria-label="${t(c, "composer.sticker")}"
-      >
-        ${icons.sticker}
-      </button>
+      ${
+        capabilities.media
+          ? html`<button
+              class="composer-action composer-attach"
+              type="button"
+              popovertarget="${SURFACE.attach}"
+              aria-label="${t(c, "composer.attach")}"
+            >
+              ${icons.attach}
+            </button>`
+          : html``
+      }
+      ${
+        capabilities.stickers
+          ? html`<button
+              class="composer-action composer-sticker"
+              type="button"
+              popovertarget="${SURFACE.sticker}"
+              aria-label="${t(c, "composer.sticker")}"
+            >
+              ${icons.sticker}
+            </button>`
+          : html``
+      }
       <div class="composer-field">
         <label class="visually-hidden" id="composer-label">${t(c, "composer.label")}</label>
         <div

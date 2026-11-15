@@ -12,6 +12,7 @@ import { ALL_EMOJI, emojiPickerBody } from "../src/components/emoji.ts";
 import { LICENSES } from "../src/core/licenses.ts";
 import { en } from "../src/catalogs/en.ts";
 import { mockChatState } from "../src/core/mock.ts";
+import { isRecord } from "../src/lib/json.ts";
 
 void test("chat surfaces are unique and come from the shared id registry", () => {
   const ids = CHAT_SURFACES.map((surface) => surface.id);
@@ -109,8 +110,8 @@ void test("the message menu offers source and forwarding offers rooms", () => {
     "messageMenu.source",
     "messageMenu.select",
     "messageMenu.cancel",
+    "messageMenu.retry",
   ]);
-  assert.doesNotMatch(menu, /messageMenu\.retry/u);
   const forward = surfaceBodyFor(en, SURFACE.forward, state).value;
   assert.match(forward, /data-forward-room="design"/u);
 });
@@ -145,7 +146,8 @@ void test("settings expose notification levels, keys, devices, reset and license
   assert.match(markup, /data-select-name="notification-level"/u);
   assert.match(markup, /data-setting="desktop"/u);
   assert.match(markup, /data-settings-action="reset-key"/u);
-  assert.match(markup, /data-settings-action="reset-identity"/u);
+  assert.match(markup, /data-surface="reset-identity"/u);
+  assert.match(markup, /id="reset-identity-password"/u);
   assert.match(markup, /id="reset-key-dialog"/u);
   assert.match(markup, /commandfor="reset-key-dialog"/u);
   assert.match(markup, /data-reset-key-value/u);
@@ -217,12 +219,13 @@ void test("the licenses surface lists the shipped runtime dependencies", () => {
 });
 
 void test("runtime license versions match the manifest", () => {
-  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
-    dependencies: Record<string, string>;
-  };
+  const parsed: unknown = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  if (!isRecord(parsed)) assert.fail("package.json is not an object");
+  const dependencies = parsed["dependencies"];
+  if (!isRecord(dependencies)) assert.fail("package.json has no dependencies");
   for (const entry of LICENSES) {
-    const range = manifest.dependencies[entry.name];
-    assert.ok(range !== undefined, entry.name);
+    const range: unknown = dependencies[entry.name];
+    if (typeof range !== "string") assert.fail(`${entry.name} has no version`);
     assert.equal(range.replace(/^[~^]/u, ""), entry.version, entry.name);
   }
 });

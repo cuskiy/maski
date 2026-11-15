@@ -1,6 +1,7 @@
 import { nav as navView } from "../../components/nav.ts";
 import type { Catalog } from "../../lib/catalog.ts";
-import type { ChatState, SectionId } from "../../core/types.ts";
+import type { ChatState } from "../../core/types.ts";
+import { isSectionId } from "../../core/state.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
 import { bindSwipe } from "../swipe.ts";
@@ -17,6 +18,11 @@ function rowKey(row: Element): string | null {
   return row.dataset["room"] ?? row.dataset["space"] ?? null;
 }
 
+function cloneElement(element: Element): HTMLElement | null {
+  const clone: Node = element.cloneNode(true);
+  return clone instanceof HTMLElement ? clone : null;
+}
+
 function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void {
   const active = document.activeElement;
   const focusedRow =
@@ -24,8 +30,9 @@ function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void 
   const focusKey = focusedRow?.dataset["room"] ?? focusedRow?.dataset["space"] ?? null;
   const existing = new Map<string, HTMLElement>();
   for (const row of current.children) {
+    if (!(row instanceof HTMLElement)) continue;
     const key = rowKey(row);
-    if (key !== null) existing.set(key, row as HTMLElement);
+    if (key !== null) existing.set(key, row);
   }
   const fragment = document.createDocumentFragment();
   for (const desired of next.children) {
@@ -42,7 +49,8 @@ function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void 
       existing.delete(key);
       continue;
     }
-    const clone = desired.cloneNode(true) as HTMLElement;
+    const clone = cloneElement(desired);
+    if (clone === null) continue;
     fragment.append(clone);
     existing.delete(key);
   }
@@ -108,7 +116,7 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
   const render = (): void => {
     const state: ChatState = store.snapshot();
     const next = new DOMParser()
-      .parseFromString(navView(state, c).value, "text/html")
+      .parseFromString(navView(state, c, actions.capabilities).value, "text/html")
       .querySelector<HTMLElement>(".nav");
     if (next !== null) reconcile(root, next);
   };
@@ -117,8 +125,8 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
     const target = event.target;
     if (!(target instanceof HTMLDetailsElement) || !target.matches("details.section[data-section]")) return;
     const id = target.dataset["section"];
-    if (id === undefined) return;
-    actions.toggleSection(id as SectionId, target.open);
+    if (id === undefined || !isSectionId(id)) return;
+    actions.toggleSection(id, target.open);
   };
 
   const onClick = (event: MouseEvent): void => {
@@ -151,8 +159,8 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
       const room = store.snapshot().rooms.find((entry) => entry.roomId === roomId);
       if (room === undefined) return;
       if (direction === "right" && (room.unread > 0 || room.highlight > 0)) actions.markRead(roomId);
-      if (direction === "left" && roomPermissions(room, store.snapshot().session?.userId ?? null).mute) {
-        actions.toggleMute(roomId);
+      if (direction === "left" && actions.capabilities.setNotification) {
+        if (roomPermissions(room, store.snapshot().session?.userId ?? null).mute) actions.toggleMute(roomId);
       }
     },
   });

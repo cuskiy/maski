@@ -542,6 +542,8 @@ These are the user's, not the agent's. Until answered, the conservative option i
 owning paragraph.
 
 - Read receipt privacy: public `m.read`, private `m.read.private`, or both; what "last read" means.
+  Until the user chooses, the worker advances only the public `m.read` receipt plus `m.fully_read`;
+  `m.read.private` is never written. "Last read" is the event at the persisted advancing marker.
 - Unread badge: server notification count, local unread after decrypt, or both.
 - Key-gate predicate: device keys, cross-signing, secret storage, backup, or all; what "recovery key" names.
 - Device identity: reuse `device_id` or create one device per login.
@@ -602,8 +604,8 @@ owning paragraph.
 - `skipLibCheck` is true only because the pinned `matrix-js-sdk` 45.1.0 declaration references a missing
   internal `.d.ts`; every project file is still checked under the full strict set. Remove the exception
   when the public SDK fixes the declaration.
-- `typescript/no-unsafe-type-assertion` is temporarily disabled while parser and DOM boundary casts remain.
-  It is not permission to add casts: replace them with guards, and enable the rule before P1 exits.
+- `typescript/no-unsafe-type-assertion` is enabled and has no file-level or global exception. A parser or
+  DOM boundary narrows with a real guard; an assertion is not a substitute for validation.
 - Discriminated unions for commands, events, failures and rows. `readonly` on DTOs. `satisfies` for
   tables. Type-only imports. No runtime `enum`; use `as const` maps.
 - `const` by default, `for...of`, early returns, one obvious happy path. Prefer pure functions at the
@@ -694,8 +696,10 @@ One dedicated module worker per tab, created when the page needs data.
   event and the room fields it touches; read a page by a stable event-id cursor.
 - Backfill names the oldest stored event id and returns one page. Preserve segments across `limited`
   sync gaps. Handle `TimelineReset` explicitly; never clear a readable segment because a sync was gappy.
-- Read state reads `m.fully_read` account data and the chosen receipt type; mark read once when the
-  position advances, never on every render.
+- Read state reads `m.fully_read` account data and the public `m.read` receipt; the conservative interim
+  choice is public only, never `m.read.private`. Mark read once when the persisted advancing marker moves,
+  never on every render. The marker is stored per room and unread/highlight come from projected events
+  after it, never from `getUnreadNotificationCount`.
 - Unread is a product policy stored explicitly, not `getUnreadNotificationCount` used as an array index.
 - Members are loaded (`loadMembersIfNeeded`) before a full member projection; a partial list is labeled
   partial.
@@ -736,23 +740,27 @@ and recent stickers. It is account-scoped and cleared on logout. It never stores
 
 | command | reply | notes |
 |---|---|---|
-| `start` | cached session + gate + rooms | returns before crypto; sync follows |
+| `start` | cached session + gate + cached rooms | returns before crypto; sync follows |
 | `login` | session | credentials arrive once and never stay on the main thread |
-| `logout` | empty | clears SDK/crypto/account DB after stop |
-| `keyStatus` | typed gate | the gate answer, not a boolean guess |
-| `open` | window | cursor-aware; waits for start |
+| `logout` | empty | clears SDK/crypto/session; the account projection survives only until an explicit reset |
+| `keyStatus` | typed gate | verified device + ready secret storage, not a boolean guess |
+| `recover` | typed gate | recovery key/passphrase → secret storage → cross-signing signing |
+| `open` | window | stored window first; ingest on miss |
 | `older` | one page | before oldest stored id, segment-aware |
-| `send` | queued row | body, html, reply relation, transaction id |
-| `media` | blob URL | authenticated download/thumbnail/upload |
-| `packs`, `sticker`, `react`, `edit`, `redact`, `markRead`, `typing`, `members`, `search`, `notifications`, `sessions`, `reset` | documented shape | one handler each |
+| `send` | queued row | body, html, reply relation, transaction id, typed kind/media |
+| `retrySend`, `discardSend` | row / empty | worker-owned outbox state |
+| `markRead` | empty | one advancing public marker plus `m.fully_read` |
+| `members` | members event | the SDK member projection |
+| `resetIdentity` | recovery key once | destructive reset; the key is displayed once |
 
-Events: ready, rooms, window, outbox, connection, keys, typing, fatal, media. Payloads are bounded; a
-lost event costs one window, not a rebuild. Every inbound command and event crosses a parser; a malformed
-command keeps its valid id and returns `invalid`. A reply that matches no pending id is ignored and does
-not leak.
+Events: `session`, `keys`, `rooms`, `window` (`patch` or page), `members`, `connection`, `outbox`.
+Payloads are bounded; a lost event costs one window, not a rebuild. Every inbound command and event
+crosses a parser; a malformed command keeps its valid id and returns `invalid`. A reply that matches no
+pending id is ignored and does not leak.
 
-`ChatSource` cannot have a method without a protocol command, handler, projection and test. A mock source
-is a development fixture, never the production implementation. Hiding a control is better than a no-op.
+`ChatSource` cannot have a method without a protocol command, handler, projection and test. The production
+source exposes only implemented commands and the client hides the rest by `SourceCapabilities`; the mock
+source is a review fixture and advertises the whole surface. Hiding a control is better than a no-op.
 
 ## 3.7 UI
 
@@ -846,8 +854,8 @@ server also sends `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referr
 Budgets are measured by the build and enforced by C6. Values in this contract are ceilings, not targets:
 client JS 320 KB, stylesheet 96 KB, matrix worker 1.5 MB, crypto wasm 8.5 MB, generated watermark 96 KB,
 no unbudgeted asset above 8 KB. The build prints every size. A budget increase is a user decision, never a
-silent output of a refactor. Audit currently enforces client, stylesheet, worker and wasm. The watermark is
-still over budget and is an explicit open defect; C6 is not complete until it passes.
+silent output of a refactor. Audit enforces client, stylesheet, worker, wasm and watermark and reports every
+measurement; the generated watermark is packed under its ceiling.
 
 ## 3.11 Testing
 
@@ -1129,78 +1137,66 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-15 in the current working tree, after the latest uncommitted changes:
+Measured on 2026-11-15 after the technical-debt baseline commit:
 
-- `npm run check` is green: **124 tests**, 11 generated pages, 314 catalog keys, 2 languages.
-- Build sizes: stylesheet 85.7 KB, client 285 KB, matrix worker 1.23 MB, crypto wasm 7.79 MB.
-- `git` still reports a large dirty tree. `src/worker/`, `src/protocol/`, `src/client/dom.ts`,
-  `src/client/matrixTransport.ts`, `src/client/workerSource.ts` and the protocol tests are untracked.
-  Do not reset or clean the tree. Read the diff first.
-- `/review/` is a mock surface and is not the product. The production path at 5184 loads the server page
-  with no errors, but no current real login/sync/send has been re-run after the latest UI changes.
+- `npm run check` is green: **148 tests**, 11 generated pages, 317 catalog keys, 2 languages.
+- Build sizes: stylesheet 85.7 KB, client 299.7 KB, matrix worker 1.26 MB, crypto wasm 7.79 MB,
+  watermark 69.9 KB (was 263 KB), generated service worker 2.8 KB.
+- The shell service worker is written at `/service-worker.js` with the hashed manifest inlined: install
+  precaches the 11 generated pages and 9 shell assets, navigation is cache-first with background
+  revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache.
+- `git` is clean at this baseline. Do not reset or clean user files; read the diff before reverting one.
+- `/review/` is a mock surface and is not the product. The production key page, gate redirect, static shell
+  and hidden-capability surface were checked in Chromium; no current real login/sync/send has been re-run.
 - Advice.md's snapshot describes an earlier red gate and an earlier tree; its architectural findings remain
   valid, but its exact line numbers and counts are stale.
 
 ## 6.4 Current blockers
 
-The UI is ahead of the runtime. These remain open:
+The UI is ahead of the runtime in the hidden surfaces. These remain open:
 
-1. **Key gate has two owners.** The main thread still has `maski.key` and `setKeyReady`; the worker returns
-   `key: "unknown"`; the gate is not a real predicate. Fix one authority before any gate UI.
-2. **Production ChatSource is incomplete.** Many methods are mock-only. Every visible action without a
-   protocol command must be hidden or implemented end to end. No optimistic branch for a missing command.
-3. **No projection DB/cursor.** The worker scans the live timeline; there is no bounded store, segment
-   token or gap table. Add it before claiming first paint or history.
-4. **Outbox is main-thread owned.** The worker must store the queued row and status. A row cannot vanish
-   before echo.
-5. **Pagination is a window dump.** Add a before-id cursor and segment chain; preserve scroll.
-6. **No lock/serialized auth.** Add `navigator.locks` and one start/login/logout queue; a second tab must
-   say `locked`.
-7. **Auth lifecycle incomplete.** Refresh token, soft logout, error mapping, `/login` flow discovery and
-   `/versions` shape are not done; do not present one generic auth error.
-8. **Media missing.** No worker upload/download/cache; `mxc` is not in the DOM; `safeMediaUrl` rejects it.
-9. **Search is mock-only.** The worker returns `[]`; implement account projection search before claiming.
-10. **Read receipts wrong.** `fully_read` is account data, not a receipt; choose privacy and advance once.
-11. **Unread is push-count.** Do not index `messages` with notification count. Store the product policy.
-12. **Drafts in local storage.** Move to the account-scoped UI DB; clear on logout.
-13. **CSP broad.** Current `connect-src https: wss:` is a migration defect; generate an exact header.
-14. **Offline absent.** No service worker/persistence yet; precache shell/hashed assets only.
-15. **Budgets are partly enforced.** Audit now fails on client, stylesheet, worker or wasm growth; the
-    generated watermark is still 257 KB against a 96 KB budget and is not yet gated. Pack it before
-    claiming C6 complete.
-16. **DOM replacement remains.** The surfaces admit generated markup through `replaceHtml`; it is safer
-   than `innerHTML`, but it still reparses whole bodies. Move to field-level patches.
-17. **Tests can be tautological.** Source regex, string markup and `/review/` cannot prove focus, caret,
-   scroll, worker behavior or first paint.
-18. **Agent claims above rung.** The rule in 1.5 exists because this has happened.
+1. **Key gate incomplete.** Recovery key/passphrase, secret storage and cross-signing signing share one worker
+   owner; the SAS path, device list, backup and reset-key display are absent. A device that cannot verify
+   through recovery stays locked and has no second path yet.
+2. **Auth lifecycle incomplete.** Refresh tokens are persisted through `onTokenRefresh`, account lock is held
+   across startup, and `M_UNKNOWN_TOKEN` soft logout is handled. Broader typed `M_*` error mapping,
+   `/login` flow discovery and a serialized start/login/logout queue are still missing.
+3. **Media missing.** No worker upload/download/cache; `mxc` never enters the DOM and media controls are
+   hidden. A file send becomes a stored, non-retryable failed row that can be discarded.
+4. **Search missing.** No account-projection query; search controls are hidden in production and remain in
+   the review fixture only.
+5. **CSP broad.** `connect-src https: wss:` is still a migration defect. An exact per-homeserver policy is a
+   user-owned decision (2.10), so the conservative wildcard remains.
+6. **DOM replacement remains.** The review surfaces admit generated markup through `replaceHtml`; it is
+   safer than `innerHTML`, but it still reparses whole bodies. Move to field-level patches.
+7. **Browser evidence absent.** There is no committed worker harness and no first-paint pair at the three
+   widths. Pure tests cannot prove focus, caret, scroll, worker behavior or first paint.
+8. **Counts drift.** The test/page/key counts and build sizes are measured after every change; do not quote a
+   previous run.
 
 ## 6.5 Migration order
 
 This order minimizes wasted UI work. Do not start at item 7.
 
-1. **Make the gate green and commit a baseline.** Fix the current unused parameter/sticker rule, run the
-   whole gate, correct Part 6 counts, and commit one coherent change. Do not clean user files.
-2. **One session authority.** Worker returns session summary, gate, cached rooms and connection in one
-   start reply; delete `maski.key`, `maski.registered`, `setKeyReady`, fake unlock/reset/register. The main
-   thread stores only UI preferences.
-3. **Projection DB and cursors.** Persist rooms/events/members/receipts/segments in the worker, bounded
-   windows, before-id pages, gap handling, pure tests at 1/30/1,000/10,000 events. Paint cached rooms before
-   crypto.
-4. **Worker-owned outbox.** Queued row, status, retry/cancel, echo replacement, typed failures. Wire
-   reactions/edits/redactions/replies through the same projection.
+1. **Baseline gate and counts.** Done: the gate is green, the counts are measured, and the tree is still
+   user-owned.
+2. **One session authority.** Done: `maski.key`, `maski.registered`, `setKeyReady` and fake unlock/register
+   are gone. The cached gate hint is not authority; the worker recomputes verification and secret storage.
+3. **Projection DB and cursors.** Done: worker-only rooms/events/outbox/markers/segments, bounded windows,
+   before-cursor pages, reset gaps, and pure tests at 1/30/1,000/10,000 events.
+4. **Worker-owned outbox.** Done: queued row before request, status, retry/discard, echo replacement and
+   typed failures. The client has no optimistic row writer.
 5. **Media in the worker.** Upload with EXIF strip, authenticated download/thumbnail, content-addressed
    cache, MIME/size limits, blob URLs. Enable composer attachments and media surfaces only then.
 6. **Search in the worker.** Account projection query, media/file filters, stable results across timeline
    changes. No search of the current window only.
-7. **Real key gate.** Secret storage, recovery key, SAS, backup, reset, device list, typed failures. The
-   predicate is a user decision; until it is made, do not show a gate that cannot decide.
-8. **Auth lifecycle.** Refresh tokens, soft logout, `/login` flows, error mapping, account lock, worker
-   restart once.
+7. **Finish the key gate.** Recovery key/passphrase is connected to secret storage and cross-signing; SAS,
+   backup, reset-key display and device list are still absent. Do not re-add a fake gate.
+8. **Auth lifecycle.** Typed `M_*` error mapping, `/login` flow discovery and a serialized
+   start/login/logout queue. Refresh tokens, account lock and `M_UNKNOWN_TOKEN` soft logout are done.
 9. **Settings/invites/spaces/notifications.** Only after each has a record in `types.ts`, a command, a
    projection and a test. Delete mock-only surfaces until then.
-10. **Offline and budgets.** Service worker for shell/hashed assets only; persistence request; enforce C6;
-    watermark in the manifest and under budget.
-11. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,
+10. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,
     receipt, decrypt success/failure, malformed command, two-tab lock. This is the P1 exit.
 
 ## 6.6 Definition of done

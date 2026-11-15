@@ -4,8 +4,9 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, type BuildResult } from "esbuild";
 import { minify } from "html-minifier-terser";
-import type { Assets } from "../src/lib/assets.ts";
-import { renderPages } from "./pages.ts";
+import { SERVICE_WORKER_PATH, type Assets } from "../src/lib/assets.ts";
+import { serviceWorkerSource } from "../src/service-worker.ts";
+import { generatedPages, renderPages } from "./pages.ts";
 
 export const minifyOptions = {
   collapseWhitespace: true,
@@ -25,12 +26,18 @@ const jsBuildOptions = {
   drop: ["debugger", "console"] as Array<"debugger" | "console">,
 };
 
-function emittedAsset(result: BuildResult, extension: string): string {
+function emittedAssets(result: BuildResult, extension: string): string[] {
   const metafile = result.metafile;
   if (metafile === undefined) throw new Error("the build did not emit a metafile");
-  const output = Object.keys(metafile.outputs).find((path) => path.endsWith(extension));
+  return Object.keys(metafile.outputs)
+    .filter((path) => path.endsWith(extension))
+    .map((path) => `/assets/${basename(path)}`);
+}
+
+function emittedAsset(result: BuildResult, extension: string): string {
+  const [output] = emittedAssets(result, extension);
   if (output === undefined) throw new Error(`the ${extension} bundle was not emitted`);
-  return `/assets/${basename(output)}`;
+  return output;
 }
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -45,7 +52,7 @@ export async function buildSite(): Promise<void> {
   await mkdir(join(dist, "assets"), { recursive: true });
   await mkdir(buildDir, { recursive: true });
 
-  const result = await build({
+  const styleResult = await build({
     entryPoints: [join(root, "src/styles/style.css")],
     bundle: true,
     minify: true,
@@ -59,7 +66,9 @@ export async function buildSite(): Promise<void> {
     logLevel: "silent",
   });
 
-  const stylesheet = emittedAsset(result, ".css");
+  const stylesheet = emittedAsset(styleResult, ".css");
+  const watermark = emittedAssets(styleResult, ".svg").find((asset) => asset.startsWith("/assets/watermark-"));
+  if (watermark === undefined) throw new Error("the watermark asset was not emitted");
 
   const guardResult = await build({
     ...jsBuildOptions,
@@ -172,11 +181,32 @@ export async function buildSite(): Promise<void> {
   }
   await writeFile(join(buildDir, "manifest.json"), `${JSON.stringify(assets, null, 2)}\n`);
 
+  const shellAssets = [
+    assets.stylesheet,
+    assets.icon,
+    assets.guard,
+    assets.prepaint,
+    assets.client,
+    assets.imageWorker,
+    assets.matrixWorker,
+    assets.cryptoWasm,
+    watermark,
+  ].toSorted();
+  const pageUrls = generatedPages()
+    .map((page) => page.url)
+    .toSorted();
+  const version = createHash("sha256")
+    .update(JSON.stringify({ pages: pageUrls, assets: shellAssets }))
+    .digest("hex")
+    .slice(0, 12);
+  const serviceWorker = join(dist, SERVICE_WORKER_PATH.replace(/^\//u, ""));
+  await writeFile(serviceWorker, serviceWorkerSource({ version, pages: pageUrls, assets: shellAssets }));
+
   const sizes: string[] = [];
-  for (const asset of [stylesheet, client, matrixWorker, cryptoWasm]) {
+  for (const asset of [stylesheet, client, matrixWorker, cryptoWasm, watermark, SERVICE_WORKER_PATH]) {
     sizes.push(`${asset} ${String((await stat(join(dist, asset))).size)}B`);
   }
-  process.stdout.write(`built ${String(pages.length)} pages · ${icon}\n${sizes.join("\n")}\n`);
+  process.stdout.write(`built ${String(pages.length)} pages · ${icon} · ${SERVICE_WORKER_PATH}\n${sizes.join("\n")}\n`);
 }
 
 if (import.meta.main) await buildSite();

@@ -11,6 +11,15 @@
     overscroll-behavior: none;
   }
 
+  .app {
+    display: grid;
+    grid-template-columns: var(--nav-width) minmax(0, 1fr);
+    inline-size: 100%;
+    block-size: 100dvh;
+    overflow: hidden;
+    background: var(--page);
+  }
+
   body:has(.app) > .app {
     flex: 1 1 auto;
     min-block-size: 0;
@@ -30,25 +39,6 @@
     padding: var(--space-7) var(--space-4);
     background: var(--page);
     color: var(--ink);
-  }
-
-  .app {
-    display: grid;
-    grid-template-columns: var(--nav-width) minmax(0, 1fr);
-    inline-size: 100%;
-    block-size: 100dvh;
-    overflow: hidden;
-    background: var(--page);
-  }
-
-  .app > .nav {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .app > .content {
-    grid-column: 2;
-    grid-row: 1;
   }
 
   .nav {
@@ -73,6 +63,16 @@
     block-size: 100%;
     overflow: hidden;
     background: var(--page);
+  }
+
+  .app > .nav {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .app > .content {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .content::before {

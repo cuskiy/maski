@@ -1,11 +1,11 @@
 import type { ChatSource, RoomStatePatch, SourceEvent, SourceEvents } from "./source.ts";
+import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import type { DeviceSession, Invite, Member, MessageRow, NotificationPrefs, RoomSummary } from "../core/types.ts";
+import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { mockChatState, mockDevices, mockInvites, mockMembersFor, mockMessagesFor } from "../core/mock.ts";
 import { messageMatches } from "../core/search.ts";
 import { toggledReactions } from "../core/reactions.ts";
 import { redactRow } from "../core/message.ts";
-
-type Listener = (payload: unknown) => void;
 
 const OLDER_BODIES = [
   "The first pass kept the room list still.",
@@ -47,7 +47,8 @@ function olderRows(roomId: string): readonly MessageRow[] {
 }
 
 export class MockSource implements ChatSource {
-  private readonly listeners = new Map<SourceEvent, Set<Listener>>();
+  readonly capabilities = REVIEW_CAPABILITIES;
+  private readonly listeners = createSourceListeners();
   private readonly timers = new Set<number>();
   private readonly olderLoaded = new Set<string>();
   private readonly messageLog = new Map<string, MessageRow[]>();
@@ -67,22 +68,15 @@ export class MockSource implements ChatSource {
   }
 
   on<K extends SourceEvent>(event: K, listener: (payload: SourceEvents[K]) => void): () => void {
-    let set = this.listeners.get(event);
-    if (set === undefined) {
-      set = new Set();
-      this.listeners.set(event, set);
-    }
-    const wrapped: Listener = (payload) => {
-      listener(payload as SourceEvents[K]);
-    };
-    set.add(wrapped);
+    const channel = this.listeners[event];
+    channel.add(listener);
     return () => {
-      set?.delete(wrapped);
+      channel.delete(listener);
     };
   }
 
   private emit<K extends SourceEvent>(event: K, payload: SourceEvents[K]): void {
-    for (const listener of this.listeners.get(event) ?? []) listener(payload);
+    for (const listener of this.listeners[event]) listener(payload);
   }
 
   private rowsFor(roomId: string): MessageRow[] {
@@ -141,8 +135,16 @@ export class MockSource implements ChatSource {
         eventId,
         status: "sent",
         error: null,
+        retryable: false,
       }));
-      this.emit("outbox", { roomId, messageId: row.id, eventId, status: "sent", error: null });
+      const sent = this.rowsFor(roomId).find((entry) => entry.id === row.id) ?? null;
+      if (sent !== null)
+        this.emit("outbox", {
+          roomId,
+          messageId: row.id,
+          row: sent,
+          retryable: false,
+        });
     }, 600);
     this.timers.add(timer);
   }
@@ -166,31 +168,57 @@ export class MockSource implements ChatSource {
       messages: rows,
       hasOlder: this.withData && olderRows(roomId).length > 0 && !this.olderLoaded.has(roomId),
       older: false,
+      patch: false,
     });
   }
 
   older(roomId: string): void {
     const rows = olderRows(roomId);
     if (!this.withData || rows.length === 0 || this.olderLoaded.has(roomId)) {
-      this.emit("window", { roomId, messages: [], hasOlder: false, older: true });
+      this.emit("window", { roomId, messages: [], hasOlder: false, older: true, patch: false });
       return;
     }
     this.olderLoaded.add(roomId);
     const timer = window.setTimeout(() => {
       this.timers.delete(timer);
       this.messageLog.set(roomId, [...rows, ...this.rowsFor(roomId)]);
-      this.emit("window", { roomId, messages: rows, hasOlder: false, older: true });
+      this.emit("window", { roomId, messages: rows, hasOlder: false, older: true, patch: false });
     }, 650);
     this.timers.add(timer);
   }
 
-  send(roomId: string, row: MessageRow): void {
-    this.upsertRow(roomId, row);
-    if (row.status === "sent") return;
-    this.settlePending(roomId, row);
+  async send(roomId: string, row: MessageRow): Promise<MessageRow> {
+    const queued: MessageRow = {
+      ...row,
+      eventId: null,
+      transactionId: row.transactionId ?? row.id,
+      status: "queued",
+      error: null,
+      retryable: true,
+    };
+    this.upsertRow(roomId, queued);
+    this.emit("outbox", { roomId, messageId: queued.id, row: queued, retryable: true });
+    this.settlePending(roomId, queued);
+    return queued;
   }
 
-  markRead(_roomId: string, _eventId: string | null): void {}
+  async retrySend(roomId: string, messageId: string): Promise<MessageRow> {
+    const row = this.rowsFor(roomId).find((entry) => entry.id === messageId);
+    if (row === undefined) throw new Error("outbox row");
+    const retried = { ...row, status: "queued" as const, error: null, retryable: true };
+    this.upsertRow(roomId, retried);
+    this.emit("outbox", { roomId, messageId, row: retried, retryable: true });
+    this.settlePending(roomId, retried);
+    return retried;
+  }
+
+  discardSend(roomId: string, messageId: string): void {
+    const rows = this.rowsFor(roomId).filter((entry) => entry.id !== messageId);
+    this.messageLog.set(roomId, rows);
+    this.emit("outbox", { roomId, messageId, row: null, retryable: false });
+  }
+
+  markRead(_roomId: string, _eventId: string): void {}
 
   react(roomId: string, eventId: string, key: string): void {
     this.replaceRow(roomId, eventId, (row) => ({ ...row, reactions: toggledReactions(row.reactions, key) }));
@@ -294,7 +322,7 @@ export class MockSource implements ChatSource {
     });
   }
 
-  resetIdentity(): void {
+  resetIdentity(_password: string): void {
     this.emit("recoveryKey", {
       value: `maski-recovery-key-${crypto.randomUUID()}`,
       copy: true,
@@ -324,6 +352,6 @@ export class MockSource implements ChatSource {
   dispose(): void {
     for (const timer of this.timers) window.clearTimeout(timer);
     this.timers.clear();
-    this.listeners.clear();
+    clearSourceListeners(this.listeners);
   }
 }

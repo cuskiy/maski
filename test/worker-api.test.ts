@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SessionSummary } from "../src/core/types.ts";
+import { queuedRow } from "../src/core/message.ts";
+import type { MessageRow, SessionSummary } from "../src/core/types.ts";
 import type { CommandMap, KeyStatus, StartData } from "../src/protocol/index.ts";
 import { createWorkerApi } from "../src/worker/api.ts";
 import { WorkerFailure } from "../src/worker/failure.ts";
@@ -14,6 +15,20 @@ const session: SessionSummary = {
 };
 
 const startData: StartData = { session: null, connection: "offline", key: "missing" };
+
+const sentRow: MessageRow = queuedRow({
+  roomId: "!a:example.org",
+  messageId: "m1",
+  transactionId: "t1",
+  body: "hi",
+  html: null,
+  kind: "text",
+  media: null,
+  reply: null,
+  ownUserId: session.userId,
+  ownName: session.displayName,
+  ts: 1,
+});
 
 function fakePort(calls: string[]): SessionPort {
   return {
@@ -33,6 +48,10 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("keyStatus");
       return "missing";
     },
+    async recover() {
+      calls.push("recover");
+      return "missing";
+    },
     async open() {
       calls.push("open");
       return null;
@@ -43,6 +62,14 @@ function fakePort(calls: string[]): SessionPort {
     },
     async send() {
       calls.push("send");
+      return sentRow;
+    },
+    async retrySend() {
+      calls.push("retrySend");
+      return sentRow;
+    },
+    async discardSend() {
+      calls.push("discardSend");
       return null;
     },
     async markRead() {
@@ -107,9 +134,11 @@ void test("the worker dispatcher covers every command and preserves order", asyn
         replyTo: null,
         transactionId: "t1",
         messageId: "m1",
+        kind: "text",
+        media: null,
       },
     }),
-    { id: 7, ok: true, data: null },
+    { id: 7, ok: true, data: sentRow },
   );
   assert.deepEqual(
     await api.handle({ id: 8, type: "markRead", payload: { roomId: "!a:example.org", eventId: "$e" } }),

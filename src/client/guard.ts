@@ -5,7 +5,7 @@ import * as storage from "./storage.ts";
 function targetFor(session: MockSession, root: string): string {
   if (session.server === null) return `${root}server/`;
   if (session.account === null) return `${root}login/`;
-  if (!session.key) return `${root}key/`;
+  if (session.gate !== "ready") return `${root}key/`;
   return root;
 }
 
@@ -72,7 +72,7 @@ function run(): void {
       location.replace(`${root}login/`);
       return;
     }
-    if (session.key) location.replace(root);
+    if (session.gate === "ready") location.replace(root);
     return;
   }
 

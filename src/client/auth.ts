@@ -4,7 +4,7 @@ import type { LocaleId } from "../core/locales.ts";
 import { localeRoot } from "../core/locales.ts";
 import { config } from "../config.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
-import { mockSession, setAccount, setKeyReady, setServer } from "./session.ts";
+import { mockSession, setAccount, setGate, setServer } from "./session.ts";
 
 function navigate(path: string): void {
   location.assign(path);
@@ -16,20 +16,6 @@ function form(flow: string): HTMLFormElement | null {
 
 function input(id: string): HTMLInputElement | null {
   return document.querySelector<HTMLInputElement>(`#${id}`);
-}
-
-function homeserverDomain(): string {
-  const server = mockSession().server;
-  if (server === null) return "matrix.org";
-  try {
-    return new URL(server).host;
-  } catch {
-    return "matrix.org";
-  }
-}
-
-function accountId(value: string): string {
-  return value.includes(":") ? value : `@${value}:${homeserverDomain()}`;
 }
 
 function normaliseHomeserver(value: string): string | null {
@@ -95,15 +81,23 @@ function initLogin(c: Catalog, locale: LocaleId): void {
             password: password.value,
           }),
         )
-        .then((session) => {
+        .then(async (session) => {
           setAccount(session.userId);
-          setKeyReady();
+          const gate = await transport.keyStatus();
+          setGate(gate);
           transport.dispose();
-          navigate(localeRoot(locale));
+          navigate(gate === "ready" || gate === "unknown" ? localeRoot(locale) : `${localeRoot(locale)}key/`);
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           transport.dispose();
-          password.setCustomValidity(t(c, "auth.login.failed"));
+          const code = error instanceof Error ? error.message : "";
+          const message =
+            code === "network"
+              ? t(c, "auth.login.network")
+              : code === "unavailable"
+                ? t(c, "auth.login.unavailable")
+                : t(c, "auth.login.failed");
+          password.setCustomValidity(message);
           password.reportValidity();
           if (submit !== null) submit.disabled = false;
         });
@@ -119,56 +113,108 @@ function initLogin(c: Catalog, locale: LocaleId): void {
   });
 }
 
-function initRegister(c: Catalog, locale: LocaleId): void {
-  const registerForm = form("register");
-  if (registerForm === null) return;
-  const confirm = input("confirm");
-  const password = input("password");
-  confirm?.addEventListener("input", () => confirm.setCustomValidity(""));
-  password?.addEventListener("input", () => confirm?.setCustomValidity(""));
-  registerForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    confirm?.setCustomValidity("");
-    const username = input("username");
-    if (username === null || password === null || confirm === null) return;
-    if (password.value !== confirm.value) {
-      confirm.setCustomValidity(t(c, "auth.register.mismatch"));
-      confirm.reportValidity();
-      return;
-    }
-    confirm.setCustomValidity("");
-    setAccount(accountId(username.value.trim()), true);
-    navigate(`${localeRoot(locale)}key/`);
-  });
+function keyTransport(): MatrixTransport | null {
+  const workerUrl = document.querySelector<HTMLMetaElement>('meta[name="matrix-worker"]')?.content;
+  const wasmUrl = document.querySelector<HTMLMetaElement>('meta[name="crypto-wasm"]')?.content;
+  if (workerUrl === undefined || wasmUrl === undefined || workerUrl === "" || wasmUrl === "") return null;
+  return new MatrixTransport(workerUrl, wasmUrl);
 }
 
-function initKey(locale: LocaleId): void {
-  if (mockSession().registered) {
-    document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
-    const note = document.querySelector<HTMLElement>("[data-key-new]");
-    if (note !== null) note.hidden = false;
+function keyStatusText(c: Catalog, gate: string): string | null {
+  if (gate === "needs-recovery") return t(c, "auth.key.invalid");
+  if (gate === "needs-verification") return t(c, "auth.key.verification");
+  if (gate === "unknown") return t(c, "auth.key.waiting");
+  return null;
+}
+
+function initKey(c: Catalog, locale: LocaleId): void {
+  const transport = keyTransport();
+  const status = document.querySelector<HTMLElement>("[data-key-status]");
+  const showStatus = (message: string | null): void => {
+    if (status === null) return;
+    status.hidden = message === null;
+    status.textContent = message ?? "";
+  };
+  if (transport === null) {
+    showStatus(t(c, "auth.key.unavailable"));
+    return;
   }
+
+  transport.onEvent((event) => {
+    if (event.type !== "keys") return;
+    setGate(event.payload);
+    if (event.payload === "ready") {
+      transport.dispose();
+      navigate(localeRoot(locale));
+      return;
+    }
+    showStatus(keyStatusText(c, event.payload));
+  });
+
+  void transport.start().then(
+    async (data) => {
+      if (data.session === null) {
+        transport.dispose();
+        navigate(`${localeRoot(locale)}login/`);
+        return;
+      }
+      const gate = await transport.keyStatus();
+      setGate(gate);
+      if (gate === "ready") {
+        transport.dispose();
+        navigate(localeRoot(locale));
+        return;
+      }
+      showStatus(keyStatusText(c, gate));
+    },
+    (error: unknown) => {
+      if (error instanceof Error && error.message === "locked") {
+        document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
+        showStatus(t(c, "auth.key.locked"));
+        return;
+      }
+      showStatus(t(c, "auth.key.unavailable"));
+    },
+  );
 
   const unlock = form("unlock");
   unlock?.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!unlock.reportValidity()) return;
-    setKeyReady();
-    navigate(localeRoot(locale));
-  });
-
-  const reset = form("reset");
-  reset?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (!reset.reportValidity()) return;
-    setKeyReady();
-    navigate(localeRoot(locale));
+    const recovery = input("recovery");
+    const passphrase = input("recovery-password");
+    if (recovery === null || passphrase === null || !unlock.reportValidity()) return;
+    recovery.setCustomValidity("");
+    if (recovery.value.trim() === "" && passphrase.value === "") {
+      recovery.setCustomValidity(t(c, "auth.key.one"));
+      recovery.reportValidity();
+      return;
+    }
+    const submit = unlock.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit !== null) submit.disabled = true;
+    void transport
+      .recover({ recoveryKey: recovery.value.trim(), passphrase: passphrase.value })
+      .then((gate) => {
+        setGate(gate);
+        if (gate === "ready") {
+          transport.dispose();
+          navigate(localeRoot(locale));
+          return;
+        }
+        showStatus(keyStatusText(c, gate) ?? t(c, "auth.key.invalid"));
+      })
+      .catch(() => {
+        showStatus(t(c, "auth.key.invalid"));
+        recovery.setCustomValidity(t(c, "auth.key.invalid"));
+        recovery.reportValidity();
+      })
+      .finally(() => {
+        if (submit !== null) submit.disabled = false;
+      });
   });
 }
 
 export function initAuth(page: string, c: Catalog, locale: LocaleId): void {
   if (page === "server") initServer(c, locale);
   else if (page === "login") initLogin(c, locale);
-  else if (page === "register") initRegister(c, locale);
-  else if (page === "key") initKey(locale);
+  else if (page === "key") initKey(c, locale);
 }

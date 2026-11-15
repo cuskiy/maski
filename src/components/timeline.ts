@@ -3,7 +3,8 @@ import type { Catalog } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
 import { formatBytes } from "../lib/bytes.ts";
 import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
-import type { ChatState, Media, MessageRow } from "../core/types.ts";
+import type { ChatState, Media, MessageRow, SourceCapabilities } from "../core/types.ts";
+import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { messagePositions, type MessagePosition } from "../core/messageGroups.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
@@ -35,7 +36,12 @@ const UNREADABLE_KEYS = {
   corrupt: "chat.undecryptable.corrupt",
 } as const;
 
-export function timeline(state: ChatState, c: Catalog, locale: string): Html {
+export function timeline(
+  state: ChatState,
+  c: Catalog,
+  locale: string,
+  capabilities: SourceCapabilities = REVIEW_CAPABILITIES,
+): Html {
   const time = new Intl.DateTimeFormat(locale, { timeStyle: "short" });
   const day = new Intl.DateTimeFormat(locale, { dateStyle: "full" });
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
@@ -110,6 +116,7 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
                   },
                   time,
                   day,
+                  capabilities,
                 ),
               )
             : html``
@@ -132,6 +139,7 @@ function messageRow(
   position: MessagePosition,
   time: Intl.DateTimeFormat,
   day: Intl.DateTimeFormat,
+  capabilities: SourceCapabilities,
 ): Html {
   const { dayStart, groupStart, groupEnd, showSender } = position;
   const system = message.system;
@@ -209,7 +217,7 @@ function messageRow(
           ${reply}
           <div class="message-line">${content}</div>
         </div>
-        ${reactionsView(message, c)}
+        ${capabilities.react ? reactionsView(message, c) : html``}
         <button
           class="message-select-mark"
           type="button"

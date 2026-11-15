@@ -1,4 +1,11 @@
-import type { ChatState } from "./types.ts";
+import type { ChatState, SectionId } from "./types.ts";
+
+const SECTION_IDS: ReadonlySet<string> = new Set<SectionId>(["favorites", "rooms", "direct", "spaces"]);
+
+/** A navigation section id from a dataset, a stored preference or a generated page. */
+export function isSectionId(value: unknown): value is SectionId {
+  return typeof value === "string" && SECTION_IDS.has(value);
+}
 
 /** The shell the static page and a fresh store both start from: no session, no room, no data. */
 export function emptyChatState(): ChatState {

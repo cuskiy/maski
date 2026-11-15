@@ -7,7 +7,7 @@ import { chatView } from "../src/pages/chat.ts";
 import { en } from "../src/catalogs/en.ts";
 import { zhCN } from "../src/catalogs/zh-CN.ts";
 import { minifyOptions } from "./build.ts";
-import type { Assets } from "../src/lib/assets.ts";
+import { isAssets } from "../src/lib/assets.ts";
 import type { Locale } from "../src/catalogs/index.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -19,7 +19,9 @@ const REVIEW_LOCALES: ReadonlyArray<{ locale: Locale; path: string }> = [
 ];
 
 export async function writeReview(): Promise<void> {
-  const assets = JSON.parse(await readFile(join(root, "build", "manifest.json"), "utf8")) as Assets;
+  const parsed: unknown = JSON.parse(await readFile(join(root, "build", "manifest.json"), "utf8"));
+  if (!isAssets(parsed)) throw new Error("the build manifest is malformed");
+  const assets = parsed;
   for (const { locale, path } of REVIEW_LOCALES) {
     const view = chatView({ locale, assets, path, localePath: locale.path, alternates: [] });
     const document = base({

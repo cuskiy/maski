@@ -3,7 +3,8 @@ import type { Catalog } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
 import { safeAvatarUrl } from "../lib/safeUrl.ts";
 import { hasTag, isDirectRoom, isMuted, isSpaceRoom } from "../core/rooms.ts";
-import type { ChatState, RoomSummary, SectionId } from "../core/types.ts";
+import type { ChatState, RoomSummary, SectionId, SourceCapabilities } from "../core/types.ts";
+import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
 import { languageTrigger } from "./language.ts";
@@ -27,9 +28,15 @@ const SECTIONS: ReadonlyArray<{
   { id: "spaces", key: "sections.spaces" },
 ];
 
-export function nav(state: ChatState, c: Catalog): Html {
+export function nav(state: ChatState, c: Catalog, capabilities: SourceCapabilities = REVIEW_CAPABILITIES): Html {
   const session = state.session;
   const accountAvatar = safeAvatarUrl(session?.avatar ?? null);
+  const actions = ACTIONS.filter((action) => {
+    if (action.surface === SURFACE.newMessage) return capabilities.addRoom && capabilities.inviteUser;
+    if (action.surface === SURFACE.invite) return capabilities.answerInvite;
+    if (action.surface === SURFACE.join || action.surface === SURFACE.create) return capabilities.addRoom;
+    return true;
+  });
   return html`<aside class="nav" data-region="${REGION.nav}" aria-label="${t(c, "nav.label")}">
     <nav
       class="nav-sections"
@@ -38,7 +45,7 @@ export function nav(state: ChatState, c: Catalog): Html {
       ${state.roomsLoading ? html` aria-busy="true"` : html``}
     >
       <noscript><p class="note">${t(c, "noscript.chat")}</p></noscript>
-      ${SECTIONS.map((section) => sectionView(state, c, section.id, section.key))}
+      ${SECTIONS.map((section) => sectionView(state, c, section.id, section.key, capabilities))}
     </nav>
     ${surface({
       c,
@@ -46,7 +53,7 @@ export function nav(state: ChatState, c: Catalog): Html {
       titleKey: "nav.menu",
       kind: "floating",
       body: html`<div class="surface-menu" role="menu" aria-label="${t(c, "nav.menu")}">
-        ${ACTIONS.map((action) => surfaceTrigger(action.surface, t(c, action.key), action.icon, "modal"))}
+        ${actions.map((action) => surfaceTrigger(action.surface, t(c, action.key), action.icon, "modal"))}
         ${languageTrigger(c, "action")}
       </div>`,
     })}
@@ -74,7 +81,13 @@ export function nav(state: ChatState, c: Catalog): Html {
   </aside>`;
 }
 
-function sectionView(state: ChatState, c: Catalog, id: SectionId, key: Parameters<typeof t>[1]): Html {
+function sectionView(
+  state: ChatState,
+  c: Catalog,
+  id: SectionId,
+  key: Parameters<typeof t>[1],
+  capabilities: SourceCapabilities,
+): Html {
   const rooms = state.rooms.filter((room) => belongs(room, id));
   const open = state.sections[id].open;
   const loading = state.roomsLoading && id === "rooms";
@@ -86,7 +99,7 @@ function sectionView(state: ChatState, c: Catalog, id: SectionId, key: Parameter
       <span class="section-chevron" aria-hidden="true">${icons.chevron}</span>
     </summary>
     <ol class="section-rows" role="list" data-rows="${id}">
-      ${loading ? skeletonRows() : rooms.map((room) => (isSpaceRoom(room) ? spaceRow(state, c, room) : roomRow(state, c, room)))}
+      ${loading ? skeletonRows() : rooms.map((room) => (isSpaceRoom(room) ? spaceRow(state, c, room, capabilities) : roomRow(state, c, room, capabilities)))}
     </ol>
   </details>`;
 }
@@ -130,7 +143,7 @@ function muted(c: Catalog): Html {
   return html`<span class="room-muted" role="img" aria-label="${t(c, "room.muted")}">${icons.mute}</span>`;
 }
 
-function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
+function spaceRow(state: ChatState, c: Catalog, room: RoomSummary, capabilities: SourceCapabilities): Html {
   const open = state.openSpaces.includes(room.roomId);
   const children = state.rooms.filter((child) => child.spaceId === room.roomId && !hasTag(child, "m.lowpriority"));
   return html`<li class="room is-space${open ? " is-open" : ""}" data-space="${room.roomId}">
@@ -152,12 +165,12 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       </span>
     </button>
     <ol class="space-rows" role="list" ${open ? html`` : html`hidden`}>
-      ${children.map((child) => roomRow(state, c, child))}
+      ${children.map((child) => roomRow(state, c, child, capabilities))}
     </ol>
   </li>`;
 }
 
-function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
+function roomRow(state: ChatState, c: Catalog, room: RoomSummary, capabilities: SourceCapabilities): Html {
   const active = room.roomId === state.roomId;
   const avatar = safeAvatarUrl(room.avatar);
   return html`<li class="room${active ? " is-active" : ""}" data-room="${room.roomId}">
@@ -179,6 +192,6 @@ function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       </span>
     </button>
     <span class="room-swipe-hint is-start" aria-hidden="true">${icons.check}</span>
-    <span class="room-swipe-hint is-end" aria-hidden="true">${icons.mute}</span>
+    ${capabilities.setNotification ? html`<span class="room-swipe-hint is-end" aria-hidden="true">${icons.mute}</span>` : html``}
   </li>`;
 }

@@ -1,13 +1,9 @@
 import type { Event } from "../protocol/index.ts";
+import { workerScope } from "../lib/workerScope.ts";
 import { createWorkerApi } from "./api.ts";
 import { MatrixSession } from "./matrix.ts";
 
-interface WorkerScope {
-  onmessage: ((event: MessageEvent<unknown>) => void) | null;
-  postMessage(message: unknown): void;
-}
-
-const scope = globalThis as unknown as WorkerScope;
+const scope = workerScope<unknown, unknown>();
 const api = createWorkerApi(new MatrixSession(), (event: Event) => scope.postMessage(event));
 
 scope.onmessage = (event) => {

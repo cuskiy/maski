@@ -2,10 +2,17 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
-import type { ChatState, Media, MessageRow, NotificationPrefs, RoomSummary } from "../core/types.ts";
+import type { ChatState, Media, MessageRow, RoomSummary } from "../core/types.ts";
 import { safeMediaUrl } from "../lib/safeUrl.ts";
+import { isRecord } from "../lib/json.ts";
 import { SURFACE } from "../core/regions.ts";
-import { isSpaceRoom } from "../core/rooms.ts";
+import {
+  isHistoryVisibility,
+  isNotificationLevel,
+  isRoomJoinRule,
+  isRoomNotification,
+  isSpaceRoom,
+} from "../core/rooms.ts";
 import { messagePermissions, roomPermissions } from "../core/permissions.ts";
 import { surfaceBodyFor, mediaFilesBody } from "../components/surfaces.ts";
 import { replaceHtml } from "./dom.ts";
@@ -447,6 +454,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   let pendingResetKey = false;
 
   const state = (): ChatState => store.snapshot();
+  const capabilities = actions.capabilities;
   const popoverReturnFocus = new Map<string, HTMLElement>();
   const room = (id: string | null): RoomSummary | null => state().rooms.find((entry) => entry.roomId === id) ?? null;
   const message = (id: string | null): MessageRow | null => state().messages.find((entry) => entry.id === id) ?? null;
@@ -483,7 +491,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const scrollTop = body.scrollTop;
     const current = state();
     const target = overrideRoomId === undefined ? current : { ...current, roomId: overrideRoomId };
-    replaceHtml(body, surfaceBodyFor(c, id, target));
+    replaceHtml(body, surfaceBodyFor(c, id, target, capabilities));
     body.scrollTop = scrollTop;
     if (memberGroup !== null) {
       const tab = body.querySelector<HTMLElement>(`[data-member-group="${CSS.escape(memberGroup)}"]`);
@@ -516,6 +524,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
           if (permissions.favorite) allowed.add("roomMenu.favorite");
           if (permissions.leave) allowed.add("roomMenu.leave");
         } else {
+          allowed.add("roomMenu.markRead");
           allowed.add("roomMenu.settings");
           allowed.add("roomMenu.mediaFiles");
           allowed.add("roomMenu.search");
@@ -540,6 +549,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         allowed.add("messageMenu.source");
         allowed.add("messageMenu.select");
         if (target.own && target.status !== "sent") allowed.add("messageMenu.cancel");
+        if (target.own && target.status === "failed" && target.retryable) allowed.add("messageMenu.retry");
       }
       for (const item of body.querySelectorAll<HTMLElement>("[data-action]")) {
         item.hidden = !allowed.has(item.dataset["action"] ?? "");
@@ -596,9 +606,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       <span class="profile-avatar" aria-hidden="true">${name.slice(0, 1)}</span>
       <h3 class="profile-name" dir="auto">${name}</h3>
       <p class="note" dir="ltr">${userId}</p>
-      <button class="button-primary" type="button" data-profile-action="message">
-        ${t(c, "surface.profile.message")}
-      </button>
+      ${
+        capabilities.addRoom && capabilities.inviteUser
+          ? html`<button class="button-primary" type="button" data-profile-action="message">
+              ${t(c, "surface.profile.message")}
+            </button>`
+          : html``
+      }
     </div>`,
     );
   }
@@ -641,15 +655,15 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   function applySelectValue(name: string, value: string): void {
     const roomId = activeRoomId ?? state().roomId;
     if (name === "notification-level") {
-      actions.setNotificationLevel(value as NotificationPrefs["level"]);
+      if (isNotificationLevel(value)) actions.setNotificationLevel(value);
     } else if (name === "room-notifications" && roomId !== null) {
-      actions.setNotification(roomId, value as RoomSummary["notification"]);
+      if (isRoomNotification(value)) actions.setNotification(roomId, value);
     } else if (name === "room-join" && roomId !== null) {
-      actions.updateRoomAccess(roomId, { joinRule: value as RoomSummary["joinRule"] });
+      if (isRoomJoinRule(value)) actions.updateRoomAccess(roomId, { joinRule: value });
     } else if (name === "room-guest" && roomId !== null) {
       actions.updateRoomAccess(roomId, { guestAccess: value === "can_join" ? "can_join" : "forbidden" });
     } else if (name === "room-history" && roomId !== null) {
-      actions.updateRoomAccess(roomId, { historyVisibility: value as RoomSummary["historyVisibility"] });
+      if (isHistoryVisibility(value)) actions.updateRoomAccess(roomId, { historyVisibility: value });
     } else if (name === "room-directory" && roomId !== null) {
       actions.updateRoomAccess(roomId, { directoryPublished: value === "true" });
     }
@@ -688,15 +702,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       });
       return;
     } else if (action === "reset-key") {
+      if (!capabilities.resetRecoveryKey) return;
       askConfirm(t(c, "settings.resetKeyConfirm"), () => {
         pendingResetKey = true;
         actions.resetRecoveryKey();
-      });
-      return;
-    } else if (action === "reset-identity") {
-      askConfirm(t(c, "settings.resetIdentityConfirm"), () => {
-        pendingResetKey = true;
-        actions.resetIdentity();
       });
       return;
     } else if (action === "copy-reset-key") {
@@ -707,16 +716,19 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       downloadRecovery();
       return;
     } else if (action === "verify-device") {
+      if (!capabilities.signOutDevice) return;
       const dialog = document.getElementById("device-sas-dialog");
       if (dialog instanceof HTMLDialogElement) dialog.showModal();
       return;
     } else if (action === "sign-out-device") {
+      if (!capabilities.signOutDevice) return;
       const deviceId = element.dataset["deviceId"] ?? "";
       askConfirm(t(c, "settings.signOutDeviceConfirm"), () => {
         actions.signOutDevice(deviceId);
         queueMicrotask(() => refreshBody(SURFACE.settings));
       });
     } else if (action === "sign-out-others") {
+      if (!capabilities.signOutOthers) return;
       askConfirm(t(c, "settings.signOutOthersConfirm"), () => {
         actions.signOutOthers();
         queueMicrotask(() => refreshBody(SURFACE.settings));
@@ -733,6 +745,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   }
 
   function openMediaFiles(roomId: string): void {
+    if (!capabilities.search) return;
     const dialog = document.getElementById(SURFACE.mediaFiles);
     const body = dialog?.querySelector<HTMLElement>(`[data-region="${SURFACE.mediaFiles}-body"]`);
     if (!(dialog instanceof HTMLDialogElement) || body === null || body === undefined) return;
@@ -742,6 +755,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   }
 
   function openSearch(roomId: string): void {
+    if (!capabilities.search) return;
     const dialog = document.getElementById(SURFACE.search);
     if (!(dialog instanceof HTMLDialogElement)) return;
     refreshBody(SURFACE.search, roomId);
@@ -753,27 +767,36 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const id = activeRoomId ?? state().roomId;
     if (id === null) return;
     if (action === "roomMenu.markRead") actions.markRead(id);
-    else if (action === "roomMenu.favorite") actions.toggleFavorite(id);
-    else if (action === "roomMenu.mute") actions.toggleMute(id);
-    else if (action === "roomMenu.leave") {
+    else if (action === "roomMenu.favorite") {
+      if (!capabilities.setRoomTag) return;
+      actions.toggleFavorite(id);
+    } else if (action === "roomMenu.mute") {
+      if (!capabilities.setNotification) return;
+      actions.toggleMute(id);
+    } else if (action === "roomMenu.leave") {
+      if (!capabilities.leaveRoom) return;
       hide(SURFACE.roomMenu);
       askConfirm(t(c, "roomMenu.leaveConfirm"), () => actions.leaveRoom(id));
       return;
     } else if (action === "roomMenu.mediaFiles") {
+      if (!capabilities.search) return;
       hide(SURFACE.roomMenu);
       openMediaFiles(id);
       return;
     } else if (action === "roomMenu.search") {
+      if (!capabilities.search) return;
       hide(SURFACE.roomMenu);
       openSearch(id);
       return;
     } else if (action === "roomMenu.invite") {
+      if (!capabilities.inviteUser) return;
       hide(SURFACE.roomMenu);
       refreshBody(SURFACE.roomInvite);
       const inviteDialog = document.getElementById(SURFACE.roomInvite);
       if (inviteDialog instanceof HTMLDialogElement) inviteDialog.showModal();
       return;
     } else if (action === "spaceMenu.settings") {
+      if (!capabilities.setRoomState) return;
       hide(SURFACE.roomMenu);
       const dialog = document.getElementById(SURFACE.roomSettings);
       if (dialog instanceof HTMLDialogElement) {
@@ -783,6 +806,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       }
       return;
     } else if (action === "spaceMenu.leave") {
+      if (!capabilities.leaveRoom) return;
       hide(SURFACE.roomMenu);
       askConfirm(t(c, "spaceMenu.leaveConfirm"), () => actions.leaveRoom(id));
       return;
@@ -800,9 +824,11 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         .join("\n");
       if (text !== "") copy(text);
     } else if (action === "selection.forward") {
-      if (ids.length > 0) document.dispatchEvent(new CustomEvent("maski:forward-open", { detail: { ids } }));
+      if (capabilities.forward && ids.length > 0) {
+        document.dispatchEvent(new CustomEvent("maski:forward-open", { detail: { ids } }));
+      }
     } else if (action === "selection.delete") {
-      document.dispatchEvent(new CustomEvent("maski:selection-delete"));
+      if (capabilities.redact) document.dispatchEvent(new CustomEvent("maski:selection-delete"));
     }
     hide(SURFACE.selectionMenu);
   }
@@ -812,6 +838,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (target === null) return;
     if (action === "messageMenu.reply") composer.showReply(target);
     else if (action === "messageMenu.react") {
+      if (!capabilities.react) return;
       const source = lastMenuSource;
       const point = lastMenuPoint;
       hide(SURFACE.messageMenu);
@@ -819,10 +846,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         openContextMenu(SURFACE.reaction, source, point ?? sourcePoint(source), false, lastMenuWasKeyboard);
       }
       return;
-    } else if (action === "messageMenu.edit") composer.showEditing(target);
-    else if (action === "messageMenu.delete") {
+    } else if (action === "messageMenu.edit") {
+      if (!capabilities.edit) return;
+      composer.showEditing(target);
+    } else if (action === "messageMenu.delete") {
+      if (!capabilities.redact) return;
       askConfirm(t(c, "messageMenu.deleteConfirm"), () => actions.redact(target.id));
     } else if (action === "messageMenu.cancel") actions.discardMessage(target.id);
+    else if (action === "messageMenu.retry") actions.retryMessage(target.id);
     else if (action === "messageMenu.copy") copy(target.body);
     else if (action === "messageMenu.source") showMessageSource(target);
     else if (action === "messageMenu.select") {
@@ -832,6 +863,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   }
 
   function search(form: HTMLFormElement): void {
+    if (!capabilities.search) return;
     const input = form.querySelector<HTMLInputElement>("#search-field");
     const results = document.querySelector<HTMLElement>("[data-search-results]");
     if (input === null || results === null) return;
@@ -1007,6 +1039,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         refreshBody(id);
       } else if (id === SURFACE.invite) refreshBody(id);
       else if (id === SURFACE.roomSettings) {
+        if (!capabilities.setRoomState) return;
         hide(SURFACE.roomMenu);
         setDialogTitle(id, "roomMenu.settings");
         refreshBody(id, activeRoomId ?? state().roomId);
@@ -1034,6 +1067,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const invite = target.closest<HTMLElement>("[data-invite-action]");
     if (invite !== null) {
       event.preventDefault();
+      if (!capabilities.answerInvite) return;
       const roomId = invite.dataset["roomId"] ?? "";
       if (invite.dataset["inviteAction"] === "accept") actions.acceptInvite(roomId);
       else actions.declineInvite(roomId);
@@ -1046,6 +1080,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
     const forwardRoom = target.closest<HTMLElement>("[data-forward-room]");
     if (forwardRoom !== null) {
+      if (!capabilities.forward) return;
       const dialog = document.getElementById(SURFACE.forward);
       if (!(dialog instanceof HTMLDialogElement)) return;
       const ids = (dialog.dataset["forwardIds"] ?? "").split(",").filter(Boolean);
@@ -1085,6 +1120,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
     const profileAction = target.closest<HTMLElement>("[data-profile-action]");
     if (profileAction !== null && profileTarget !== null) {
+      if (!capabilities.addRoom || !capabilities.inviteUser) return;
       hide(SURFACE.profile);
       const existing = state().rooms.find((entry) => entry.directUserId === profileTarget?.userId);
       if (existing !== undefined) actions.selectRoom(existing.roomId);
@@ -1101,6 +1137,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const memberAction = target.closest<HTMLElement>("[data-member-action]");
     if (memberAction !== null) {
       event.preventDefault();
+      if (!capabilities.memberAction) return;
       const action = memberAction.dataset["memberAction"] ?? "";
       const memberId = memberAction.dataset["memberId"] ?? "";
       const roomId = memberAction.dataset["roomId"] ?? "";
@@ -1129,6 +1166,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const addressRemove = target.closest<HTMLElement>("[data-room-address-remove]");
     if (addressRemove !== null) {
       event.preventDefault();
+      if (!capabilities.setRoomState) return;
       actions.removeRoomAddress(activeRoomId ?? state().roomId ?? "", addressRemove.dataset["roomAddressRemove"] ?? "");
       refreshBody(SURFACE.roomSettings, activeRoomId ?? state().roomId);
       return;
@@ -1150,8 +1188,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       else if (surface?.id === SURFACE.messageMenu) handleMessageAction(action.dataset["action"] ?? "");
       else if (surface?.id === SURFACE.selectionMenu) handleSelectionAction(action.dataset["action"] ?? "");
       else if (surface?.id === SURFACE.roomSettings && action.dataset["action"] === "roomSettings.leave") {
+        if (!capabilities.leaveRoom) return;
         const roomId = activeRoomId ?? state().roomId ?? "";
-        const leavingSpace = room(roomId) !== null && isSpaceRoom(room(roomId) as RoomSummary);
+        const leaving = room(roomId);
+        const leavingSpace = leaving !== null && isSpaceRoom(leaving);
         askConfirm(t(c, leavingSpace ? "spaceMenu.leaveConfirm" : "roomMenu.leaveConfirm"), () => {
           actions.leaveRoom(roomId);
           hide(SURFACE.roomSettings);
@@ -1179,6 +1219,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const reactionChoice = target.closest<HTMLElement>("[data-react-choice]");
     if (reactionChoice !== null) {
       event.preventDefault();
+      if (!capabilities.react) return;
       if (activeMessageId !== null) {
         const emoji = reactionChoice.dataset["reactChoice"] ?? "";
         actions.recordReaction(emoji);
@@ -1190,6 +1231,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
     const reaction = target.closest<HTMLElement>(".reaction");
     if (reaction !== null) {
+      if (!capabilities.react) return;
       const row = reaction.closest<HTMLElement>("li.message");
       if (row?.dataset["id"] !== undefined && reaction.dataset["reaction"] !== undefined) {
         actions.recordReaction(reaction.dataset["reaction"]);
@@ -1222,6 +1264,16 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       }
       hide(SURFACE.newMessage);
       queueMicrotask(() => hide(SURFACE.newMessage));
+    } else if (id === "reset-identity") {
+      if (!capabilities.resetIdentity) return;
+      const input = form.querySelector<HTMLInputElement>("#reset-identity-password");
+      const password = input?.value ?? "";
+      if (input === null || password === "") return;
+      input.value = "";
+      askConfirm(t(c, "settings.resetIdentityConfirm"), () => {
+        pendingResetKey = true;
+        actions.resetIdentity(password);
+      });
     } else if (id === "join") {
       const input = form.querySelector<HTMLInputElement>("#join-field");
       const value = input?.value.trim() ?? "";
@@ -1594,31 +1646,42 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   viewer?.addEventListener("close", onViewerClose);
 
   const openForward = (ids: readonly string[]): void => {
+    if (!capabilities.forward) return;
     const dialog = document.getElementById(SURFACE.forward);
     if (!(dialog instanceof HTMLDialogElement) || ids.length === 0) return;
     const body = dialog.querySelector<HTMLElement>(`[data-region="${SURFACE.forward}-body"]`);
     if (body === null) return;
     dialog.dataset["forwardIds"] = ids.join(",");
-    replaceHtml(body, surfaceBodyFor(c, SURFACE.forward, state()));
+    replaceHtml(body, surfaceBodyFor(c, SURFACE.forward, state(), capabilities));
     body.scrollTop = 0;
     dialog.showModal();
   };
 
   const onForwardOpen = (event: Event): void => {
-    const ids = (event as CustomEvent<{ ids?: readonly string[] }>).detail?.ids ?? [];
-    openForward(ids);
+    if (!(event instanceof CustomEvent)) return;
+    const detail: unknown = event.detail;
+    if (!isRecord(detail)) return;
+    const ids = detail["ids"];
+    openForward(Array.isArray(ids) ? ids.filter((id: unknown): id is string => typeof id === "string") : []);
   };
 
   const onReplyMessage = (event: Event): void => {
-    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
-    if (id === undefined) return;
+    if (!(event instanceof CustomEvent)) return;
+    const detail: unknown = event.detail;
+    if (!isRecord(detail)) return;
+    const id = detail["id"];
+    if (typeof id !== "string") return;
     const target = message(id);
     if (target !== null) composer.showReply(target);
   };
 
   const onConfirmRequest = (event: Event): void => {
-    const detail = (event as CustomEvent<{ message?: string; action?: () => void }>).detail;
-    if (detail?.message !== undefined && typeof detail.action === "function") askConfirm(detail.message, detail.action);
+    if (!(event instanceof CustomEvent)) return;
+    const detail: unknown = event.detail;
+    if (!isRecord(detail)) return;
+    const text = detail["message"];
+    const action = detail["action"];
+    if (typeof text === "string" && typeof action === "function") askConfirm(text, () => action());
   };
 
   const unwatchResetKey = store.watch(["recoveryKey"], () => {

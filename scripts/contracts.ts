@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { en } from "../src/catalogs/en.ts";
 import { zhCN } from "../src/catalogs/zh-CN.ts";
 import { locales } from "../src/catalogs/index.ts";
+import { isAssets } from "../src/lib/assets.ts";
 import { REGION, SURFACE } from "../src/core/regions.ts";
 import { generatedPages } from "./pages.ts";
 
@@ -31,9 +32,8 @@ const code = [...sourceFiles.filter((file) => !file.startsWith("src/catalogs/"))
 
 const enKeys = Object.keys(en);
 if (JSON.stringify(enKeys.toSorted()) !== JSON.stringify(Object.keys(zhCN).toSorted())) fail("C1", "catalogs disagree");
-for (const key of enKeys) {
+for (const [key, value] of Object.entries(en)) {
   if (!code.includes(`"${key}"`)) fail("C1", `nobody reads ${key}`);
-  const value: string = en[key as keyof typeof en];
   if (value.length === 0) fail("C1", `empty entry ${key}`);
 }
 
@@ -60,45 +60,10 @@ for (const page of generated) {
   }
 }
 
-function isAssets(value: unknown): value is {
-  stylesheet: string;
-  icon: string;
-  guard: string;
-  prepaint: string;
-  client: string;
-  reviewClient: string;
-  imageWorker: string;
-  matrixWorker: string;
-  cryptoWasm: string;
-} {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "stylesheet" in value &&
-    typeof value.stylesheet === "string" &&
-    "icon" in value &&
-    typeof value.icon === "string" &&
-    "guard" in value &&
-    typeof value.guard === "string" &&
-    "prepaint" in value &&
-    typeof value.prepaint === "string" &&
-    "client" in value &&
-    typeof value.client === "string" &&
-    "reviewClient" in value &&
-    typeof value.reviewClient === "string" &&
-    "imageWorker" in value &&
-    typeof value.imageWorker === "string" &&
-    "matrixWorker" in value &&
-    typeof value.matrixWorker === "string" &&
-    "cryptoWasm" in value &&
-    typeof value.cryptoWasm === "string"
-  );
-}
-
 const parsedManifest: unknown = JSON.parse(readFileSync(join(root, "build", "manifest.json"), "utf8"));
 if (!isAssets(parsedManifest)) throw new Error("the build manifest is malformed");
 const manifest = parsedManifest;
-const manifestNames = {
+const manifestNames: Readonly<Record<string, { readonly prefix: string; readonly extension: string }>> = {
   stylesheet: { prefix: "style-", extension: ".css" },
   icon: { prefix: "icon-", extension: ".svg" },
   guard: { prefix: "guard-", extension: ".js" },
@@ -108,9 +73,9 @@ const manifestNames = {
   imageWorker: { prefix: "image-worker-", extension: ".js" },
   matrixWorker: { prefix: "matrix-worker-", extension: ".js" },
   cryptoWasm: { prefix: "matrix-sdk-crypto-", extension: ".wasm" },
-} as const;
+};
 for (const [key, value] of Object.entries(manifest)) {
-  const expected = manifestNames[key as keyof typeof manifestNames];
+  const expected = manifestNames[key];
   const name = basename(value);
   const hash =
     expected === undefined ? "" : name.slice(expected.prefix.length, name.length - expected.extension.length);

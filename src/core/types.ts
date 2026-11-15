@@ -6,6 +6,8 @@ export type MessageStatus = "sent" | "queued" | "sending" | "failed";
 
 export type Phase = "boot" | "signedOut" | "locked" | "ready";
 
+export type KeyGate = "ready" | "missing" | "unknown" | "needs-recovery" | "needs-verification";
+
 export type Connection = "connecting" | "online" | "offline" | "degraded";
 
 export type RoomEncryption = "none" | "encrypted" | "unknown";
@@ -114,6 +116,7 @@ export interface MessageRow {
   readonly redacted: boolean;
   readonly status: MessageStatus;
   readonly error: string | null;
+  readonly retryable: boolean;
   readonly system: boolean;
   readonly encryption: MessageEncryption;
 }
@@ -135,6 +138,82 @@ export interface SessionCapabilities {
   readonly signOut: boolean;
   readonly signOutOthers: boolean;
 }
+
+/** Every optional chat command. A source advertises exactly the ones it can issue. */
+export type SourceCapability =
+  | "media"
+  | "stickers"
+  | "search"
+  | "react"
+  | "edit"
+  | "redact"
+  | "forward"
+  | "typing"
+  | "memberAction"
+  | "inviteUser"
+  | "addRoom"
+  | "leaveRoom"
+  | "setRoomState"
+  | "setRoomTag"
+  | "setNotification"
+  | "resetRecoveryKey"
+  | "resetIdentity"
+  | "signOutDevice"
+  | "signOutOthers"
+  | "answerInvite"
+  | "saveNotifications";
+
+export type SourceCapabilities = Readonly<Record<SourceCapability, boolean>>;
+
+/** The review surface: every command the mock fixture implements. */
+export const REVIEW_CAPABILITIES: SourceCapabilities = {
+  media: true,
+  stickers: true,
+  search: true,
+  react: true,
+  edit: true,
+  redact: true,
+  forward: true,
+  typing: true,
+  memberAction: true,
+  inviteUser: true,
+  addRoom: true,
+  leaveRoom: true,
+  setRoomState: true,
+  setRoomTag: true,
+  setNotification: true,
+  resetRecoveryKey: true,
+  resetIdentity: true,
+  signOutDevice: true,
+  signOutOthers: true,
+  answerInvite: true,
+  saveNotifications: true,
+};
+
+/** The worker conversation: only the commands the worker protocol implements. */
+export const PRODUCTION_CAPABILITIES: SourceCapabilities = {
+  media: false,
+  stickers: false,
+  search: false,
+  react: false,
+  edit: false,
+  redact: false,
+  forward: false,
+  typing: false,
+  memberAction: false,
+  inviteUser: false,
+  addRoom: false,
+  leaveRoom: false,
+  setRoomState: false,
+  setRoomTag: false,
+  setNotification: false,
+  resetRecoveryKey: false,
+  resetIdentity: true,
+  signOutDevice: false,
+  signOutOthers: false,
+  answerInvite: false,
+  saveNotifications: false,
+};
 
 export interface DeviceCapabilities {
   readonly verify: boolean;

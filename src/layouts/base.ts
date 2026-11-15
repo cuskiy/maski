@@ -1,4 +1,4 @@
-import type { Assets } from "../lib/assets.ts";
+import { SERVICE_WORKER_PATH, type Assets } from "../lib/assets.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
@@ -37,6 +37,7 @@ export function base(input: BaseInput): Html {
         <meta name="image-worker" content="${input.assets.imageWorker}" />
         <meta name="matrix-worker" content="${input.assets.matrixWorker}" />
         <meta name="crypto-wasm" content="${input.assets.cryptoWasm}" />
+        <meta name="service-worker" content="${SERVICE_WORKER_PATH}" />
         <title>${input.title}</title>
         <meta name="description" content="${input.description}" />
         ${input.robots === undefined ? html`` : html`<meta name="robots" content="${input.robots}" />`}

@@ -1,5 +1,6 @@
 import bcd from "@mdn/browser-compat-data" with { type: "json" };
 import data from "web-features/data.json" with { type: "json" };
+import { isRecord } from "../src/lib/json.ts";
 
 interface Feature {
   readonly name?: string;
@@ -34,21 +35,23 @@ function bcdFeature(query: string): Feature | null {
   if (path === undefined) return null;
   let node: unknown = bcd;
   for (const part of path.split(".")) {
-    if (typeof node !== "object" || node === null || !(part in node)) return null;
-    node = (node as Record<string, unknown>)[part];
+    if (!isRecord(node) || !(part in node)) return null;
+    node = node[part];
   }
-  if (typeof node !== "object" || node === null || !(BCD_COMPAT in node)) return null;
-  const compat = (node as Record<string, unknown>)[BCD_COMPAT];
-  if (typeof compat !== "object" || compat === null || !("support" in compat)) return null;
-  const support = (compat as { readonly support?: unknown }).support;
-  if (typeof support !== "object" || support === null) return null;
+  if (!isRecord(node) || !(BCD_COMPAT in node)) return null;
+  const compat = node[BCD_COMPAT];
+  if (!isRecord(compat) || !("support" in compat)) return null;
+  const support = compat["support"];
+  if (!isRecord(support)) return null;
   const versions: Record<string, string> = {};
   for (const engine of ["chrome", "firefox", "safari"]) {
-    const rawEntry = (support as Record<string, unknown>)[engine];
-    const entries = Array.isArray(rawEntry) ? rawEntry : [rawEntry];
-    const first = entries[0] as { readonly version_added?: unknown } | undefined;
-    if (typeof first?.version_added === "string") versions[engine] = first.version_added;
-    else if (first?.version_added === true) versions[engine] = "0";
+    const rawEntry = support[engine];
+    const entries: readonly unknown[] = Array.isArray(rawEntry) ? rawEntry : [rawEntry];
+    const first: unknown = entries[0];
+    if (!isRecord(first)) continue;
+    const version = first["version_added"];
+    if (typeof version === "string") versions[engine] = version;
+    else if (version === true) versions[engine] = "0";
   }
   return { name: query, status: { baseline: false, support: versions } };
 }

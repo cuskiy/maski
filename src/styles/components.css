@@ -87,10 +87,6 @@
     gap: var(--space-4);
   }
 
-  .form > .button-primary {
-    margin-block-start: var(--space-1);
-  }
-
   .field {
     position: relative;
     display: grid;
@@ -270,6 +266,10 @@
   .button-primary:disabled {
     opacity: 40%;
     cursor: default;
+  }
+
+  .form > .button-primary {
+    margin-block-start: var(--space-1);
   }
 
   .button-quiet {

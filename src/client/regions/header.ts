@@ -55,7 +55,7 @@ export function mountHeader({ store, actions, c }: HeaderInput): () => void {
     }
     if (topic !== null) {
       topic.hidden = room === null;
-      const typing = store.read("typing");
+      const typing = actions.capabilities.typing ? store.read("typing") : [];
       topic.textContent = typing.length > 0 ? t(c, "chat.typing", { names: typing.join(", ") }) : (room?.topic ?? "");
     }
     if (menu !== null) {

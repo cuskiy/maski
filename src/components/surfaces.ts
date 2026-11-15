@@ -3,7 +3,16 @@ import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
 import { formatBytes } from "../lib/bytes.ts";
 import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
-import type { ChatState, Member, Membership, MessageRow, RoomJoinRule, RoomSummary } from "../core/types.ts";
+import type {
+  ChatState,
+  Member,
+  Membership,
+  MessageRow,
+  RoomJoinRule,
+  RoomSummary,
+  SourceCapabilities,
+} from "../core/types.ts";
+import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { hasTag, isSpaceRoom } from "../core/rooms.ts";
 import { memberPermissions, roomPermissions } from "../core/permissions.ts";
 import { uniqueLinks } from "../core/links.ts";
@@ -40,6 +49,7 @@ const MENU_ICONS = {
   "messageMenu.edit": icons.compose,
   "messageMenu.delete": icons.trash,
   "messageMenu.cancel": icons.close,
+  "messageMenu.retry": icons.retry,
   "messageMenu.copy": icons.copy,
   "messageMenu.source": icons.code,
   "messageMenu.select": icons.check,
@@ -405,7 +415,7 @@ function searchBody(c: Catalog, state: ChatState): Html {
   </form>`;
 }
 
-export function bootSurfaceBody(c: Catalog, id: string): Html {
+export function bootSurfaceBody(c: Catalog, id: string, capabilities: SourceCapabilities = REVIEW_CAPABILITIES): Html {
   switch (id) {
     case SURFACE.roomMenu:
     case SURFACE.messageMenu:
@@ -413,68 +423,74 @@ export function bootSurfaceBody(c: Catalog, id: string): Html {
     case SURFACE.sendMenu:
     case SURFACE.confirm:
     case SURFACE.licenses:
-      return surfaceBodyFor(c, id, emptyChatState());
+      return surfaceBodyFor(c, id, emptyChatState(), capabilities);
     default:
       return html`<p class="note">${t(c, "noscript.surface")}</p>`;
   }
 }
 
-export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
+export function surfaceBodyFor(
+  c: Catalog,
+  id: string,
+  state: ChatState,
+  capabilities: SourceCapabilities = REVIEW_CAPABILITIES,
+): Html {
   switch (id) {
     case SURFACE.search:
-      return searchBody(c, state);
+      return capabilities.search ? searchBody(c, state) : html``;
     case SURFACE.newMessage:
-      return textForm(c, "new-message", "surface.newMessage.label", "surface.newMessage.submit");
+      return capabilities.addRoom && capabilities.inviteUser
+        ? textForm(c, "new-message", "surface.newMessage.label", "surface.newMessage.submit")
+        : html``;
     case SURFACE.join:
-      return textForm(c, "join", "surface.join.label", "surface.join.submit");
+      return capabilities.addRoom ? textForm(c, "join", "surface.join.label", "surface.join.submit") : html``;
     case SURFACE.create:
-      return html`<form class="form" method="post" data-surface="create">
+      return capabilities.addRoom
+        ? html`<form class="form" method="post" data-surface="create">
         ${field({ id: "create-name", label: t(c, "surface.create.name"), type: "text", autocomplete: "off", required: true })}
         ${field({ id: "create-topic", label: t(c, "surface.create.topic"), type: "text", autocomplete: "off" })}
         ${submit(t(c, "surface.create.submit"))}
-      </form>`;
+      </form>`
+        : html``;
     case SURFACE.invite:
-      return inviteBody(c, state);
+      return capabilities.answerInvite ? inviteBody(c, state) : html``;
     case SURFACE.roomInvite:
-      return textForm(c, "room-invite", "surface.roomInvite.label", "surface.roomInvite.submit");
+      return capabilities.inviteUser
+        ? textForm(c, "room-invite", "surface.roomInvite.label", "surface.roomInvite.submit")
+        : html``;
     case SURFACE.settings:
-      return settingsBody(c, state);
+      return settingsBody(c, state, capabilities);
     case SURFACE.roomSettings:
-      return roomSettingsBody(c, state);
-    case SURFACE.roomMenu:
-      return menu(
-        c,
-        [
-          "roomMenu.settings",
-          "roomMenu.markRead",
-          "roomMenu.mute",
-          "roomMenu.favorite",
-          "roomMenu.mediaFiles",
-          "roomMenu.search",
-          "roomMenu.invite",
-          "roomMenu.leave",
-          "spaceMenu.settings",
-          "spaceMenu.leave",
-        ],
-        "surface.roomMenu",
-      );
-    case SURFACE.messageMenu:
-      return menu(
-        c,
-        [
-          "messageMenu.reply",
-          "messageMenu.react",
-          "messageMenu.edit",
-          "messageMenu.delete",
-          "messageMenu.copy",
-          "messageMenu.source",
-          "messageMenu.select",
-          "messageMenu.cancel",
-        ],
-        "surface.messageMenu",
-      );
-    case SURFACE.selectionMenu:
-      return menu(c, ["selection.copy", "selection.forward", "selection.delete"], "selection.label");
+      return capabilities.setRoomState ? roomSettingsBody(c, state) : html``;
+    case SURFACE.roomMenu: {
+      const keys: MenuKey[] = [];
+      if (capabilities.setRoomState) keys.push("roomMenu.settings");
+      keys.push("roomMenu.markRead");
+      if (capabilities.setNotification) keys.push("roomMenu.mute");
+      if (capabilities.setRoomTag) keys.push("roomMenu.favorite");
+      if (capabilities.media && capabilities.search) keys.push("roomMenu.mediaFiles");
+      if (capabilities.search) keys.push("roomMenu.search");
+      if (capabilities.inviteUser) keys.push("roomMenu.invite");
+      if (capabilities.leaveRoom) keys.push("roomMenu.leave");
+      if (capabilities.setRoomState) keys.push("spaceMenu.settings");
+      if (capabilities.leaveRoom) keys.push("spaceMenu.leave");
+      return menu(c, keys, "surface.roomMenu");
+    }
+    case SURFACE.messageMenu: {
+      const keys: MenuKey[] = ["messageMenu.reply"];
+      if (capabilities.react) keys.push("messageMenu.react");
+      if (capabilities.edit) keys.push("messageMenu.edit");
+      if (capabilities.redact) keys.push("messageMenu.delete");
+      keys.push("messageMenu.copy", "messageMenu.source", "messageMenu.select");
+      keys.push("messageMenu.cancel", "messageMenu.retry");
+      return menu(c, keys, "surface.messageMenu");
+    }
+    case SURFACE.selectionMenu: {
+      const keys: MenuKey[] = ["selection.copy"];
+      if (capabilities.forward) keys.push("selection.forward");
+      if (capabilities.redact) keys.push("selection.delete");
+      return menu(c, keys, "selection.label");
+    }
     case SURFACE.profile:
       return html`<p class="note">${t(c, "surface.profile.empty")}</p>`;
     case SURFACE.confirm:
@@ -486,7 +502,7 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
     case SURFACE.viewer:
       return html`<p class="note">${t(c, "surface.viewer.empty")}</p>`;
     case SURFACE.mediaFiles:
-      return mediaFilesBody(c, state.messages);
+      return capabilities.search ? mediaFilesBody(c, state.messages) : html``;
     case SURFACE.licenses:
       return html`<ul class="license-list" role="list">
         ${LICENSES.map(
@@ -507,6 +523,7 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
     case SURFACE.messageSource:
       return html`<p class="note">${t(c, "surface.messageSource")}</p>`;
     case SURFACE.forward: {
+      if (!capabilities.forward) return html``;
       const rooms = state.rooms.filter((room) => !isSpaceRoom(room));
       if (rooms.length === 0) return html`<p class="note">${t(c, "surface.forward.empty")}</p>`;
       return html`<p class="note">${t(c, "surface.forward.hint")}</p>
@@ -526,6 +543,7 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
         </div>`;
     }
     case SURFACE.attach:
+      if (!capabilities.media) return html``;
       return html`<div class="surface-menu" role="menu" aria-label="${t(c, "surface.attach")}">
           <button class="surface-item" type="button" role="menuitem" data-attach="image">
             ${icons.image}<span>${t(c, "surface.attach.image")}</span>
@@ -546,13 +564,16 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
           aria-label="${t(c, "composer.attach")}"
         />`;
     case SURFACE.sticker:
+      if (!capabilities.stickers) return html``;
       return state.phase === "boot"
         ? html`<div class="sticker-picker"></div>`
         : stickerPickerBody(c, state.recentStickers);
     case SURFACE.emoji:
       return html`<div class="emoji-picker" data-emoji-picker></div>`;
     case SURFACE.reaction:
-      return html`<div class="emoji-picker" data-emoji-picker data-emoji-mode="reaction"></div>`;
+      return capabilities.react
+        ? html`<div class="emoji-picker" data-emoji-picker data-emoji-mode="reaction"></div>`
+        : html``;
     case SURFACE.sendMenu:
       return html`<div class="surface-menu" role="menu" aria-label="${t(c, "surface.sendMenu")}">
         <button class="surface-item" type="button" role="menuitem" data-send="text">
@@ -575,17 +596,25 @@ function settingsTabs(
   return html`<nav class="settings-tabs" aria-label="${t(c, labelKey)}">${items.map((item) => html`<a href="${item.href}">${t(c, item.key)}</a>`)}</nav>`;
 }
 
-function settingsBody(c: Catalog, state: ChatState): Html {
+function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabilities): Html {
   const session = state.session;
-  const capabilities = session?.capabilities ?? null;
+  const sessionCapabilities = session?.capabilities ?? null;
+  const hasSecurity =
+    capabilities.resetRecoveryKey ||
+    capabilities.resetIdentity ||
+    capabilities.signOutDevice ||
+    capabilities.signOutOthers;
+  const tabs: Array<{ readonly href: string; readonly key: CatalogKey }> = [
+    { href: "#settings-account", key: "settings.account" },
+  ];
+  if (capabilities.saveNotifications) tabs.push({ href: "#settings-notifications", key: "settings.notifications" });
+  if (hasSecurity) tabs.push({ href: "#settings-security", key: "settings.security" });
+  tabs.push(
+    { href: "#settings-low-priority", key: "settings.lowPriority" },
+    { href: "#settings-about", key: "settings.about" },
+  );
   return html`<div class="settings-layout">
-    ${settingsTabs(c, "surface.settings", [
-      { href: "#settings-account", key: "settings.account" },
-      { href: "#settings-notifications", key: "settings.notifications" },
-      { href: "#settings-security", key: "settings.security" },
-      { href: "#settings-low-priority", key: "settings.lowPriority" },
-      { href: "#settings-about", key: "settings.about" },
-    ])}
+    ${settingsTabs(c, "surface.settings", tabs)}
     <div class="settings-panels">
     <section class="surface-section" id="settings-account">
       <h3>${t(c, "settings.account")}</h3>
@@ -599,16 +628,14 @@ function settingsBody(c: Catalog, state: ChatState): Html {
                   <p class="note" dir="ltr">${session.userId}</p>
                 </div>
               </div>
-              ${
-                capabilities?.signOut === true
-                  ? html`<button class="button-quiet" type="button" data-settings-action="logout">
-                    ${t(c, "settings.logout")}
-                  </button>`
-                  : html``
-              }`
+              <button class="button-quiet" type="button" data-settings-action="logout">
+                ${t(c, "settings.logout")}
+              </button>`
       }
     </section>
-    <section class="surface-section" id="settings-notifications">
+    ${
+      capabilities.saveNotifications
+        ? html`<section class="surface-section" id="settings-notifications">
       <h3>${t(c, "settings.notifications")}</h3>
       <label class="setting-row"
         ><span>${t(c, "settings.desktop")}</span><input type="checkbox" data-setting="desktop"
@@ -639,8 +666,12 @@ function settingsBody(c: Catalog, state: ChatState): Html {
           { value: "mute", label: t(c, "roomSettings.mute") },
         ],
       })}
-    </section>
-    <section class="surface-section" id="settings-security">
+    </section>`
+        : html``
+    }
+    ${
+      hasSecurity
+        ? html`<section class="surface-section" id="settings-security">
       <h3>${t(c, "settings.security")}</h3>
       <div class="setting-row">
         <span>${t(c, "settings.recovery")}</span>
@@ -649,7 +680,7 @@ function settingsBody(c: Catalog, state: ChatState): Html {
         >
       </div>
       ${
-        capabilities?.recoveryKey === true
+        capabilities.resetRecoveryKey
           ? html`<button class="button-quiet" type="button" data-settings-action="reset-key">
             ${t(c, "settings.recoveryShow")}
           </button>`
@@ -662,20 +693,30 @@ function settingsBody(c: Catalog, state: ChatState): Html {
         >
       </div>
       ${
-        capabilities?.backup === true && !state.backupReady
+        sessionCapabilities?.backup === true && !state.backupReady
           ? html`<button class="button-quiet" type="button" data-settings-action="backup">
             ${t(c, "settings.backupSetup")}
           </button>`
           : html``
       }
       ${
-        capabilities?.recoveryKey === true
-          ? html`<button class="button-quiet is-danger" type="button" data-settings-action="reset-identity">
-            ${t(c, "settings.resetIdentity")}
-          </button>`
+        capabilities.resetIdentity
+          ? html`<form class="setting-stack" method="post" data-surface="reset-identity">
+            ${field({
+              id: "reset-identity-password",
+              label: t(c, "auth.password"),
+              type: "password",
+              autocomplete: "current-password",
+              required: true,
+            })}
+            <p class="field-hint">${t(c, "settings.resetIdentityConfirm")}</p>
+            <button class="button-quiet is-danger" type="submit">${t(c, "settings.resetIdentity")}</button>
+          </form>`
           : html``
       }
-      <dialog
+      ${
+        capabilities.resetRecoveryKey || capabilities.resetIdentity
+          ? html`<dialog
         id="reset-key-dialog"
         class="surface modal reset-key-dialog"
         closedby="any"
@@ -699,7 +740,9 @@ function settingsBody(c: Catalog, state: ChatState): Html {
             </button>
           </div>
         </div>
-      </dialog>
+      </dialog>`
+          : html``
+      }
       ${sasDialog(c, "device-sas-dialog")}
       <h3>${t(c, "settings.sessions")}</h3>
       ${
@@ -726,7 +769,7 @@ function settingsBody(c: Catalog, state: ChatState): Html {
                   </div>
                   <div class="device-actions">
                     ${
-                      device.capabilities.verify && !device.verified
+                      capabilities.signOutDevice && device.capabilities.verify && !device.verified
                         ? html`<button
                             class="button-quiet"
                             type="button"
@@ -738,7 +781,7 @@ function settingsBody(c: Catalog, state: ChatState): Html {
                         : html``
                     }
                     ${
-                      device.capabilities.signOut
+                      capabilities.signOutDevice && device.capabilities.signOut
                         ? html`<button
                             class="button-quiet"
                             type="button"
@@ -755,13 +798,15 @@ function settingsBody(c: Catalog, state: ChatState): Html {
             </ul>`
       }
       ${
-        capabilities?.signOutOthers === true
+        capabilities.signOutOthers
           ? html`<button class="button-quiet" type="button" data-settings-action="sign-out-others">
             ${t(c, "settings.signOutOthers")}
           </button>`
           : html``
       }
-    </section>
+    </section>`
+        : html``
+    }
     <section class="surface-section" id="settings-low-priority">
       <h3>${t(c, "settings.lowPriority")}</h3>
       ${

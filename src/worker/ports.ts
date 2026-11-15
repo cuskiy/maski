@@ -1,4 +1,4 @@
-import type { SessionSummary } from "../core/types.ts";
+import type { MessageRow, SessionSummary } from "../core/types.ts";
 import type { CommandMap, Event, KeyStatus, StartData } from "../protocol/index.ts";
 
 export interface SessionPort {
@@ -6,6 +6,7 @@ export interface SessionPort {
   login(input: CommandMap["login"]): Promise<SessionSummary>;
   logout(): Promise<null>;
   keyStatus(): Promise<KeyStatus>;
+  recover(input: CommandMap["recover"]): Promise<KeyStatus>;
   open(roomId: string): Promise<null>;
   older(roomId: string): Promise<null>;
   send(
@@ -15,7 +16,11 @@ export interface SessionPort {
     replyTo: string | null,
     transactionId: string,
     messageId: string,
-  ): Promise<null>;
+    kind: CommandMap["send"]["kind"],
+    media: CommandMap["send"]["media"],
+  ): Promise<MessageRow>;
+  retrySend(roomId: string, messageId: string): Promise<MessageRow>;
+  discardSend(roomId: string, messageId: string): Promise<null>;
   markRead(roomId: string, eventId: string): Promise<null>;
   members(roomId: string): Promise<null>;
   resetIdentity(password: string): Promise<string | null>;

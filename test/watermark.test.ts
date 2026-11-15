@@ -7,6 +7,7 @@ import {
   TILE_H,
   TILE_W,
   LAYERS,
+  WATERMARK_BUDGET,
   packWatermark,
   renderWatermark,
   type PlacedMotif,
@@ -65,4 +66,8 @@ void test("watermark layer sizes move from large to small", () => {
 void test("the committed watermark matches its generator", async () => {
   const source = await readFile(new URL("../src/styles/watermark.svg", import.meta.url), "utf8");
   assert.equal(source, renderWatermark());
+});
+
+void test("the generated watermark stays inside its declared budget", () => {
+  assert.ok(Buffer.byteLength(renderWatermark(), "utf8") <= WATERMARK_BUDGET);
 });

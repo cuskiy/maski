@@ -1,8 +1,9 @@
 import type { NotificationPrefs, SectionId } from "../core/types.ts";
+import { isSectionId } from "../core/state.ts";
 import * as storage from "./storage.ts";
 
 function sectionId(value: string): SectionId | null {
-  if (value === "favorites" || value === "rooms" || value === "direct" || value === "spaces") return value;
+  if (isSectionId(value)) return value;
   if (value === "channels") return "spaces";
   return null;
 }
@@ -47,22 +48,6 @@ export function readSpaces(account: string): readonly string[] | null {
 
 export function saveSpaces(account: string, spaces: readonly string[]): void {
   storage.writeJson(storage.STORAGE.spaces(account), spaces);
-}
-
-export function readDraft(account: string, roomId: string): string {
-  const key = storage.STORAGE.draft(account, roomId);
-  const scoped = storage.read(key);
-  if (scoped !== null) return scoped;
-  const legacy = storage.read(storage.STORAGE.legacyDraft(roomId)) ?? "";
-  if (legacy !== "") {
-    storage.write(key, legacy);
-    storage.write(storage.STORAGE.legacyDraft(roomId), null);
-  }
-  return legacy;
-}
-
-export function saveDraft(account: string, roomId: string, value: string): void {
-  storage.write(storage.STORAGE.draft(account, roomId), value === "" ? null : value);
 }
 
 export function readNotifications(account: string): NotificationPrefs | null {
