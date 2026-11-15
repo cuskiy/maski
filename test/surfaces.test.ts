@@ -318,4 +318,7 @@ void test("settings exposes the sticker pack toggle", () => {
   const markup = surfaceBodyFor(en, SURFACE.settings, mockChatState()).value;
   assert.match(markup, /data-setting="stickers"/u);
   assert.match(markup, /Stickers and emoji packs/u);
+  const sections = [...markup.matchAll(/<section class="surface-section" id="([^"]+)"/gu)].map((match) => match[1]);
+  const tabs = new Set([...markup.matchAll(/href="#(settings-[^"]+)"/gu)].map((match) => match[1]));
+  for (const section of sections) assert.ok(tabs.has(section), `settings section ${section} has no tab`);
 });

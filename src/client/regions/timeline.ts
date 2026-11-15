@@ -457,7 +457,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   });
   const resizeObserver = new ResizeObserver(scheduleLayout);
   resizeObserver.observe(wrap);
-  const unsubscribe = store.watch(["phase", "roomId", "rooms", "messages", "hasOlder", "olderLoading"], render);
+  const unsubscribe = store.watch(["phase", "roomId", "messages", "hasOlder", "olderLoading"], render);
   render();
   return () => {
     unsubscribe();

@@ -1,4 +1,8 @@
 @layer layout {
+  html {
+    block-size: 100%;
+  }
+
   body {
     container-type: inline-size;
   }
@@ -6,7 +10,7 @@
   body:has(.app) {
     display: flex;
     flex-direction: column;
-    block-size: 100dvh;
+    block-size: 100%;
     overflow: hidden;
     overscroll-behavior: none;
   }
@@ -15,7 +19,7 @@
     display: grid;
     grid-template-columns: var(--nav-width) minmax(0, 1fr);
     inline-size: 100%;
-    block-size: 100dvh;
+    block-size: 100%;
     overflow: hidden;
     background: var(--page);
   }

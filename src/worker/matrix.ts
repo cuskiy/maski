@@ -52,7 +52,6 @@ import {
   advanceMarker,
   markTimelineReset,
   projectRoomState,
-  readState,
   rowCursor,
   searchRows,
   WINDOW_LIMIT,
@@ -137,10 +136,10 @@ function sasEvents(client: MatrixClient): SasEvents {
   };
 }
 
-function normalizeHomeserver(value: string): string | null {
+function normalizeHomeserver(value: string, allowLoopback = false): string | null {
   try {
     const url = new URL(value.includes("://") ? value : `https://${value}`);
-    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    const local = allowLoopback && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
     if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
     return url.origin;
   } catch {
@@ -149,7 +148,7 @@ function normalizeHomeserver(value: string): string | null {
 }
 
 async function discoverHomeserver(value: string): Promise<string | null> {
-  const direct = normalizeHomeserver(value);
+  const direct = normalizeHomeserver(value, true);
   if (direct === null) return null;
   let target = direct;
   try {
@@ -162,7 +161,9 @@ async function discoverHomeserver(value: string): Promise<string | null> {
       const baseUrl = isRecord(homeserver) ? homeserver["base_url"] : undefined;
       if (typeof baseUrl === "string") {
         const discovered = normalizeHomeserver(baseUrl);
+        const sameLoopback = normalizeHomeserver(baseUrl, true) === direct;
         if (discovered !== null) target = discovered;
+        else if (sameLoopback) target = direct;
       }
     }
   } catch {
@@ -363,6 +364,7 @@ export class MatrixSession implements SessionPort {
   private activeRoomId: string | null = null;
   private keyReady: KeyStatus = "unknown";
   private startTask: Promise<SessionSummary> | null = null;
+  private syncReady = false;
   private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
   private readonly secretStorageKeys = new Map<string, Uint8Array<ArrayBuffer>>();
@@ -370,7 +372,12 @@ export class MatrixSession implements SessionPort {
   private lockUserId: string | null = null;
   private generation = 0;
   private roomsQueued = false;
+  private roomsRunning = false;
+  private roomsAgain = false;
   private readonly directoryPublished = new Map<string, boolean>();
+  private readonly roomAvatars = new Map<string, string>();
+  private readonly avatarRequests = new Set<string>();
+  private avatarQueue: Promise<void> = Promise.resolve();
   private readonly reactionTransactions = new Map<string, string>();
   private readonly leftRooms = new Set<string>();
   private readonly listeners = new Set<Listener>();
@@ -399,7 +406,7 @@ export class MatrixSession implements SessionPort {
         (record) => record.room.membership === "join" || record.room.membership === "invite",
       ),
     );
-    this.emitCachedRooms(cached);
+    this.emitCachedRooms(cached, cached.length === 0);
     const recent = [...cached].toSorted((left, right) => right.lastOpened - left.lastOpened)[0];
     if (recent !== undefined) await this.emitStoredWindow(recent.room.roomId);
     void this.outbox.resume().catch(() => undefined);
@@ -730,15 +737,27 @@ export class MatrixSession implements SessionPort {
 
     try {
       await crypto.resetEncryption(auth);
+      this.secretStorageKeys.clear();
       const key = await crypto.createRecoveryKeyFromPassphrase();
-      await crypto.bootstrapSecretStorage({
-        setupNewSecretStorage: true,
-        setupNewKeyBackup: true,
-        createSecretStorageKey: () => Promise.resolve(key),
-      });
+      this.pendingSecret = { key: key.privateKey, passphrase: "" };
+      try {
+        await crypto.bootstrapSecretStorage({
+          setupNewSecretStorage: true,
+          setupNewKeyBackup: true,
+          createSecretStorageKey: () => Promise.resolve(key),
+        });
+      } finally {
+        this.pendingSecret = null;
+      }
+      const defaultKeyId = await client.secretStorage.getDefaultKeyId();
+      if (defaultKeyId !== null) this.secretStorageKeys.set(defaultKeyId, key.privateKey);
       this.keyReady = await this.refreshGate();
       this.emit({ type: "keys", payload: this.keyReady });
-      return key.encodedPrivateKey ?? null;
+      const encoded = key.encodedPrivateKey ?? null;
+      // A library error string must never be shown as the one-time key.
+      if (encoded === null) return null;
+      decodeRecoveryKey(encoded);
+      return encoded;
     } catch {
       throw new WorkerFailure("auth");
     }
@@ -1292,6 +1311,14 @@ export class MatrixSession implements SessionPort {
     const client = this.requireClient();
     const target = this.requireRoom(targetRoomId);
     if (target.getMyMembership() !== "join") throw new WorkerFailure("unavailable");
+    if (await this.encryptionEnabled(client, targetRoomId)) {
+      for (const source of sources) {
+        const event = client.getRoom(source.roomId)?.findEventById(source.eventId);
+        if (event !== undefined && forwardableEvent(event)?.kind === "sticker") {
+          throw new WorkerFailure("unsupported");
+        }
+      }
+    }
     let sent = 0;
     try {
       for (const source of sources) {
@@ -1640,10 +1667,10 @@ export class MatrixSession implements SessionPort {
     this.listeners.forEach((listener) => listener(event));
   }
 
-  private emitCachedRooms(records: readonly RoomRecord[]): void {
+  private emitCachedRooms(records: readonly RoomRecord[], loading = false): void {
     this.emit({
       type: "rooms",
-      payload: { rooms: records.map((record) => record.room), loading: false },
+      payload: { rooms: records.map((record) => record.room), loading },
     });
   }
 
@@ -1778,13 +1805,68 @@ export class MatrixSession implements SessionPort {
     };
   }
 
+  private queueAvatar(roomId: string, mxc: string): void {
+    if (this.roomAvatars.has(roomId) || this.avatarRequests.has(roomId)) return;
+    this.avatarRequests.add(roomId);
+    this.avatarQueue = this.avatarQueue
+      .then(async () => {
+        const client = this.client;
+        if (client === null) return;
+        const source: MediaSource = {
+          roomId,
+          messageId: `avatar:${roomId}`,
+          kind: "image",
+          name: "",
+          caption: "",
+          width: null,
+          height: null,
+          size: null,
+          duration: null,
+          mime: null,
+          source: { kind: "mxc", url: mxc },
+          thumbnail: null,
+        };
+        const reply = await this.requireMedia().resolve(client, source, "thumbnail");
+        this.roomAvatars.set(roomId, reply.url);
+        this.scheduleRooms();
+      })
+      .catch(() => undefined)
+      .finally(() => this.avatarRequests.delete(roomId));
+  }
+
   private scheduleRooms(): void {
+    if (this.roomsRunning) {
+      this.roomsAgain = true;
+      return;
+    }
     if (this.roomsQueued) return;
     this.roomsQueued = true;
     queueMicrotask(() => {
       this.roomsQueued = false;
-      void this.emitRooms().catch(() => undefined);
+      void this.runRooms();
     });
+  }
+
+  private async runRooms(): Promise<void> {
+    if (this.roomsRunning) {
+      this.roomsAgain = true;
+      return;
+    }
+    this.roomsRunning = true;
+    try {
+      do {
+        this.roomsAgain = false;
+        await this.emitRooms();
+      } while (this.roomsAgain);
+    } catch {
+      // A projection read failure keeps the previous room snapshot.
+    } finally {
+      this.roomsRunning = false;
+      if (this.roomsAgain) {
+        this.roomsAgain = false;
+        this.scheduleRooms();
+      }
+    }
   }
 
   private async emitRooms(): Promise<void> {
@@ -1793,43 +1875,47 @@ export class MatrixSession implements SessionPort {
     const records = await account.readRooms();
     const lastOpened = new Map(records.map((record) => [record.room.roomId, record.lastOpened]));
     const client = this.client;
-    if (client === null) {
-      this.emitCachedRooms(sortRooms(records));
+    if (client === null || !this.syncReady) {
+      const visible = sortRooms(
+        records.filter((record) => record.room.membership === "join" || record.room.membership === "invite"),
+      );
+      this.emitCachedRooms(visible, visible.length === 0);
       return;
     }
     const own = client.getUserId() ?? "";
     const direct = directRooms(client);
     const spaces = spaceParents(client);
     const rooms: RoomRecord[] = [];
-    const live = new Set<string>();
     for (const room of client.getRooms()) {
       if (this.leftRooms.has(room.roomId)) continue;
-      const base = projectRoom(
+      const projectedBase = projectRoom(
         room,
         own,
         direct,
         this.notificationFor(room.roomId),
         this.directoryPublished.get(room.roomId) ?? false,
       );
-      if (base === null) continue;
-      live.add(room.roomId);
-      const marker = await account.readMarker(room.roomId);
-      const latest = await account.readLatest(room.roomId, WINDOW_LIMIT);
-      const queued = this.outbox === null ? [] : await this.outbox.rows(room.roomId);
+      if (projectedBase === null) continue;
+      const avatar = this.roomAvatars.get(room.roomId);
+      const base = avatar === undefined ? projectedBase : { ...projectedBase, avatar };
+      const mxcAvatar = room.getMxcAvatarUrl();
+      if (mxcAvatar !== null) this.queueAvatar(room.roomId, mxcAvatar);
+      const [marker, latest, queued] = await Promise.all([
+        account.readMarker(room.roomId),
+        account.readLatest(room.roomId, Math.max(WINDOW_LIMIT, 100)),
+        this.outbox === null ? Promise.resolve([]) : this.outbox.rows(room.roomId),
+      ]);
       const projected = projectRoomState(base, latest, queued, marker, own);
-      const unread = readState(await account.readEventsAfter(room.roomId, marker?.ts ?? 0), marker, own);
       const summaryRoom = {
         ...projected,
         spaceId: spaces.get(room.roomId) ?? projected.spaceId,
-        unread: unread.unread,
-        highlight: unread.highlight,
       };
-      const record = { room: summaryRoom, lastOpened: lastOpened.get(room.roomId) ?? 0 };
+      const record = {
+        room: { ...summaryRoom, avatar: null },
+        lastOpened: lastOpened.get(room.roomId) ?? 0,
+      };
       await account.writeRoom(record);
-      rooms.push(record);
-    }
-    for (const record of records) {
-      if (!live.has(record.room.roomId)) await account.deleteRoom(record.room.roomId);
+      rooms.push({ room: summaryRoom, lastOpened: record.lastOpened });
     }
     this.emit({
       type: "rooms",
@@ -2002,6 +2088,7 @@ export class MatrixSession implements SessionPort {
         return;
       }
       if (state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup) {
+        if (state === SyncState.Prepared) this.syncReady = true;
         this.emit({ type: "connection", payload: "online" });
         this.scheduleRooms();
       }
@@ -2209,6 +2296,9 @@ export class MatrixSession implements SessionPort {
   private async softLogout(): Promise<void> {
     this.generation += 1;
     this.startTask = null;
+    this.syncReady = false;
+    this.roomAvatars.clear();
+    this.avatarRequests.clear();
     const client = this.client;
     this.sas?.dispose();
     this.sas = null;
@@ -2239,6 +2329,9 @@ export class MatrixSession implements SessionPort {
   private async teardown(client: MatrixClient | null): Promise<void> {
     this.generation += 1;
     this.startTask = null;
+    this.syncReady = false;
+    this.roomAvatars.clear();
+    this.avatarRequests.clear();
     const prefix = this.cryptoPrefix;
     const account = this.account;
     this.sas?.dispose();

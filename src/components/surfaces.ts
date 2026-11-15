@@ -526,7 +526,7 @@ export function surfaceBodyFor(
       return html`<p class="note">${t(c, "surface.messageSource")}</p>`;
     case SURFACE.forward: {
       if (!capabilities.forward) return html``;
-      const rooms = state.rooms.filter((room) => !isSpaceRoom(room));
+      const rooms = state.rooms.filter((room) => !isSpaceRoom(room) && room.membership === "join");
       if (rooms.length === 0) return html`<p class="note">${t(c, "surface.forward.empty")}</p>`;
       return html`<p class="note">${t(c, "surface.forward.hint")}</p>
         <div class="forward-list">
@@ -610,6 +610,7 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
     { href: "#settings-account", key: "settings.account" },
   ];
   if (capabilities.saveNotifications) tabs.push({ href: "#settings-notifications", key: "settings.notifications" });
+  tabs.push({ href: "#settings-stickers", key: "settings.stickersTab" });
   if (hasSecurity) tabs.push({ href: "#settings-security", key: "settings.security" });
   tabs.push(
     { href: "#settings-low-priority", key: "settings.lowPriority" },
@@ -683,36 +684,40 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
       hasSecurity
         ? html`<section class="surface-section" id="settings-security">
       <h3>${t(c, "settings.security")}</h3>
-      <div class="setting-row">
-        <span>${t(c, "settings.recovery")}</span>
-        <span class="setting-value" data-setting-value="recovery"
-          >${t(c, state.recoveryKey === null ? "settings.recoveryNotSet" : "settings.recoveryShown")}</span
-        >
+      <div class="settings-group">
+        <div class="setting-row">
+          <span>${t(c, "settings.recovery")}</span>
+          <span class="setting-value" data-setting-value="recovery"
+            >${t(c, state.recoveryKey === null ? "settings.recoveryNotSet" : "settings.recoveryShown")}</span
+          >
+        </div>
+        ${
+          capabilities.resetRecoveryKey
+            ? html`<button class="button-quiet" type="button" data-settings-action="reset-key">
+              ${t(c, "settings.recoveryShow")}
+            </button>`
+            : html``
+        }
       </div>
-      ${
-        capabilities.resetRecoveryKey
-          ? html`<button class="button-quiet" type="button" data-settings-action="reset-key">
-            ${t(c, "settings.recoveryShow")}
-          </button>`
-          : html``
-      }
-      <div class="setting-row">
-        <span>${t(c, "settings.backup")}</span>
-        <span class="setting-value" data-setting-value="backup"
-          >${t(c, state.backupReady ? "settings.ready" : "settings.off")}</span
-        >
+      <div class="settings-group">
+        <div class="setting-row">
+          <span>${t(c, "settings.backup")}</span>
+          <span class="setting-value" data-setting-value="backup"
+            >${t(c, state.backupReady ? "settings.ready" : "settings.off")}</span
+          >
+        </div>
+        ${
+          sessionCapabilities?.backup === true && !state.backupReady
+            ? html`<button class="button-quiet" type="button" data-settings-action="backup">
+              ${t(c, "settings.backupSetup")}
+            </button>`
+            : html``
+        }
+        ${state.backupError === null ? html`` : html`<p class="field-hint">${t(c, "settings.backupFailed")}</p>`}
       </div>
-      ${
-        sessionCapabilities?.backup === true && !state.backupReady
-          ? html`<button class="button-quiet" type="button" data-settings-action="backup">
-            ${t(c, "settings.backupSetup")}
-          </button>`
-          : html``
-      }
-      ${state.backupError === null ? html`` : html`<p class="field-hint">${t(c, "settings.backupFailed")}</p>`}
       ${
         capabilities.resetIdentity
-          ? html`<form class="setting-stack" method="post" data-surface="reset-identity">
+          ? html`<form class="settings-group setting-stack" method="post" data-surface="reset-identity">
             ${field({
               id: "reset-identity-password",
               label: t(c, "auth.password"),

@@ -641,7 +641,7 @@
   }
 
   .message-media-wrap {
-    max-inline-size: min(100%, var(--bubble-max));
+    max-inline-size: min(100%, var(--media-max-inline));
   }
 
   .message-media {
@@ -792,7 +792,7 @@
     padding: 0;
     border-radius: var(--radius-sm);
     background: none;
-    font-size: clamp(2.5rem, 6vi, 3.5rem);
+    font-size: clamp(2.25rem, 5vi, 3rem);
     line-height: 1.15;
   }
 

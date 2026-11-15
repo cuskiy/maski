@@ -595,8 +595,20 @@
   }
 
   .settings-panels .surface-section > h3 {
-    margin-block-end: var(--space-2);
+    margin-block-end: var(--space-4);
     font-size: var(--text-xl);
+  }
+
+  .settings-panels .settings-group {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--dialog-row-bg);
+  }
+
+  .settings-panels .settings-group + .settings-group {
+    margin-block-start: var(--space-4);
   }
 
   .settings-panels .surface-section > h3:not(:first-child) {
@@ -1007,7 +1019,7 @@
 
   #reset-key-dialog .surface-body {
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-4);
   }
 
   #surface-room-invite {
@@ -1996,6 +2008,14 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+  }
+
+  #reset-key-dialog .key-actions {
+    margin-block-start: calc(-1 * var(--space-2));
+  }
+
+  #reset-key-dialog .confirm-actions {
+    margin-block-start: var(--space-2);
   }
 
   #surface-viewer .surface-body {

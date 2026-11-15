@@ -12,7 +12,7 @@ export function emptyChatState(): ChatState {
   return {
     phase: "boot",
     connection: "connecting",
-    roomsLoading: false,
+    roomsLoading: true,
     session: null,
     rooms: [],
     roomId: null,

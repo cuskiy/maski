@@ -761,7 +761,10 @@ export function wireSources(store: Store, source: ChatSource): () => void {
   const subscriptions = [
     source.on("session", (session) => store.write("session", session)),
     source.on("phase", (phase) => store.write("phase", phase)),
-    source.on("connection", (connection) => store.write("connection", connection)),
+    source.on("connection", (connection) => {
+      store.write("connection", connection);
+      if (connection === "offline" && store.read("rooms").length === 0) store.write("roomsLoading", false);
+    }),
     source.on("rooms", ({ rooms, loading }) => {
       store.batch(() => {
         store.write("rooms", rooms);

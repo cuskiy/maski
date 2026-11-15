@@ -1257,8 +1257,8 @@ Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and 
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **194 tests**, 11 generated pages, 349 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.0 KiB, client 318.7 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **194 tests**, 11 generated pages, 352 catalog keys, 2 languages.
+- Build sizes: stylesheet 84.4 KiB, client 319.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1271,7 +1271,9 @@ old commits are evidence, not status.
   second tab on the key page shows the visible lock note, a fresh key status waits for crypto instead
   of reporting `unknown`, the review media-files dialog opens the image by message id, and the topbar
   room menu hides mark-read. A real send, SAS handshake, backup setup and a reload with a non-empty
-  stored window were not re-run after the latest changes.
+  stored window were not re-run after the latest changes. Chromium also measured the app filling
+  `innerHeight` at 1333x778 and 1778x1111, and the settings dialog now exposes the Stickers tab with
+  grouped security rows. The cached-room start was not re-run against the user's account.
 - Chromium measured a 10-room cached start at 57 ms for the worker `start` reply and 86 ms to the
   first navigation row; crypto continued in the background. The test account had no stored events, so
   message-window first paint was not measured.

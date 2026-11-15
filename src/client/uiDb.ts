@@ -212,7 +212,12 @@ export function createDraftStore({
         (left, right) => Number(left.account === null) - Number(right.account === null),
       );
       for (const draft of pendingDrafts) {
-        if (draft.account !== null && draft.account !== account) continue;
+        // An unowned legacy draft cannot be proven to belong to this account; drop it.
+        if (draft.account === null) {
+          legacy?.remove(draft.key);
+          continue;
+        }
+        if (draft.account !== account) continue;
         const key = cacheKey(account, draft.roomId);
         if (draft.value !== "" && !cache.has(key)) {
           cache.set(key, draft.value);
@@ -245,7 +250,7 @@ export function createDraftStore({
         // The mirror is already empty; a failed store must not keep the session signed in.
       }
       for (const draft of legacy?.scan() ?? []) {
-        if (draft.account === null || draft.account === account) legacy?.remove(draft.key);
+        if (draft.account === account) legacy?.remove(draft.key);
       }
     },
   };

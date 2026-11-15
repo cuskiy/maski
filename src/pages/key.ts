@@ -27,6 +27,7 @@ export function keyView({ locale }: PageContext): PageView {
           </form>
         </div>
         <button class="button-primary" type="button" data-key-verify hidden>${t(c, "auth.key.sasTitle")}</button>
+        <button class="button-primary" type="button" data-key-continue hidden>${t(c, "auth.key.continue")}</button>
         <dialog
           id="key-sas-dialog"
           class="surface modal sas"

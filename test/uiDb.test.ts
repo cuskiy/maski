@@ -71,7 +71,7 @@ void test("drafts are account-scoped and cleared on logout", async () => {
   assert.equal(store.read(accountB, roomId), "draft b");
 });
 
-void test("legacy localStorage drafts migrate once, account-scoped first", async () => {
+void test("legacy localStorage drafts migrate only when the owner is known", async () => {
   const backend = memoryBackend();
   const legacyRows = new Map<string, LegacyDraft>();
   const addLegacy = (key: string, account: string | null, room: string, value: string): void => {
@@ -95,7 +95,7 @@ void test("legacy localStorage drafts migrate once, account-scoped first", async
   await backend.put({ account: accountA, roomId, value: "database a" });
   await store.hydrate(accountA);
   assert.equal(store.read(accountA, roomId), "database a");
-  assert.equal(store.read(accountA, "!loose:example.org"), "loose draft");
+  assert.equal(store.read(accountA, "!loose:example.org"), "");
   assert.equal(store.read(accountB, roomId), "");
   assert.deepEqual([...legacyRows.keys()], [`maski.draft.${accountB}.${roomId}`]);
 
@@ -129,5 +129,5 @@ void test("logout removes the account's legacy localStorage drafts", async () =>
   await store.clear(accountA);
   assert.equal(store.read(accountA, roomId), "");
   assert.equal(backend.rows.size, 0);
-  assert.deepEqual([...legacyRows.keys()], [`maski.draft.${accountB}.${roomId}`]);
+  assert.deepEqual([...legacyRows.keys()], ["maski.draft.!loose:example.org", `maski.draft.${accountB}.${roomId}`]);
 });

@@ -182,7 +182,8 @@
     --send-width: 11rem;
     --overlay-inset: 2rem;
     --bubble-max: 36rem;
-    --media-max-block: 24rem;
+    --media-max-inline: 28rem;
+    --media-max-block: 20rem;
     --media-video-width: 24rem;
     --composer-max: 12rem;
     --composer-height: 2.375rem;

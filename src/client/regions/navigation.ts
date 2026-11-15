@@ -201,13 +201,22 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
       }
     },
   });
+  let frame = 0;
+  const scheduleRender = (): void => {
+    if (frame !== 0) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      render();
+    });
+  };
   const unsubscribe = store.watch(
     ["rooms", "roomsLoading", "roomId", "sections", "openSpaces", "session", "phase", "notifications"],
-    render,
+    scheduleRender,
   );
   render();
   return () => {
     unsubscribe();
+    if (frame !== 0) cancelAnimationFrame(frame);
     unbindSwipe();
     root.removeEventListener("toggle", onToggle, true);
     root.removeEventListener("click", onClick);
