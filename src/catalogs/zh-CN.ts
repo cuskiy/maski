@@ -20,6 +20,8 @@ export const zhCN = {
   "auth.server.submit": "继续",
 
   "auth.login.title": "登录",
+  "auth.login.server": "服务器",
+  "auth.login.changeServer": "更换服务器",
   "auth.username": "用户名",
   "auth.password": "密码",
   "auth.login.submit": "登录",

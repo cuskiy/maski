@@ -20,6 +20,8 @@ export const en = {
   "auth.server.submit": "Continue",
 
   "auth.login.title": "Sign in",
+  "auth.login.server": "Server",
+  "auth.login.changeServer": "Change server",
   "auth.username": "Username",
   "auth.password": "Password",
   "auth.login.submit": "Sign in",

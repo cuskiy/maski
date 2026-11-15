@@ -50,7 +50,8 @@ function run(): void {
   }
 
   if (page === "server") {
-    if (session.server !== null) location.replace(target);
+    // The server page is the escape hatch before sign-in; never bounce it back to itself.
+    if (session.account !== null) location.replace(target);
     return;
   }
 

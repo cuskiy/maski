@@ -36,6 +36,9 @@ function normaliseHomeserver(value: string): string | null {
 function initServer(c: Catalog, locale: LocaleId): void {
   const serverForm = form("server");
   if (serverForm === null) return;
+  const serverField = input("homeserver");
+  const selectedServer = mockSession().server;
+  if (serverField !== null && selectedServer !== null) serverField.value = selectedServer;
   serverForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const field = input("homeserver");
@@ -515,6 +518,10 @@ function initKey(c: Catalog, locale: LocaleId): void {
 }
 
 export function initAuth(page: string, c: Catalog, locale: LocaleId): void {
+  if (page === "login" || page === "register") {
+    const target = document.querySelector<HTMLElement>("[data-auth-server]");
+    if (target !== null) target.textContent = mockSession().server ?? config.homeserver.default;
+  }
   if (page === "server") initServer(c, locale);
   else if (page === "login") initLogin(c, locale);
   else if (page === "register") initRegister(c, locale);

@@ -149,3 +149,11 @@ void test("the key lock status is outside the hidden form container", () => {
   assert.ok(status >= 0 && paths >= 0);
   assert.ok(status < paths, "the status would be hidden with the forms");
 });
+
+void test("login offers a change-server link without leaving the form", () => {
+  const page = renderPages(assets).find((entry) => entry.file === "en/login/index.html");
+  assert.ok(page);
+  assert.match(page.content, /data-auth-server/u);
+  assert.match(page.content, /href="\/en\/server\/"/u);
+  assert.match(page.content, /Change server/u);
+});
