@@ -70,7 +70,6 @@ const manifestNames: Readonly<Record<string, { readonly prefix: string; readonly
   prepaint: { prefix: "prepaint-", extension: ".js" },
   client: { prefix: "client-", extension: ".js" },
   reviewClient: { prefix: "review-client-", extension: ".js" },
-  imageWorker: { prefix: "image-worker-", extension: ".js" },
   matrixWorker: { prefix: "matrix-worker-", extension: ".js" },
   cryptoWasm: { prefix: "matrix-sdk-crypto-", extension: ".wasm" },
 };

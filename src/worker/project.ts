@@ -1,8 +1,17 @@
-import { EventTimeline, EventType, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
+import {
+  EventTimeline,
+  EventType,
+  type MatrixClient,
+  type MatrixEvent,
+  type Room,
+  type TimelineEvents,
+} from "matrix-js-sdk";
 import type { Member, MessageEncryption, MessageKind, MessageRow, Membership, RoomSummary } from "../core/types.ts";
 import { DEFAULT_POWER_LEVELS } from "../core/permissions.ts";
 import { createRoom, isRoomJoinRule } from "../core/rooms.ts";
 import { isRecord } from "../lib/json.ts";
+import { readEncryptedFileData } from "./mediaTypes.ts";
+import type { MediaReference, MediaSource } from "./mediaTypes.ts";
 
 function content(event: MatrixEvent): Record<string, unknown> {
   const value: unknown = event.getContent();
@@ -26,25 +35,155 @@ function messageKind(event: MatrixEvent): MessageKind {
       return "audio";
     case "m.file":
       return "file";
+    case "m.notice":
+      return "notice";
+    case "m.emote":
+      return "emote";
     default:
       return "text";
   }
 }
 
-function messageMedia(event: MatrixEvent, kind: MessageKind): MessageRow["media"] {
-  if (kind === "text" || kind === "notice" || kind === "emote") return null;
+interface MediaDetails {
+  readonly kind: "image" | "video" | "audio" | "file" | "sticker";
+  readonly name: string;
+  readonly caption: string;
+  readonly width: number | null;
+  readonly height: number | null;
+  readonly size: number | null;
+  readonly duration: number | null;
+  readonly mime: string | null;
+  readonly source: MediaReference | null;
+  readonly thumbnail: MediaReference | null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function mediaReference(url: unknown, file: unknown): MediaReference | null {
+  if (typeof url === "string" && url.startsWith("mxc://")) return { kind: "mxc", url };
+  const encrypted = readEncryptedFileData(file);
+  return encrypted === null ? null : { kind: "encrypted", file: encrypted };
+}
+
+/**
+ * Media fields split into the part the client may see and the worker-only source. The spec says
+ * `body` is the filename when `filename` is absent or equal, otherwise it is a caption.
+ */
+function mediaDetails(event: MatrixEvent, kind: MessageKind): MediaDetails | null {
+  if (kind !== "image" && kind !== "video" && kind !== "audio" && kind !== "file" && kind !== "sticker") {
+    return null;
+  }
   const value = content(event);
-  const info = value["info"];
-  const details = typeof info === "object" && info !== null ? Object.fromEntries(Object.entries(info)) : {};
-  const url = value["url"];
+  const infoValue = value["info"];
+  const info = isRecord(infoValue) ? infoValue : {};
+  const body = typeof value["body"] === "string" ? value["body"] : "";
+  const filenameValue = value["filename"];
+  const filename = typeof filenameValue === "string" && filenameValue !== "" ? filenameValue : null;
+  const name = kind === "sticker" ? body : (filename ?? body);
+  const caption = kind === "sticker" ? body : filename !== null && filename !== body ? body : "";
+  const mimetype = info["mimetype"];
   return {
     kind,
-    name: typeof value["body"] === "string" ? value["body"] : "",
-    width: typeof details["w"] === "number" ? details["w"] : null,
-    height: typeof details["h"] === "number" ? details["h"] : null,
-    size: typeof details["size"] === "number" ? details["size"] : null,
-    url: typeof url === "string" ? url : null,
+    name,
+    caption,
+    width: numberOrNull(info["w"]),
+    height: numberOrNull(info["h"]),
+    size: numberOrNull(info["size"]),
+    duration: numberOrNull(info["duration"]),
+    mime: typeof mimetype === "string" ? mimetype : null,
+    source: mediaReference(value["url"], value["file"]),
+    thumbnail: mediaReference(info["thumbnail_url"], info["thumbnail_file"]),
   };
+}
+
+function messageMedia(details: MediaDetails): MessageRow["media"] {
+  return {
+    kind: details.kind,
+    name: details.name,
+    width: details.width,
+    height: details.height,
+    size: details.size,
+    // The worker resolves mxc/EncryptedFile to a blob URL outside this row.
+    url: null,
+  };
+}
+
+/** The worker-only record that can answer a `media` command for this event. */
+export function projectMediaSource(room: Room, event: MatrixEvent): MediaSource | null {
+  const type = event.getType();
+  if (type !== EventType.RoomMessage && type !== EventType.RoomMessageEncrypted && type !== EventType.Sticker) {
+    return null;
+  }
+  if (event.isRedacted() || event.isDecryptionFailure()) return null;
+  if (event.getRelation()?.rel_type === "m.replace") return null;
+  const kind = messageKind(event);
+  const details = mediaDetails(event, kind);
+  if (details === null || (details.source === null && details.thumbnail === null)) return null;
+  return {
+    roomId: room.roomId,
+    messageId: event.getId() ?? event.getTxnId() ?? `${room.roomId}:${String(event.getTs())}`,
+    kind: details.kind,
+    name: details.name,
+    caption: details.caption,
+    width: details.width,
+    height: details.height,
+    size: details.size,
+    duration: details.duration,
+    mime: details.mime,
+    source: details.source,
+    thumbnail: details.thumbnail,
+  };
+}
+
+/** The one writer of the window's media sources, called beside `projectWindow`. */
+export function projectMediaSources(room: Room): readonly MediaSource[] {
+  const sources: MediaSource[] = [];
+  for (const event of room.getLiveTimeline().getEvents()) {
+    const source = projectMediaSource(room, event);
+    if (source !== null) sources.push(source);
+  }
+  return sources;
+}
+
+function projectReactions(room: Room, event: MatrixEvent, ownUserId: string): MessageRow["reactions"] {
+  const eventId = event.getId();
+  if (eventId === undefined) return [];
+  const senders = new Map<string, Set<string>>();
+  for (const child of room.relations.getAllChildEventsForEvent(eventId) ?? []) {
+    const relation = child.getRelation();
+    if (relation?.rel_type !== "m.annotation" || child.isRedacted()) continue;
+    const key = relation.key;
+    const sender = child.getSender();
+    if (typeof key !== "string" || key === "" || sender === undefined) continue;
+    const set = senders.get(key) ?? new Set<string>();
+    set.add(sender);
+    senders.set(key, set);
+  }
+  return [...senders.entries()]
+    .map(([key, set]) => ({ key, count: set.size, mine: set.has(ownUserId) }))
+    .toSorted((left, right) => right.count - left.count || left.key.localeCompare(right.key));
+}
+
+function projectReply(room: Room, event: MatrixEvent): MessageRow["reply"] {
+  const parentId = event.replyEventId;
+  if (parentId === undefined) return null;
+  const parent = room.findEventById(parentId);
+  if (parent === undefined) return { messageId: parentId, senderName: "", body: "" };
+  const sender = parent.getSender() ?? "";
+  const value = content(parent);
+  return {
+    messageId: parentId,
+    senderName: room.getMember(sender)?.name ?? sender,
+    body: typeof value["body"] === "string" ? value["body"] : "",
+  };
+}
+
+function projectMentions(value: Readonly<Record<string, unknown>>): readonly string[] {
+  const mentions = value["m.mentions"];
+  if (!isRecord(mentions) || !Array.isArray(mentions["user_ids"])) return [];
+  return mentions["user_ids"].filter((id: unknown): id is string => typeof id === "string");
 }
 
 function messageEncryption(event: MatrixEvent): MessageEncryption {
@@ -75,14 +214,18 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
   }
   if (event.getRelation()?.rel_type === "m.replace") return null;
   const encryption = messageEncryption(event);
-  const body = encryption.state === "undecryptable" ? "" : content(event)["body"];
-  const formatted = content(event)["formatted_body"];
+  const redacted = event.isRedacted();
+  const replacement = redacted ? null : event.replacingEvent();
+  const effective = replacement === null ? content(event) : content(replacement);
+  const body = redacted || encryption.state === "undecryptable" ? "" : effective["body"];
+  const formatted = effective["formatted_body"];
   const unsigned = event.getUnsigned();
   const transactionId =
     typeof unsigned["transaction_id"] === "string" ? unsigned["transaction_id"] : (event.getTxnId() ?? null);
   const sender = event.getSender() ?? "";
   const member = room.getMember(sender);
   const kind = messageKind(event);
+  const details = !redacted && encryption.state === "ok" ? mediaDetails(event, kind) : null;
   return {
     id: event.getId() ?? transactionId ?? `${room.roomId}:${String(event.getTs())}`,
     eventId: event.getId() ?? null,
@@ -94,20 +237,55 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
     ts: event.getTs(),
     own: sender === ownUserId,
     kind,
-    body: typeof body === "string" ? body : "",
-    html: encryption.state === "ok" && typeof formatted === "string" ? formatted : null,
-    media: encryption.state === "ok" ? messageMedia(event, kind) : null,
-    reactions: [],
-    reply: null,
-    mentions: [],
-    edited: event.replacingEvent() !== null,
-    redacted: event.isRedacted(),
+    body: details === null ? (typeof body === "string" ? body : "") : details.caption,
+    html: !redacted && encryption.state === "ok" && typeof formatted === "string" ? formatted : null,
+    media: details === null ? null : messageMedia(details),
+    reactions: redacted ? [] : projectReactions(room, event, ownUserId),
+    reply: redacted ? null : projectReply(room, event),
+    mentions: redacted ? [] : projectMentions(effective),
+    edited: replacement !== null,
+    redacted,
     status: messageStatus(event),
     error: null,
     retryable: false,
     system: false,
     encryption,
   };
+}
+
+export type ForwardableEvent =
+  | { readonly kind: "message"; readonly content: TimelineEvents[typeof EventType.RoomMessage] }
+  | { readonly kind: "sticker"; readonly content: TimelineEvents[typeof EventType.Sticker] };
+
+type MessageContent = TimelineEvents[typeof EventType.RoomMessage];
+type StickerContent = TimelineEvents[typeof EventType.Sticker];
+
+function isForwardableMessage(value: unknown): value is MessageContent {
+  return isRecord(value) && typeof value["body"] === "string" && typeof value["msgtype"] === "string";
+}
+
+function isForwardableSticker(value: unknown): value is StickerContent {
+  return (
+    isRecord(value) && typeof value["body"] === "string" && typeof value["url"] === "string" && isRecord(value["info"])
+  );
+}
+
+/**
+ * A forward is a new event with the decrypted content of the source. Relationships and mentions
+ * describe the source room and must not leak into the target room.
+ */
+export function forwardableEvent(event: MatrixEvent): ForwardableEvent | null {
+  if (event.isRedacted()) return null;
+  const raw = event.getContent();
+  if (!isRecord(raw)) return null;
+  const payload: Record<string, unknown> = { ...raw };
+  delete payload["m.relates_to"];
+  delete payload["m.mentions"];
+  if (event.getType() === EventType.Sticker) {
+    return isForwardableSticker(payload) ? { kind: "sticker", content: payload } : null;
+  }
+  if (event.getType() !== EventType.RoomMessage) return null;
+  return isForwardableMessage(payload) ? { kind: "message", content: payload } : null;
 }
 
 export function projectWindow(room: Room, ownUserId: string): { messages: readonly MessageRow[]; hasOlder: boolean } {
@@ -178,7 +356,13 @@ function powerLevels(room: Room): RoomSummary["powerLevels"] {
   };
 }
 
-export function projectRoom(room: Room, ownUserId: string, direct: ReadonlyMap<string, string>): RoomSummary | null {
+export function projectRoom(
+  room: Room,
+  ownUserId: string,
+  direct: ReadonlyMap<string, string>,
+  notification: RoomSummary["notification"] = "default",
+  directoryPublished = false,
+): RoomSummary | null {
   const membership = room.getMyMembership();
   if (membership !== "join" && membership !== "invite") return null;
   const topic = room.currentState.getStateEvents(EventType.RoomTopic, "")?.getContent()["topic"];
@@ -209,12 +393,12 @@ export function projectRoom(room: Room, ownUserId: string, direct: ReadonlyMap<s
     roomType: room.getType() ?? null,
     tags,
     membership,
-    notification: "default",
+    notification,
     encryption: room.currentState.getStateEvents(EventType.RoomEncryption, "") === undefined ? "none" : "encrypted",
     joinRule: isRoomJoinRule(joinRuleValue) ? joinRuleValue : "invite",
     guestAccess: room.getGuestAccess(),
     historyVisibility: room.getHistoryVisibility(),
-    directoryPublished: aliases.length > 0,
+    directoryPublished,
     roomVersion: room.currentState.getRoomVersion(),
     federated: create?.["m.federate"] !== false,
     aliases,

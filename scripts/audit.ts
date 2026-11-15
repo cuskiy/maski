@@ -35,7 +35,6 @@ for (const asset of [
   parsed.prepaint,
   parsed.client,
   parsed.reviewClient,
-  parsed.imageWorker,
   parsed.matrixWorker,
   parsed.cryptoWasm,
 ]) {
@@ -88,7 +87,6 @@ for (const asset of [
   parsed.prepaint,
   parsed.client,
   parsed.reviewClient,
-  parsed.imageWorker,
   parsed.matrixWorker,
   SERVICE_WORKER_PATH,
 ]) {
@@ -122,7 +120,6 @@ if (serviceWorkerSource === "") {
       parsed.guard,
       parsed.prepaint,
       parsed.client,
-      parsed.imageWorker,
       parsed.matrixWorker,
       parsed.cryptoWasm,
       ...(watermark === null ? [] : [watermark]),

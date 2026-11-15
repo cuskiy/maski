@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { queuedRow } from "../src/core/message.ts";
 import type { MessageRow, SessionSummary } from "../src/core/types.ts";
 import type { CommandMap, KeyStatus, Reply, StartData } from "../src/protocol/index.ts";
 import { createWorkerApi, type WorkerApi } from "../src/worker/api.ts";
@@ -84,6 +85,7 @@ function harness(): Harness {
     backend,
     identity: () => ({ userId: SESSION.userId, displayName: SESSION.displayName }),
     emit: (event) => emitted.push(event),
+    upload: () => Promise.resolve({ source: { kind: "mxc", url: "mxc://example.org/media" } }),
     deliver: (record) => {
       requests.push(record.row);
       const pending = Promise.withResolvers<string>();
@@ -108,9 +110,9 @@ function harness(): Harness {
       transactionId: string,
       messageId: string,
       kind: CommandMap["send"]["kind"],
-      media: CommandMap["send"]["media"],
+      _media: CommandMap["send"]["media"],
     ) {
-      const row = await outbox.queue({ roomId, messageId, transactionId, body, html, replyTo, kind, media });
+      const row = await outbox.queue({ roomId, messageId, transactionId, body, html, replyTo, kind, media: null });
       void outbox.deliver(messageId).catch(() => undefined);
       return row;
     },
@@ -126,7 +128,40 @@ function harness(): Harness {
     },
     markRead: () => Promise.resolve(null),
     members: () => Promise.resolve(null),
+    devices: () => Promise.resolve([]),
     resetIdentity: () => Promise.resolve(null),
+    react: () => Promise.resolve(null),
+    edit: () => Promise.resolve(null),
+    redact: () => Promise.resolve(null),
+    typing: () => Promise.resolve(null),
+    search: () => Promise.resolve([]),
+    leaveRoom: () => Promise.resolve(null),
+    setRoomTag: () => Promise.resolve(null),
+    setNotification: () => Promise.resolve(null),
+    setRoomState: () => Promise.resolve(null),
+    inviteUser: () => Promise.resolve(null),
+    joinRoom: () => Promise.resolve(ROOM),
+    answerInvite: () => Promise.resolve(null),
+    createRoom: () => Promise.resolve(ROOM),
+    forward: () => Promise.resolve(null),
+    memberAction: () => Promise.resolve(null),
+    sendMedia: () =>
+      Promise.resolve(
+        queuedRow({
+          roomId: ROOM,
+          messageId: "m-media",
+          transactionId: "txn-m-media",
+          body: "",
+          html: null,
+          kind: "image",
+          media: null,
+          reply: null,
+          ownUserId: SESSION.userId,
+          ownName: SESSION.displayName,
+          ts: 1,
+        }),
+      ),
+    media: () => Promise.resolve({ url: "blob:https://example.org/1", mime: "image/webp", width: 1, height: 1 }),
     onEvent: () => () => {},
   };
   return { api: createWorkerApi(port), outbox, backend, emitted, requests, deferred };

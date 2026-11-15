@@ -53,10 +53,15 @@ void test("a redacted message remains as a tombstone without its media", () => {
   assert.doesNotMatch(redactedMarkup, /media-element/u);
 });
 
-void test("image and video messages carry no visible caption", () => {
+void test("media captions render and the viewer control carries the message id", () => {
   const image = message("d4");
   const video = message("d9");
-  assert.doesNotMatch(image, /media-caption/u);
-  assert.doesNotMatch(image, /The new layout/u);
-  assert.doesNotMatch(video, /video-title/u);
+  assert.match(image, /media-caption/u);
+  assert.match(image, /The new layout/u);
+  assert.match(image, /data-media-open="d4"/u);
+  assert.doesNotMatch(image, /data-media-open="layout\.png"/u);
+  assert.match(video, /media-caption/u);
+  assert.match(video, /data-media-open="d9"/u);
+  const dated = message("d5");
+  assert.match(dated, /The placeholder stays neutral/u);
 });

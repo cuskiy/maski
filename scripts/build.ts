@@ -122,19 +122,6 @@ export async function buildSite(): Promise<void> {
   });
   const reviewClient = emittedAsset(reviewClientResult, ".js");
 
-  const imageWorkerResult = await build({
-    ...jsBuildOptions,
-    entryPoints: [join(root, "src/client/imageWorker.ts")],
-    bundle: true,
-    minify: true,
-    format: "iife",
-    outdir: join(dist, "assets"),
-    entryNames: "image-worker-[hash]",
-    metafile: true,
-    logLevel: "silent",
-  });
-  const imageWorker = emittedAsset(imageWorkerResult, ".js");
-
   const wasmSource = await readFile(
     join(root, "node_modules/@matrix-org/matrix-sdk-crypto-wasm/pkg/matrix_sdk_crypto_wasm_bg.wasm"),
   );
@@ -169,7 +156,6 @@ export async function buildSite(): Promise<void> {
     prepaint,
     client,
     reviewClient,
-    imageWorker,
     matrixWorker,
     cryptoWasm,
   };
@@ -187,7 +173,6 @@ export async function buildSite(): Promise<void> {
     assets.guard,
     assets.prepaint,
     assets.client,
-    assets.imageWorker,
     assets.matrixWorker,
     assets.cryptoWasm,
     watermark,

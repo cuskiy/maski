@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { pbkdf2Sync } from "node:crypto";
 import test from "node:test";
-import { decodeRecoveryKey } from "../src/worker/recovery.ts";
+import { decodeRecoveryKey, derivePassphraseKey } from "../src/worker/recovery.ts";
 
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -56,4 +57,10 @@ void test("rejects a wrong prefix, parity or length", () => {
   assert.throws(() => decodeRecoveryKey(wrongParity));
 
   assert.throws(() => decodeRecoveryKey(encodeRecovery(raw.subarray(0, 31))));
+});
+
+void test("derives an SSSS key with PBKDF2-SHA-512 and a UTF-8 salt", async () => {
+  const expected = pbkdf2Sync("password", "salt", 1_000, 32, "sha512");
+  const derived = await derivePassphraseKey("password", { salt: "salt", iterations: 1_000 });
+  assert.deepEqual(derived, Uint8Array.from(expected));
 });

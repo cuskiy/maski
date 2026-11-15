@@ -187,6 +187,58 @@ export class MockSource implements ChatSource {
     this.timers.add(timer);
   }
 
+  async sendMedia(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    caption: string,
+    _html: string | null,
+    replyTo: string | null,
+    kind: "image" | "video" | "audio" | "file" | "sticker",
+    name: string,
+    file: File,
+  ): Promise<MessageRow> {
+    const session = this.state.session;
+    const parent =
+      replyTo === null ? undefined : this.rowsFor(roomId).find((row) => row.id === replyTo || row.eventId === replyTo);
+    const row: MessageRow = {
+      id: messageId,
+      eventId: null,
+      transactionId,
+      roomId,
+      sender: session?.userId ?? "",
+      senderName: session?.displayName ?? "You",
+      senderAvatar: session?.avatar ?? null,
+      ts: Date.now(),
+      own: true,
+      kind,
+      body: caption,
+      html: null,
+      media: {
+        kind,
+        name,
+        width: null,
+        height: null,
+        size: file.size,
+        url: URL.createObjectURL(file),
+      },
+      reactions: [],
+      reply:
+        parent === undefined
+          ? null
+          : { messageId: parent.eventId ?? parent.id, senderName: parent.senderName, body: parent.body },
+      mentions: [],
+      edited: false,
+      redacted: false,
+      status: "queued",
+      error: null,
+      retryable: true,
+      system: false,
+      encryption: { state: "ok" },
+    };
+    return this.send(roomId, row);
+  }
+
   async send(roomId: string, row: MessageRow): Promise<MessageRow> {
     const queued: MessageRow = {
       ...row,
@@ -220,8 +272,20 @@ export class MockSource implements ChatSource {
 
   markRead(_roomId: string, _eventId: string): void {}
 
+  private emitPatch(roomId: string, row: MessageRow): void {
+    this.emit("window", {
+      roomId,
+      messages: [row],
+      hasOlder: this.olderLoaded.has(roomId) ? false : olderRows(roomId).length > 0,
+      older: false,
+      patch: true,
+    });
+  }
+
   react(roomId: string, eventId: string, key: string): void {
     this.replaceRow(roomId, eventId, (row) => ({ ...row, reactions: toggledReactions(row.reactions, key) }));
+    const updated = this.rowsFor(roomId).find((row) => row.id === eventId || row.eventId === eventId);
+    if (updated !== undefined) this.emitPatch(roomId, updated);
   }
 
   edit(roomId: string, eventId: string, body: string, html: string | null): void {
@@ -233,22 +297,57 @@ export class MockSource implements ChatSource {
       status: "sent",
       error: null,
     }));
+    const updated = this.rowsFor(roomId).find((row) => row.id === eventId || row.eventId === eventId);
+    if (updated !== undefined) this.emitPatch(roomId, updated);
   }
 
   redact(roomId: string, eventId: string): void {
     this.replaceRow(roomId, eventId, redactRow);
+    const updated = this.rowsFor(roomId).find((row) => row.id === eventId || row.eventId === eventId);
+    if (updated !== undefined) this.emitPatch(roomId, updated);
   }
 
-  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[] {
+  async search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>) {
     if (!this.withData) return [];
-    return roomIds.flatMap((roomId) => this.rowsFor(roomId)).filter((row) => messageMatches(row, query, mediaKinds));
+    return roomIds
+      .flatMap((roomId) => this.rowsFor(roomId))
+      .filter((row) => !row.redacted && !row.system && row.encryption.state === "ok")
+      .filter((row) => messageMatches(row, query, mediaKinds));
   }
 
-  forward(roomId: string, rows: readonly MessageRow[]): void {
-    this.messageLog.set(roomId, [...this.rowsFor(roomId), ...rows]);
+  forward(targetRoomId: string, sources: readonly { readonly roomId: string; readonly eventId: string }[]): void {
+    for (const source of sources) {
+      const origin = this.rowsFor(source.roomId).find(
+        (row) => row.eventId === source.eventId || row.id === source.eventId,
+      );
+      if (origin === undefined || origin.redacted) continue;
+      const id = `local-forward-${crypto.randomUUID()}`;
+      const forwarded: MessageRow = {
+        ...origin,
+        id,
+        eventId: null,
+        transactionId: `txn-${id}`,
+        roomId: targetRoomId,
+        sender: this.state.session?.userId ?? origin.sender,
+        senderName: this.state.session?.displayName ?? origin.senderName,
+        senderAvatar: this.state.session?.avatar ?? null,
+        own: true,
+        reactions: [],
+        reply: null,
+        mentions: [],
+        edited: false,
+        redacted: false,
+        status: "queued",
+        error: null,
+        retryable: true,
+      };
+      this.upsertRow(targetRoomId, forwarded);
+      this.emit("outbox", { roomId: targetRoomId, messageId: id, row: forwarded, retryable: true });
+      this.settlePending(targetRoomId, forwarded);
+    }
   }
 
-  typing(_roomId: string): void {}
+  typing(_roomId: string, _typing: boolean): void {}
 
   members(roomId: string): void {
     this.emit("members", { roomId, members: this.withData ? this.membersFor(roomId) : [] });

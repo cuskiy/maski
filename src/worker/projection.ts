@@ -3,6 +3,7 @@
  * IndexedDB: the worker feeds stored rows in and sends the bounded result out.
  */
 import type { MessageRow, RoomSummary } from "../core/types.ts";
+import { messageMatches } from "../core/search.ts";
 
 export const WINDOW_LIMIT = 30;
 
@@ -59,6 +60,26 @@ export function mergeRows(current: readonly MessageRow[], changed: readonly Mess
 
 export function removeRow(rows: readonly MessageRow[], messageId: string): MessageRow[] {
   return rows.filter((row) => row.id !== messageId && row.transactionId !== messageId);
+}
+
+/**
+ * The worker-owned search: projected rows plus unsent outbox rows, deduplicated, with redacted,
+ * system and undecryptable rows removed, then matched by the one core text contract.
+ */
+export function searchRows(
+  rows: readonly MessageRow[],
+  outbox: readonly MessageRow[],
+  query: string,
+  mediaKinds: readonly string[],
+  limit: number,
+): readonly MessageRow[] {
+  const kinds = new Set(mediaKinds);
+  return mergeRows(rows, outbox)
+    .filter((row) => !row.redacted && !row.system && row.encryption.state === "ok")
+    .filter((row) => row.body !== "" || row.media !== null)
+    .filter((row) => messageMatches(row, query, kinds))
+    .toSorted((left, right) => right.ts - left.ts || left.id.localeCompare(right.id))
+    .slice(0, limit);
 }
 
 /** The visible window plus whether anything remains before it. */

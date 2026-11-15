@@ -3,35 +3,69 @@ import {
   createClient,
   EventTimeline,
   EventType,
+  GuestAccess,
+  HistoryVisibility,
   IndexedDBStore,
+  JoinRule,
   MatrixEventEvent,
   MsgType,
   PendingEventOrdering,
+  Preset,
+  PushRuleActionName,
+  RelationType,
+  RestrictedAllowType,
   RoomEvent,
+  RoomMemberEvent,
+  RoomStateEvent,
   SyncState,
+  Visibility,
   type MatrixClient,
   type MatrixEvent,
   type Room,
+  type RoomMember,
+  type StateEvents,
+  type TimelineEvents,
 } from "matrix-js-sdk";
 import { initAsync } from "@matrix-org/matrix-sdk-crypto-wasm";
 import { isRecord } from "../lib/json.ts";
-import type { MessageRow, RoomSummary, SessionSummary } from "../core/types.ts";
-import type { CommandMap, Event, KeyStatus, StartData } from "../protocol/index.ts";
+import type {
+  DeviceSession,
+  MessageKind,
+  MessageRow,
+  RoomStatePatch,
+  RoomSummary,
+  SessionSummary,
+} from "../core/types.ts";
+import type { CommandMap, Event, KeyStatus, MediaReply, StartData } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
 import { AccountDatabase, type RoomRecord } from "./accountDb.ts";
-import { createOutbox, type Outbox, type OutboxEvent } from "./outbox.ts";
+import { createOutbox, type Outbox, type OutboxEvent, type OutboxRecord, type UploadedMedia } from "./outbox.ts";
 import type { SessionPort } from "./ports.ts";
+import { buildMediaContent, MAX_UPLOAD_BYTES, prepareUpload, type MediaContent } from "./mediaFormat.ts";
+import { encryptAttachment, encryptedFile } from "./mediaCrypto.ts";
+import { createMediaResolver, type MediaResolver } from "./mediaResolver.ts";
+import type { EncryptedFileData, MediaReference, MediaSource } from "./mediaTypes.ts";
 import {
   advanceMarker,
   markTimelineReset,
   projectRoomState,
   readState,
   rowCursor,
+  searchRows,
   WINDOW_LIMIT,
   windowSlice,
   type ReadMarker,
 } from "./projection.ts";
-import { directRooms, projectMembers, projectMessage, projectRoom, projectWindow } from "./project.ts";
+import {
+  directRooms,
+  forwardableEvent,
+  projectMediaSource,
+  projectMediaSources,
+  projectMembers,
+  projectMessage,
+  projectRoom,
+  projectWindow,
+} from "./project.ts";
 import { decodeRecoveryKey, derivePassphraseKey } from "./recovery.ts";
 import { clearSession, readSession, writeSession, type StoredSession } from "./sessionDb.ts";
 
@@ -122,18 +156,170 @@ function sortRooms(rooms: readonly RoomRecord[]): readonly RoomRecord[] {
   );
 }
 
+/** User ids the body names; the one source of mentions for a sent or edited message. */
+function mentionedUserIds(room: Room, ownUserId: string, body: string): string[] {
+  const ids = new Set<string>();
+  for (const member of room.getMembersWithMembership("join")) {
+    if (member.userId === ownUserId) continue;
+    if (member.name !== "" && body.includes(member.name)) ids.add(member.userId);
+    else if (body.includes(member.userId)) ids.add(member.userId);
+  }
+  return [...ids].toSorted();
+}
+
+function mentionIds(value: unknown): readonly string[] {
+  if (!isRecord(value) || !Array.isArray(value["user_ids"])) return [];
+  return value["user_ids"].filter((id: unknown): id is string => typeof id === "string");
+}
+
+type MessageContent = TimelineEvents[typeof EventType.RoomMessage];
+type StickerContent = TimelineEvents[typeof EventType.Sticker];
+
+interface SdkEncryptedFile {
+  readonly url: string;
+  readonly v: string;
+  readonly key: {
+    readonly kty: string;
+    readonly alg: string;
+    readonly key_ops: string[];
+    readonly ext: boolean;
+    readonly k: string;
+  };
+  readonly iv: string;
+  readonly hashes: Record<string, string>;
+}
+
+function sdkEncryptedFile(file: EncryptedFileData): SdkEncryptedFile {
+  return {
+    url: file.url,
+    v: file.v,
+    key: {
+      kty: file.key.kty,
+      alg: file.key.alg,
+      key_ops: [...file.key.key_ops],
+      ext: file.key.ext,
+      k: file.key.k,
+    },
+    iv: file.iv,
+    hashes: { ...file.hashes },
+  };
+}
+
+function messageContent(fields: MediaContent): MessageContent {
+  if (fields.msgtype === null) throw new WorkerFailure("unsupported");
+  const shared = {
+    body: fields.body,
+    filename: fields.name,
+    info: fields.info,
+    ...(fields.html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: fields.html }),
+    ...(fields.reference.kind === "mxc"
+      ? { url: fields.reference.url }
+      : fields.reference.kind === "encrypted"
+        ? { file: sdkEncryptedFile(fields.reference.file) }
+        : {}),
+  };
+  switch (fields.msgtype) {
+    case "m.image":
+      return { msgtype: MsgType.Image, ...shared };
+    case "m.video":
+      return { msgtype: MsgType.Video, ...shared };
+    case "m.audio":
+      return { msgtype: MsgType.Audio, ...shared };
+    case "m.file":
+      return { msgtype: MsgType.File, ...shared };
+    default:
+      throw new WorkerFailure("unsupported");
+  }
+}
+
+function stickerContent(fields: MediaContent): StickerContent {
+  if (fields.reference.kind !== "mxc") throw new WorkerFailure("unsupported");
+  return { body: fields.body, info: fields.info, url: fields.reference.url };
+}
+
+function uploadFailure(error: unknown): WorkerFailure {
+  if (error instanceof WorkerFailure) return error;
+  if (isRecord(error)) {
+    if (error["httpStatus"] === 413 || error["errcode"] === "M_TOO_LARGE") return new WorkerFailure("too-large");
+    if (error["errcode"] === "M_FORBIDDEN") return new WorkerFailure("unavailable");
+  }
+  return new WorkerFailure("network");
+}
+
+async function uploadBlob(client: MatrixClient, blob: Blob, type: string): Promise<string> {
+  let response;
+  try {
+    response = await client.uploadContent(blob, { type, includeFilename: false });
+  } catch (error) {
+    throw uploadFailure(error);
+  }
+  if (!response.content_uri.startsWith("mxc://")) throw new WorkerFailure("unavailable");
+  return response.content_uri;
+}
+
+type JoinRulesContent = StateEvents[typeof EventType.RoomJoinRules];
+
+function restrictedAllow(room: Room): JoinRulesContent["allow"] | undefined {
+  const event = room.currentState.getStateEvents(EventType.RoomJoinRules, "");
+  const content = event === null ? {} : event.getContent();
+  const allow = content["allow"];
+  if (!Array.isArray(allow)) return undefined;
+  const entries = allow.filter(
+    (entry: unknown): entry is { room_id: string; type: RestrictedAllowType } =>
+      isRecord(entry) && typeof entry["room_id"] === "string" && entry["type"] === RestrictedAllowType.RoomMembership,
+  );
+  return entries.length === 0 ? undefined : entries;
+}
+
+function sdkJoinRule(value: RoomStatePatch["joinRule"]): JoinRule {
+  switch (value) {
+    case "public":
+      return JoinRule.Public;
+    case "invite":
+      return JoinRule.Invite;
+    case "knock":
+      return JoinRule.Knock;
+    case "restricted":
+      return JoinRule.Restricted;
+    case "knock_restricted":
+      throw new WorkerFailure("unavailable");
+    default:
+      throw new WorkerFailure("unavailable");
+  }
+}
+
+function sdkHistoryVisibility(value: RoomStatePatch["historyVisibility"]): HistoryVisibility {
+  switch (value) {
+    case "world_readable":
+      return HistoryVisibility.WorldReadable;
+    case "shared":
+      return HistoryVisibility.Shared;
+    case "invited":
+      return HistoryVisibility.Invited;
+    case "joined":
+      return HistoryVisibility.Joined;
+    default:
+      throw new WorkerFailure("unavailable");
+  }
+}
+
 export class MatrixSession implements SessionPort {
   private client: MatrixClient | null = null;
   private wasmUrl: string | null = null;
   private cryptoPrefix: string | null = null;
   private account: AccountDatabase | null = null;
   private outbox: Outbox | null = null;
+  private mediaResolver: MediaResolver | null = null;
+  private uploadLimit: number | null = null;
   private stored: StoredSession | null = null;
   private activeRoomId: string | null = null;
   private keyReady: KeyStatus = "unknown";
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
   private releaseLock: (() => void) | null = null;
   private roomsQueued = false;
+  private readonly directoryPublished = new Map<string, boolean>();
+  private readonly reactionTransactions = new Map<string, string>();
+  private readonly leftRooms = new Set<string>();
   private readonly listeners = new Set<Listener>();
 
   onEvent(listener: Listener): () => void {
@@ -154,6 +340,7 @@ export class MatrixSession implements SessionPort {
     const account = await AccountDatabase.open(stored.userId);
     this.account = account;
     this.outbox = this.createOutbox(account);
+    this.openMedia(account);
     const cached = sortRooms(await account.readRooms());
     this.emitCachedRooms(cached);
     const recent = [...cached].toSorted((left, right) => right.lastOpened - left.lastOpened)[0];
@@ -198,6 +385,7 @@ export class MatrixSession implements SessionPort {
     const account = await AccountDatabase.open(stored.userId);
     this.account = account;
     this.outbox = this.createOutbox(account);
+    this.openMedia(account);
     return this.startClient(stored);
   }
 
@@ -218,16 +406,28 @@ export class MatrixSession implements SessionPort {
     const crypto = client.getCrypto();
     if (crypto === undefined) throw new WorkerFailure("unavailable");
     const recoveryKey = input.recoveryKey.trim();
+    let candidate: Uint8Array<ArrayBuffer>;
     if (recoveryKey !== "") {
-      this.pendingSecret = { key: decodeRecoveryKey(recoveryKey), passphrase: "" };
+      candidate = decodeRecoveryKey(recoveryKey);
     } else if (input.passphrase !== "") {
-      this.pendingSecret = { key: null, passphrase: input.passphrase };
+      const keyTuple = await client.secretStorage.getKey();
+      const derivation = keyTuple?.[1].passphrase;
+      if (derivation === undefined) throw new WorkerFailure("auth");
+      candidate = await derivePassphraseKey(input.passphrase, derivation);
     } else {
       throw new WorkerFailure("auth");
     }
+    const keyTuple = await client.secretStorage.getKey();
+    if (keyTuple === null || !(await client.secretStorage.checkKey(candidate, keyTuple[1]))) {
+      throw new WorkerFailure("auth");
+    }
+    this.pendingSecret = { key: candidate, passphrase: "" };
     try {
       await crypto.bootstrapSecretStorage({});
       if (!(await crypto.isSecretStorageReady())) throw new WorkerFailure("auth");
+      if ((await client.secretStorage.get("m.cross_signing.master")) === undefined) {
+        throw new WorkerFailure("auth");
+      }
       await crypto.bootstrapCrossSigning({});
     } catch {
       throw new WorkerFailure("auth");
@@ -237,6 +437,35 @@ export class MatrixSession implements SessionPort {
     this.keyReady = await this.refreshGate();
     this.emit({ type: "keys", payload: this.keyReady });
     return this.keyReady;
+  }
+
+  async devices(): Promise<readonly DeviceSession[]> {
+    const client = this.requireClient();
+    const crypto = client.getCrypto();
+    const own = client.getUserId();
+    if (crypto === undefined || own === null) throw new WorkerFailure("unavailable");
+    const current = client.getDeviceId();
+    let response;
+    try {
+      response = await client.getDevices();
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    const devices = await Promise.all(
+      response.devices.map(async (device) => {
+        const status = await crypto.getDeviceVerificationStatus(own, device.device_id).catch(() => null);
+        return {
+          id: device.device_id,
+          name: device.display_name ?? device.device_id,
+          lastSeen: typeof device.last_seen_ts === "number" ? new Date(device.last_seen_ts).toISOString() : "",
+          verified: status?.isVerified() ?? false,
+          current: device.device_id === current,
+          capabilities: { verify: false, signOut: false },
+        } satisfies DeviceSession;
+      }),
+    );
+    this.emit({ type: "devices", payload: devices });
+    return devices;
   }
 
   async resetIdentity(password: string): Promise<string | null> {
@@ -266,14 +495,10 @@ export class MatrixSession implements SessionPort {
     try {
       await crypto.resetEncryption(auth);
       const key = await crypto.createRecoveryKeyFromPassphrase();
-      try {
-        await crypto.bootstrapSecretStorage({
-          setupNewSecretStorage: true,
-          createSecretStorageKey: () => Promise.resolve(key),
-        });
-      } catch {
-        // The key account data is written before the remaining secrets; the key is still the reset result.
-      }
+      await crypto.bootstrapSecretStorage({
+        setupNewSecretStorage: true,
+        createSecretStorageKey: () => Promise.resolve(key),
+      });
       this.keyReady = await this.refreshGate();
       this.emit({ type: "keys", payload: this.keyReady });
       return key.encodedPrivateKey ?? null;
@@ -284,6 +509,9 @@ export class MatrixSession implements SessionPort {
 
   async open(roomId: string): Promise<null> {
     const account = this.requireAccount();
+    if (!this.directoryPublished.has(roomId)) {
+      void this.refreshDirectoryVisibility(roomId).then(() => this.scheduleRooms());
+    }
     const record = await account.readRoom(roomId);
     await account.writeRoom({
       room: this.roomSummary(roomId) ?? record?.room ?? this.placeholderRoom(roomId),
@@ -357,7 +585,7 @@ export class MatrixSession implements SessionPort {
     transactionId: string,
     messageId: string,
     kind: CommandMap["send"]["kind"],
-    media: CommandMap["send"]["media"],
+    _media: CommandMap["send"]["media"],
   ): Promise<MessageRow> {
     this.requireClient();
     const outbox = this.requireOutbox();
@@ -368,7 +596,8 @@ export class MatrixSession implements SessionPort {
       body,
       html,
       kind,
-      media,
+      // Bytes only travel through `sendMedia`; this path cannot upload.
+      media: null,
       replyTo,
     });
     void outbox.deliver(messageId).catch(() => undefined);
@@ -391,6 +620,75 @@ export class MatrixSession implements SessionPort {
     await outbox.discard(messageId);
     this.scheduleRooms();
     return null;
+  }
+
+  /**
+   * Validates, strips and caches the bytes, then queues one outbox row. The upload itself happens
+   * in `deliver`, so a send retry never repeats it.
+   */
+  async sendMedia(input: CommandMap["sendMedia"]): Promise<MessageRow> {
+    const client = this.requireClient();
+    const account = this.requireAccount();
+    const media = this.requireMedia();
+    const room = this.requireRoom(input.roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    if (room.getMyMembership() !== "join" || !room.currentState.maySendMessage(own)) {
+      throw new WorkerFailure("unavailable");
+    }
+    if (input.kind === "sticker" && (await this.encryptionEnabled(client, input.roomId))) {
+      // `m.sticker` has no encrypted `file`; sending one would leak an unencrypted image.
+      throw new WorkerFailure("unsupported");
+    }
+    const prepared = await prepareUpload(input.file, input.name, input.kind, await this.uploadLimitFor(client));
+    const local = await media.cacheLocal(prepared.blob, prepared.mime, prepared.width, prepared.height, prepared.hash);
+    await account.writeMediaSource({
+      roomId: input.roomId,
+      messageId: input.messageId,
+      kind: input.kind,
+      name: prepared.name,
+      caption: input.caption,
+      width: prepared.width,
+      height: prepared.height,
+      size: prepared.size,
+      duration: null,
+      mime: prepared.mime,
+      source: { kind: "local", key: local.key },
+      thumbnail: { kind: "local", key: local.key },
+    });
+    const outbox = this.requireOutbox();
+    const row = await outbox.queue({
+      roomId: input.roomId,
+      messageId: input.messageId,
+      transactionId: input.transactionId,
+      body: input.caption,
+      html: input.html,
+      kind: input.kind,
+      replyTo: input.replyTo,
+      media: {
+        kind: input.kind,
+        name: prepared.name,
+        mime: prepared.mime,
+        width: prepared.width,
+        height: prepared.height,
+        size: prepared.size,
+        duration: null,
+        hash: prepared.hash,
+        blob: prepared.blob,
+        previewUrl: local.url,
+      },
+    });
+    void outbox.deliver(input.messageId).catch(() => undefined);
+    this.scheduleRooms();
+    return row;
+  }
+
+  async media(input: CommandMap["media"]): Promise<MediaReply> {
+    const client = this.requireClient();
+    const account = this.requireAccount();
+    const source = await account.readMediaSource(input.roomId, input.messageId);
+    if (source === null) throw new WorkerFailure("unavailable");
+    return this.requireMedia().resolve(client, source, input.variant);
   }
 
   async markRead(roomId: string, eventId: string): Promise<null> {
@@ -417,6 +715,427 @@ export class MatrixSession implements SessionPort {
     const room = client.getRoom(roomId);
     if (room !== null) this.emit({ type: "members", payload: { roomId, members: projectMembers(room) } });
     return null;
+  }
+
+  async react(roomId: string, eventId: string, key: string): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    if (room.getMyMembership() !== "join") throw new WorkerFailure("unavailable");
+    const target = room.findEventById(eventId);
+    if (target === undefined || target.isRedacted()) throw new WorkerFailure("unavailable");
+    const relations = room.relations.getChildEventsForEvent(eventId, RelationType.Annotation, EventType.Reaction);
+    const mine = relations?.getAnnotationsBySender()?.[own] ?? new Set<MatrixEvent>();
+    const existing = [...mine].find((child) => !child.isRedacted() && child.getRelation()?.key === key);
+    const transactionKey =
+      existing === undefined ? `${roomId}\n${eventId}\n${key}` : `redact\n${existing.getId() ?? eventId}`;
+    const transactionId = this.reactionTransaction(transactionKey);
+    try {
+      if (existing === undefined) {
+        await client.sendEvent(
+          roomId,
+          EventType.Reaction,
+          { "m.relates_to": { rel_type: RelationType.Annotation, event_id: eventId, key } },
+          transactionId,
+        );
+      } else {
+        const reactionId = existing.getId();
+        if (reactionId === undefined) throw new WorkerFailure("unavailable");
+        await client.redactEvent(roomId, reactionId, transactionId);
+      }
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    this.reactionTransactions.delete(transactionKey);
+    return null;
+  }
+
+  async edit(roomId: string, eventId: string, body: string, html: string | null): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    if (!room.currentState.maySendMessage(own)) throw new WorkerFailure("unavailable");
+    const target = room.findEventById(eventId);
+    if (target === undefined || target.isRedacted() || target.getSender() !== own) {
+      throw new WorkerFailure("unavailable");
+    }
+    if (target.getType() !== EventType.RoomMessage && target.getType() !== EventType.RoomMessageEncrypted) {
+      throw new WorkerFailure("unavailable");
+    }
+    if (target.getRelation()?.rel_type === RelationType.Replace) throw new WorkerFailure("unavailable");
+    const original = target.getContent();
+    const msgtype =
+      original["msgtype"] === MsgType.Notice
+        ? MsgType.Notice
+        : original["msgtype"] === MsgType.Emote
+          ? MsgType.Emote
+          : MsgType.Text;
+    const mentions = mentionedUserIds(room, own, body);
+    const existingMentions = mentionIds(original["m.mentions"]);
+    const added = mentions.filter((id) => !existingMentions.includes(id));
+    try {
+      await client.sendMessage(
+        roomId,
+        {
+          msgtype,
+          body: `* ${body}`,
+          ...(html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: `* ${html}` }),
+          "m.new_content": {
+            msgtype,
+            body,
+            ...(html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: html }),
+            ...(mentions.length === 0 ? {} : { "m.mentions": { user_ids: mentions } }),
+          },
+          "m.relates_to": { rel_type: RelationType.Replace, event_id: eventId },
+          ...(added.length === 0 ? {} : { "m.mentions": { user_ids: added } }),
+        },
+        crypto.randomUUID(),
+      );
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    return null;
+  }
+
+  async redact(roomId: string, eventId: string): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    const target = room.findEventById(eventId);
+    if (target === undefined || target.isRedacted()) throw new WorkerFailure("unavailable");
+    if (!room.currentState.maySendRedactionForEvent(target, own)) throw new WorkerFailure("unavailable");
+    try {
+      await client.redactEvent(roomId, eventId, crypto.randomUUID());
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    return null;
+  }
+
+  async typing(roomId: string, typing: boolean): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    if (room.getMyMembership() !== "join") throw new WorkerFailure("unavailable");
+    try {
+      await client.sendTyping(roomId, typing, typing ? 30_000 : 0);
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    return null;
+  }
+
+  async search(
+    roomIds: readonly string[],
+    query: string,
+    mediaKinds: readonly MessageKind[],
+    limit: number,
+  ): Promise<readonly MessageRow[]> {
+    const account = this.requireAccount();
+    const events: MessageRow[] = [];
+    const outbox: MessageRow[] = [];
+    for (const roomId of roomIds) {
+      events.push(...(await account.readEvents(roomId)));
+      if (this.outbox !== null) outbox.push(...(await this.outbox.rows(roomId)));
+    }
+    return searchRows(events, outbox, query, mediaKinds, limit);
+  }
+
+  async leaveRoom(roomId: string): Promise<null> {
+    const client = this.requireClient();
+    const account = this.requireAccount();
+    try {
+      await client.leave(roomId);
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    await account.deleteRoom(roomId);
+    this.leftRooms.add(roomId);
+    this.directoryPublished.delete(roomId);
+    if (this.activeRoomId === roomId) this.activeRoomId = null;
+    await this.emitRooms();
+    return null;
+  }
+
+  async setRoomTag(roomId: string, tag: CommandMap["setRoomTag"]["tag"], enabled: boolean): Promise<null> {
+    const client = this.requireClient();
+    this.requireRoom(roomId);
+    try {
+      if (enabled) await client.setRoomTag(roomId, tag, { order: 0.5 });
+      else await client.deleteRoomTag(roomId, tag);
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    await this.emitRooms();
+    return null;
+  }
+
+  async setNotification(roomId: string, mode: CommandMap["setNotification"]["mode"]): Promise<null> {
+    const client = this.requireClient();
+    this.requireRoom(roomId);
+    if (mode === "all" || mode === "mentions") {
+      // A per-room "all/mentions" choice needs push-rule conditions this product does not store.
+      throw new WorkerFailure("unavailable");
+    }
+    try {
+      await client.setRoomMutePushRule("global", roomId, mode === "mute");
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    await this.emitRooms();
+    return null;
+  }
+
+  async setRoomState(roomId: string, patch: RoomStatePatch): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    const ownMember = room.getMember(own);
+    if (ownMember === null) throw new WorkerFailure("unavailable");
+    try {
+      if (patch.name !== undefined) {
+        if (!room.currentState.maySendStateEvent(EventType.RoomName, own)) throw new WorkerFailure("unavailable");
+        await client.setRoomName(roomId, patch.name);
+      }
+      if (patch.topic !== undefined) {
+        if (!room.currentState.maySendStateEvent(EventType.RoomTopic, own)) throw new WorkerFailure("unavailable");
+        await client.setRoomTopic(roomId, patch.topic);
+      }
+      if (patch.joinRule !== undefined) {
+        if (!room.currentState.maySendStateEvent(EventType.RoomJoinRules, own)) {
+          throw new WorkerFailure("unavailable");
+        }
+        const allow = restrictedAllow(room);
+        await client.sendStateEvent(
+          roomId,
+          EventType.RoomJoinRules,
+          {
+            join_rule: sdkJoinRule(patch.joinRule),
+            ...(allow === undefined ? {} : { allow }),
+          },
+          "",
+        );
+      }
+      if (patch.guestAccess !== undefined) {
+        if (!room.currentState.maySendStateEvent(EventType.RoomGuestAccess, own)) {
+          throw new WorkerFailure("unavailable");
+        }
+        await client.sendStateEvent(
+          roomId,
+          EventType.RoomGuestAccess,
+          { guest_access: patch.guestAccess === "can_join" ? GuestAccess.CanJoin : GuestAccess.Forbidden },
+          "",
+        );
+      }
+      if (patch.historyVisibility !== undefined) {
+        if (!room.currentState.maySendStateEvent(EventType.RoomHistoryVisibility, own)) {
+          throw new WorkerFailure("unavailable");
+        }
+        await client.sendStateEvent(
+          roomId,
+          EventType.RoomHistoryVisibility,
+          { history_visibility: sdkHistoryVisibility(patch.historyVisibility) },
+          "",
+        );
+      }
+      if (patch.directoryPublished !== undefined) {
+        await client.setRoomDirectoryVisibility(
+          roomId,
+          patch.directoryPublished ? Visibility.Public : Visibility.Private,
+        );
+        this.directoryPublished.set(roomId, patch.directoryPublished);
+      }
+      if (patch.aliases !== undefined) {
+        if (!room.currentState.maySendStateEvent(EventType.RoomCanonicalAlias, own)) {
+          throw new WorkerFailure("unavailable");
+        }
+        const desired = [...new Set(patch.aliases)];
+        const canonical = room.getCanonicalAlias();
+        const current = canonical === null ? [] : [canonical, ...room.getAltAliases()];
+        for (const alias of desired) {
+          if (!current.includes(alias)) await client.createAlias(alias, roomId);
+        }
+        for (const alias of current) {
+          if (!desired.includes(alias)) await client.deleteAlias(alias);
+        }
+        await client.sendStateEvent(
+          roomId,
+          EventType.RoomCanonicalAlias,
+          desired[0] === undefined ? { alt_aliases: [] } : { alias: desired[0], alt_aliases: desired.slice(1) },
+          "",
+        );
+      }
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    await this.emitRooms();
+    return null;
+  }
+
+  async inviteUser(roomId: string, userId: string): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    if (!room.canInvite(userId)) throw new WorkerFailure("unavailable");
+    const existing = room.getMember(userId);
+    if (existing?.membership === "join") return null;
+    try {
+      await client.invite(roomId, userId);
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    this.emit({ type: "members", payload: { roomId, members: projectMembers(room) } });
+    this.scheduleRooms();
+    return null;
+  }
+
+  async joinRoom(roomIdOrAlias: string): Promise<string> {
+    const client = this.requireClient();
+    try {
+      const room = await client.joinRoom(roomIdOrAlias);
+      this.leftRooms.delete(room.roomId);
+      await this.emitRooms();
+      return room.roomId;
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+  }
+
+  async answerInvite(roomId: string, accept: boolean): Promise<string | null> {
+    if (accept) return this.joinRoom(roomId);
+    await this.leaveRoom(roomId);
+    return null;
+  }
+
+  async createRoom(name: string, topic: string, directUserId: string | null): Promise<string> {
+    const client = this.requireClient();
+    let roomId: string;
+    try {
+      const created = await client.createRoom({
+        name,
+        topic,
+        preset: directUserId === null ? Preset.PrivateChat : Preset.TrustedPrivateChat,
+        visibility: Visibility.Private,
+        ...(directUserId === null ? {} : { is_direct: true, invite: [directUserId] }),
+      });
+      roomId = created.room_id;
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    if (directUserId !== null) {
+      const current = client.getAccountData(EventType.Direct)?.getContent();
+      const map: Record<string, string[]> = {};
+      if (isRecord(current)) {
+        for (const [userId, roomIds] of Object.entries(current)) {
+          if (!Array.isArray(roomIds)) continue;
+          map[userId] = roomIds.filter((id: unknown): id is string => typeof id === "string");
+        }
+      }
+      map[directUserId] = [...(map[directUserId] ?? []).filter((id) => id !== roomId), roomId];
+      try {
+        await client.setAccountData(EventType.Direct, map);
+      } catch (error) {
+        throw this.transportFailure(error);
+      }
+    }
+    this.leftRooms.delete(roomId);
+    await this.emitRooms();
+    return roomId;
+  }
+
+  async forward(
+    targetRoomId: string,
+    sources: readonly { readonly roomId: string; readonly eventId: string }[],
+  ): Promise<null> {
+    const client = this.requireClient();
+    const target = this.requireRoom(targetRoomId);
+    if (target.getMyMembership() !== "join") throw new WorkerFailure("unavailable");
+    try {
+      for (const source of sources) {
+        const room = client.getRoom(source.roomId);
+        if (room === null) continue;
+        const event = room.findEventById(source.eventId);
+        if (event === undefined) continue;
+        const forwardable = forwardableEvent(event);
+        if (forwardable === null) continue;
+        const transactionId = crypto.randomUUID();
+        if (forwardable.kind === "sticker") {
+          await client.sendEvent(targetRoomId, EventType.Sticker, forwardable.content, transactionId);
+        } else {
+          await client.sendMessage(targetRoomId, forwardable.content, transactionId);
+        }
+      }
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    this.scheduleRooms();
+    return null;
+  }
+
+  async memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<null> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    if (userId === own) throw new WorkerFailure("unavailable");
+    const target = room.getMember(userId);
+    if (target === null) throw new WorkerFailure("unavailable");
+    if (action === "unban" && target.membership !== "ban") throw new WorkerFailure("unavailable");
+    if (action === "kick" && target.membership !== "join" && target.membership !== "invite") {
+      throw new WorkerFailure("unavailable");
+    }
+    const ownMember = room.getMember(own);
+    const ownLevel = ownMember?.powerLevel ?? 0;
+    const threshold = action === "kick" ? "kick" : "ban";
+    if (!room.currentState.hasSufficientPowerLevelFor(threshold, ownLevel)) {
+      throw new WorkerFailure("unavailable");
+    }
+    if (target.powerLevel >= ownLevel && target.membership !== "leave") {
+      throw new WorkerFailure("unavailable");
+    }
+    try {
+      if (action === "kick") await client.kick(roomId, userId);
+      else if (action === "ban") await client.ban(roomId, userId);
+      else await client.unban(roomId, userId);
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    this.emit({ type: "members", payload: { roomId, members: projectMembers(room) } });
+    this.scheduleRooms();
+    return null;
+  }
+
+  private reactionTransaction(key: string): string {
+    const existing = this.reactionTransactions.get(key);
+    if (existing !== undefined) return existing;
+    const transactionId = crypto.randomUUID();
+    this.reactionTransactions.set(key, transactionId);
+    return transactionId;
+  }
+
+  private transportFailure(error: unknown): WorkerFailure {
+    if (error instanceof WorkerFailure) return error;
+    return new WorkerFailure("network");
+  }
+
+  private requireRoom(roomId: string): Room {
+    const client = this.requireClient();
+    const room = client.getRoom(roomId);
+    if (room === null) throw new WorkerFailure("unavailable");
+    return room;
+  }
+
+  private async refreshDirectoryVisibility(roomId: string): Promise<void> {
+    const client = this.client;
+    if (client === null) return;
+    try {
+      const visibility = await client.getRoomDirectoryVisibility(roomId);
+      this.directoryPublished.set(roomId, visibility.visibility === Visibility.Public);
+    } catch {
+      // A server may forbid reading the directory entry; unknown stays unpublished.
+    }
   }
 
   private async acquireLock(userId: string): Promise<void> {
@@ -518,6 +1237,29 @@ export class MatrixSession implements SessionPort {
       deliver: async (record) => {
         const client = this.requireClient();
         const row = record.row;
+        const media = record.media ?? null;
+        if (media !== null) {
+          const uploaded = record.uploaded;
+          if (uploaded === null) throw new WorkerFailure("unavailable");
+          const fields = buildMediaContent({
+            kind: media.kind,
+            name: media.name,
+            caption: row.body,
+            html: row.html,
+            mime: media.mime,
+            size: media.size,
+            width: media.width,
+            height: media.height,
+            duration: media.duration,
+            reference: uploaded.source,
+          });
+          const transactionId = row.transactionId ?? undefined;
+          const response =
+            fields.event === "sticker"
+              ? await client.sendEvent(row.roomId, EventType.Sticker, stickerContent(fields), transactionId)
+              : await client.sendMessage(row.roomId, messageContent(fields), transactionId);
+          return response.event_id;
+        }
         const msgtype = row.kind === "notice" ? MsgType.Notice : row.kind === "emote" ? MsgType.Emote : MsgType.Text;
         const response = await client.sendMessage(
           row.roomId,
@@ -531,8 +1273,106 @@ export class MatrixSession implements SessionPort {
         );
         return response.event_id;
       },
+      upload: (record) => this.uploadMedia(record),
       now: () => Date.now(),
     });
+  }
+
+  private openMedia(account: AccountDatabase): void {
+    this.mediaResolver?.dispose();
+    this.mediaResolver = createMediaResolver({
+      backend: account,
+      createUrl: (blob: Blob) => URL.createObjectURL(blob),
+      revokeUrl: (url: string) => URL.revokeObjectURL(url),
+      revoked: (subscription) => {
+        this.emit({
+          type: "media",
+          payload: {
+            roomId: subscription.roomId,
+            messageId: subscription.messageId,
+            variant: subscription.variant,
+            url: null,
+          },
+        });
+      },
+      now: () => Date.now(),
+    });
+  }
+
+  private requireMedia(): MediaResolver {
+    if (this.mediaResolver === null) throw new WorkerFailure("not-signed-in");
+    return this.mediaResolver;
+  }
+
+  private encryptionEnabled(client: MatrixClient, roomId: string): Promise<boolean> {
+    const crypto = client.getCrypto();
+    if (crypto === undefined) return Promise.resolve(false);
+    return crypto.isEncryptionEnabledInRoom(roomId);
+  }
+
+  private async uploadLimitFor(client: MatrixClient): Promise<number> {
+    if (this.uploadLimit !== null) return this.uploadLimit;
+    let limit = MAX_UPLOAD_BYTES;
+    try {
+      const config = await client.getMediaConfig(true);
+      const declared = config["m.upload.size"];
+      if (typeof declared === "number" && Number.isFinite(declared) && declared > 0) {
+        limit = Math.min(declared, MAX_UPLOAD_BYTES);
+      }
+    } catch {
+      // A server without the media config endpoint keeps the local cap.
+    }
+    this.uploadLimit = limit;
+    return limit;
+  }
+
+  /** Uploads the sanitized bytes once; the reference is persisted by the outbox before send. */
+  private async uploadMedia(record: OutboxRecord): Promise<UploadedMedia> {
+    const client = this.requireClient();
+    const media = record.media;
+    if (media === null) throw new WorkerFailure("unavailable");
+    let source: MediaReference;
+    if (await this.encryptionEnabled(client, record.roomId)) {
+      const sealed = await encryptAttachment(media.blob);
+      const url = await uploadBlob(client, sealed.ciphertext, "application/octet-stream");
+      source = { kind: "encrypted", file: encryptedFile(url, sealed) };
+    } else {
+      source = { kind: "mxc", url: await uploadBlob(client, media.blob, media.mime) };
+    }
+    await this.recordUploadSource(record, source);
+    return { source };
+  }
+
+  private async recordUploadSource(record: OutboxRecord, source: MediaReference): Promise<void> {
+    const media = record.media;
+    if (media === null) return;
+    const account = this.requireAccount();
+    const existing = await account.readMediaSource(record.roomId, record.messageId);
+    const shared: MediaSource = existing ?? {
+      roomId: record.roomId,
+      messageId: record.messageId,
+      kind: media.kind,
+      name: media.name,
+      caption: record.row.body,
+      width: media.width,
+      height: media.height,
+      size: media.size,
+      duration: media.duration,
+      mime: media.mime,
+      source: null,
+      thumbnail: null,
+    };
+    await account.writeMediaSource({
+      ...shared,
+      source,
+      thumbnail: media.kind === "image" || media.kind === "sticker" ? source : null,
+    });
+  }
+
+  private async recordProjectedSource(room: Room, event: MatrixEvent): Promise<void> {
+    const source = projectMediaSource(room, event);
+    if (source === null) return;
+    await this.requireAccount().writeMediaSource(source);
   }
 
   private emit(event: Event): void {
@@ -575,7 +1415,9 @@ export class MatrixSession implements SessionPort {
     const room = client?.getRoom(roomId);
     if (client === null || room === null || room === undefined) return;
     const window = projectWindow(room, client.getUserId() ?? "");
-    await this.requireAccount().writeEvents(window.messages);
+    const account = this.requireAccount();
+    await account.writeEvents(window.messages);
+    await account.writeMediaSources(projectMediaSources(room));
   }
 
   private roomSummary(roomId: string): RoomSummary | null {
@@ -583,7 +1425,25 @@ export class MatrixSession implements SessionPort {
     if (client === null) return null;
     const room = client.getRoom(roomId);
     if (room === null) return null;
-    return projectRoom(room, client.getUserId() ?? "", directRooms(client));
+    return projectRoom(
+      room,
+      client.getUserId() ?? "",
+      directRooms(client),
+      this.notificationFor(roomId),
+      this.directoryPublished.get(roomId) ?? false,
+    );
+  }
+
+  private notificationFor(roomId: string): RoomSummary["notification"] {
+    const client = this.client;
+    if (client === null) return "default";
+    try {
+      const rule = client.getRoomPushRule("global", roomId);
+      return rule?.actions.includes(PushRuleActionName.DontNotify) === true ? "mute" : "default";
+    } catch {
+      // Push rules are unavailable before the first sync.
+      return "default";
+    }
   }
 
   private placeholderRoom(roomId: string): RoomSummary {
@@ -652,7 +1512,14 @@ export class MatrixSession implements SessionPort {
     const direct = directRooms(client);
     const rooms: RoomRecord[] = [];
     for (const room of client.getRooms()) {
-      const base = projectRoom(room, own, direct);
+      if (this.leftRooms.has(room.roomId)) continue;
+      const base = projectRoom(
+        room,
+        own,
+        direct,
+        this.notificationFor(room.roomId),
+        this.directoryPublished.get(room.roomId) ?? false,
+      );
       if (base === null) continue;
       const marker = await account.readMarker(room.roomId);
       const latest = await account.readLatest(room.roomId, WINDOW_LIMIT);
@@ -677,24 +1544,82 @@ export class MatrixSession implements SessionPort {
       const replaced = await outbox.reconcile(row);
       if (replaced) return [];
     }
-    const existing = (await account.readLatest(row.roomId, WINDOW_LIMIT)).find(
-      (entry) =>
-        (row.eventId !== null && entry.eventId === row.eventId) ||
-        (row.transactionId !== null && entry.transactionId === row.transactionId),
-    );
-    const stored = existing === undefined ? row : { ...row, id: existing.id };
+    const byEvent = row.eventId === null ? null : await account.readEvent(row.roomId, row.eventId);
+    const existing =
+      byEvent ??
+      (await account.readLatest(row.roomId, WINDOW_LIMIT)).find(
+        (entry) => row.transactionId !== null && entry.transactionId === row.transactionId,
+      );
+    const stored = existing === undefined || existing === null ? row : { ...row, id: existing.id };
     await account.writeEvent(stored);
     return [stored];
+  }
+
+  /**
+   * A reaction, edit or redaction changes a row that is already in the projection. The row is
+   * re-projected from the SDK aggregation and emitted as a patch; no second message store exists.
+   */
+  private async refreshRelatedTarget(room: Room, event: MatrixEvent): Promise<void> {
+    const type = event.getType();
+    const relation = event.getRelation();
+    let targetId: string | undefined;
+    if (
+      relation !== null &&
+      (relation.rel_type === RelationType.Annotation || relation.rel_type === RelationType.Replace)
+    ) {
+      targetId = relation.event_id;
+    } else if (type === EventType.Reaction || type === EventType.RoomRedaction) {
+      targetId = event.getAssociatedId();
+    }
+    if (targetId === undefined) return;
+    await this.refreshEvent(room, targetId);
+  }
+
+  private async refreshEvent(room: Room, eventId: string): Promise<void> {
+    const event = room.findEventById(eventId);
+    if (event === undefined) return;
+    const relation = event.getRelation();
+    const parentId =
+      relation !== null &&
+      (relation.rel_type === RelationType.Annotation || relation.rel_type === RelationType.Replace) &&
+      relation.event_id !== undefined
+        ? relation.event_id
+        : null;
+    const target = parentId === null ? event : room.findEventById(parentId);
+    if (target === undefined) return;
+    const own = this.client?.getUserId() ?? "";
+    const row = projectMessage(room, target, own);
+    if (row === null) return;
+    const account = this.requireAccount();
+    await this.recordProjectedSource(room, target);
+    const existing = row.eventId === null ? null : await account.readEvent(room.roomId, row.eventId);
+    const stored = existing === null ? row : { ...row, id: existing.id };
+    await account.writeEvent(stored);
+    if (this.activeRoomId === room.roomId) {
+      const window = await this.windowState(room.roomId);
+      this.emit({
+        type: "window",
+        payload: {
+          roomId: room.roomId,
+          messages: [stored],
+          hasOlder: window.hasOlder,
+          older: false,
+          patch: true,
+        },
+      });
+    }
   }
 
   private async handleTimeline(event: MatrixEvent, room: Room, toStartOfTimeline: boolean): Promise<void> {
     const own = this.client?.getUserId() ?? "";
     const row = projectMessage(room, event, own);
     if (row === null) {
+      await this.refreshRelatedTarget(room, event);
       this.scheduleRooms();
       return;
     }
     const stored = await this.persistEvent(row);
+    await this.recordProjectedSource(room, event);
     if (!toStartOfTimeline && this.activeRoomId === room.roomId && stored.length > 0) {
       const window = await this.windowState(room.roomId);
       this.emit({
@@ -718,8 +1643,12 @@ export class MatrixSession implements SessionPort {
     const room = client.getRoom(roomId);
     if (room === null) return;
     const row = projectMessage(room, event, client.getUserId() ?? "");
-    if (row === null) return;
+    if (row === null) {
+      await this.refreshRelatedTarget(room, event);
+      return;
+    }
     const stored = await this.persistEvent(row);
+    await this.recordProjectedSource(room, event);
     if (this.activeRoomId === roomId && stored.length > 0) {
       const window = await this.windowState(roomId);
       this.emit({
@@ -773,6 +1702,7 @@ export class MatrixSession implements SessionPort {
           this.keyReady = gate;
           this.emit({ type: "keys", payload: gate });
         });
+        void this.devices().catch(() => undefined);
       }
     });
     client.on(RoomEvent.Timeline, (event: MatrixEvent, room: Room | undefined, toStart?: boolean) => {
@@ -792,7 +1722,40 @@ export class MatrixSession implements SessionPort {
     });
     client.on(RoomEvent.Name, () => this.scheduleRooms());
     client.on(RoomEvent.Tags, () => this.scheduleRooms());
-    client.on(RoomEvent.MyMembership, () => this.scheduleRooms());
+    client.on(RoomEvent.MyMembership, (room: Room) => {
+      if (room.getMyMembership() === "join") this.leftRooms.delete(room.roomId);
+      this.scheduleRooms();
+    });
+    client.on(RoomEvent.Redaction, (event: MatrixEvent, room: Room) => {
+      const targetId = event.getAssociatedId();
+      if (targetId === undefined) return;
+      void this.refreshEvent(room, targetId).then(() => this.scheduleRooms());
+    });
+    client.on(MatrixEventEvent.Replaced, (event: MatrixEvent) => {
+      const roomId = event.getRoomId();
+      const room = roomId === undefined ? null : this.client?.getRoom(roomId);
+      const eventId = event.getId();
+      if (room === null || room === undefined || eventId === undefined) return;
+      void this.refreshEvent(room, eventId).then(() => this.scheduleRooms());
+    });
+    client.on(RoomMemberEvent.Typing, (_event: MatrixEvent, member: RoomMember) => {
+      this.emitTyping(member.roomId);
+    });
+    client.on(RoomStateEvent.Events, () => this.scheduleRooms());
+  }
+
+  private emitTyping(roomId: string): void {
+    const client = this.client;
+    if (client === null) return;
+    const room = client.getRoom(roomId);
+    if (room === null) return;
+    const own = client.getUserId();
+    const userIds = room.currentState
+      .getMembers()
+      .filter((member) => member.typing && member.userId !== own)
+      .map((member) => member.userId)
+      .toSorted();
+    this.emit({ type: "typing", payload: { roomId, userIds } });
   }
 
   private async startClient(stored: StoredSession): Promise<SessionSummary> {
@@ -848,6 +1811,7 @@ export class MatrixSession implements SessionPort {
     this.emit({ type: "session", payload: session });
     this.emit({ type: "keys", payload: this.keyReady });
     this.emit({ type: "connection", payload: "connecting" });
+    void this.devices().catch(() => undefined);
     const account = this.account;
     if (account !== null) {
       for (const room of client.getRooms()) await this.syncMarker(room);
@@ -865,6 +1829,9 @@ export class MatrixSession implements SessionPort {
     this.client = null;
     this.stored = null;
     this.outbox = null;
+    this.mediaResolver?.dispose();
+    this.mediaResolver = null;
+    this.uploadLimit = null;
     this.keyReady = "missing";
     this.releaseLock?.();
     this.releaseLock = null;
@@ -891,6 +1858,9 @@ export class MatrixSession implements SessionPort {
     this.cryptoPrefix = null;
     this.account = null;
     this.outbox = null;
+    this.mediaResolver?.dispose();
+    this.mediaResolver = null;
+    this.uploadLimit = null;
     this.activeRoomId = null;
     this.stored = null;
     this.keyReady = "unknown";

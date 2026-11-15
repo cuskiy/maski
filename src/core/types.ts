@@ -39,6 +39,17 @@ export interface RoomTag {
   readonly order?: string;
 }
 
+/** The room fields a reader may change; one field per command is the normal shape. */
+export interface RoomStatePatch {
+  readonly name?: string;
+  readonly topic?: string;
+  readonly aliases?: readonly string[];
+  readonly joinRule?: RoomJoinRule;
+  readonly guestAccess?: GuestAccess;
+  readonly historyVisibility?: RoomHistoryVisibility;
+  readonly directoryPublished?: boolean;
+}
+
 export interface Preview {
   readonly kind: MessageKind | "error";
   readonly body: string;
@@ -192,26 +203,28 @@ export const REVIEW_CAPABILITIES: SourceCapabilities = {
 
 /** The worker conversation: only the commands the worker protocol implements. */
 export const PRODUCTION_CAPABILITIES: SourceCapabilities = {
-  media: false,
+  media: true,
+  // The sticker picker sends emoji text, not an image; `m.sticker` has no image source yet.
   stickers: false,
-  search: false,
-  react: false,
-  edit: false,
-  redact: false,
-  forward: false,
-  typing: false,
-  memberAction: false,
-  inviteUser: false,
-  addRoom: false,
-  leaveRoom: false,
-  setRoomState: false,
-  setRoomTag: false,
-  setNotification: false,
+  search: true,
+  react: true,
+  edit: true,
+  redact: true,
+  forward: true,
+  typing: true,
+  memberAction: true,
+  inviteUser: true,
+  addRoom: true,
+  leaveRoom: true,
+  setRoomState: true,
+  setRoomTag: true,
+  // Only mute is a room push rule; all/mentions are not fake choices in the surface.
+  setNotification: true,
   resetRecoveryKey: false,
   resetIdentity: true,
   signOutDevice: false,
   signOutOthers: false,
-  answerInvite: false,
+  answerInvite: true,
   saveNotifications: false,
 };
 

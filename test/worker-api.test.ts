@@ -80,9 +80,81 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("members");
       return null;
     },
+    async devices() {
+      calls.push("devices");
+      return [];
+    },
     async resetIdentity() {
       calls.push("resetIdentity");
       return null;
+    },
+    async react() {
+      calls.push("react");
+      return null;
+    },
+    async edit() {
+      calls.push("edit");
+      return null;
+    },
+    async redact() {
+      calls.push("redact");
+      return null;
+    },
+    async typing() {
+      calls.push("typing");
+      return null;
+    },
+    async search() {
+      calls.push("search");
+      return [sentRow];
+    },
+    async leaveRoom() {
+      calls.push("leaveRoom");
+      return null;
+    },
+    async setRoomTag() {
+      calls.push("setRoomTag");
+      return null;
+    },
+    async setNotification() {
+      calls.push("setNotification");
+      return null;
+    },
+    async setRoomState() {
+      calls.push("setRoomState");
+      return null;
+    },
+    async inviteUser() {
+      calls.push("inviteUser");
+      return null;
+    },
+    async joinRoom() {
+      calls.push("joinRoom");
+      return "!a:example.org";
+    },
+    async answerInvite() {
+      calls.push("answerInvite");
+      return null;
+    },
+    async createRoom() {
+      calls.push("createRoom");
+      return "!a:example.org";
+    },
+    async forward() {
+      calls.push("forward");
+      return null;
+    },
+    async memberAction() {
+      calls.push("memberAction");
+      return null;
+    },
+    async sendMedia() {
+      calls.push("sendMedia");
+      return sentRow;
+    },
+    async media() {
+      calls.push("media");
+      return { url: "blob:https://example.org/1", mime: "image/webp", width: 1, height: 1 };
     },
     onEvent() {
       return () => {};
@@ -149,8 +221,13 @@ void test("the worker dispatcher covers every command and preserves order", asyn
     ok: true,
     data: null,
   });
-  assert.deepEqual(await api.handle({ id: 10, type: "resetIdentity", payload: { password: "pw" } }), {
+  assert.deepEqual(await api.handle({ id: 10, type: "devices", payload: {} }), {
     id: 10,
+    ok: true,
+    data: [],
+  });
+  assert.deepEqual(await api.handle({ id: 11, type: "resetIdentity", payload: { password: "pw" } }), {
+    id: 11,
     ok: true,
     data: null,
   });
@@ -164,8 +241,46 @@ void test("the worker dispatcher covers every command and preserves order", asyn
     "send",
     "markRead",
     "members",
+    "devices",
     "resetIdentity",
   ]);
+});
+
+void test("the worker dispatcher covers every daily-use command", async () => {
+  const calls: string[] = [];
+  const api = createWorkerApi(fakePort(calls));
+  const roomId = "!a:example.org";
+  const payloads = [
+    ["react", { roomId, eventId: "$e", key: "👍" }],
+    ["edit", { roomId, eventId: "$e", body: "new", html: null }],
+    ["redact", { roomId, eventId: "$e" }],
+    ["typing", { roomId, typing: true }],
+    ["search", { roomIds: [roomId], query: "hi", mediaKinds: ["image"], limit: 10 }],
+    ["leaveRoom", { roomId }],
+    ["setRoomTag", { roomId, tag: "m.favourite", enabled: true }],
+    ["setNotification", { roomId, mode: "mute" }],
+    ["setRoomState", { roomId, patch: { name: "Name" } }],
+    ["inviteUser", { roomId, userId: "@bob:example.org" }],
+    ["joinRoom", { roomIdOrAlias: "#room:example.org" }],
+    ["answerInvite", { roomId, accept: true }],
+    ["createRoom", { name: "Room", topic: "", directUserId: null }],
+    ["forward", { targetRoomId: roomId, sources: [{ roomId, eventId: "$e" }] }],
+    ["memberAction", { roomId, userId: "@bob:example.org", action: "kick" }],
+  ] as const;
+  for (const [index, [type, payload]] of payloads.entries()) {
+    const reply = await api.handle({ id: index + 1, type, payload });
+    assert.equal(reply.ok, true, type);
+  }
+  assert.deepEqual(
+    calls,
+    payloads.map(([type]) => type),
+  );
+  const searched = await api.handle({
+    id: 99,
+    type: "search",
+    payload: { roomIds: [roomId], query: "", mediaKinds: [], limit: 5 },
+  });
+  assert.deepEqual(searched, { id: 99, ok: true, data: [sentRow] });
 });
 
 void test("the worker dispatcher rejects malformed and failed commands", async () => {

@@ -313,7 +313,7 @@ export const en = {
   "message.failed": "Not sent",
   "composer.tray": "Attachments",
   "composer.remove": "Remove",
-  "composer.imageFailed": "This image could not be processed safely.",
+  "composer.mediaFailed": "The attachment could not be sent.",
   "composer.label": "Message",
   "composer.placeholder": "Write a message",
   "composer.placeholderRoom": "Message {room}",

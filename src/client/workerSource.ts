@@ -1,7 +1,7 @@
-import type { KeyGate, MessageRow, Phase } from "../core/types.ts";
-import type { Event } from "../protocol/index.ts";
+import type { KeyGate, MessageKind, MessageRow, Phase, RoomStatePatch, RoomSummary } from "../core/types.ts";
+import type { CommandMap, Event, MediaReply, MediaVariant } from "../protocol/index.ts";
 import { PRODUCTION_CAPABILITIES } from "../core/types.ts";
-import type { ChatSource, SourceEvent, SourceEvents } from "./source.ts";
+import type { ChatSource, ForwardSource, SourceEvent, SourceEvents } from "./source.ts";
 import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { localeForPath, localeRoot } from "../core/locales.ts";
@@ -16,6 +16,21 @@ function phaseFor(gate: KeyGate): Phase {
   if (gate === "missing") return "signedOut";
   if (gate === "ready" || gate === "unknown") return "ready";
   return "locked";
+}
+
+const MESSAGE_KINDS: ReadonlySet<string> = new Set<MessageKind>([
+  "text",
+  "notice",
+  "emote",
+  "image",
+  "sticker",
+  "file",
+  "audio",
+  "video",
+]);
+
+function isMessageKind(value: string): value is MessageKind {
+  return MESSAGE_KINDS.has(value);
 }
 
 export class WorkerSource implements ChatSource {
@@ -98,6 +113,24 @@ export class WorkerSource implements ChatSource {
     return this.transport.retrySend(roomId, messageId);
   }
 
+  sendMedia(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    caption: string,
+    html: string | null,
+    replyTo: string | null,
+    kind: CommandMap["sendMedia"]["kind"],
+    name: string,
+    file: Blob,
+  ): Promise<MessageRow> {
+    return this.transport.sendMedia(roomId, messageId, transactionId, caption, html, replyTo, kind, name, file);
+  }
+
+  media(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply> {
+    return this.transport.media(roomId, messageId, variant);
+  }
+
   discardSend(roomId: string, messageId: string): void {
     this.transport.discardSend(roomId, messageId);
   }
@@ -108,6 +141,72 @@ export class WorkerSource implements ChatSource {
 
   members(roomId: string): void {
     this.transport.members(roomId);
+  }
+
+  react(roomId: string, eventId: string, key: string): void {
+    void this.transport.react(roomId, eventId, key).catch(() => undefined);
+  }
+
+  edit(roomId: string, eventId: string, body: string, html: string | null): void {
+    void this.transport.edit(roomId, eventId, body, html).catch(() => undefined);
+  }
+
+  redact(roomId: string, eventId: string): void {
+    void this.transport.redact(roomId, eventId).catch(() => undefined);
+  }
+
+  typing(roomId: string, typing: boolean): void {
+    void this.transport.typing(roomId, typing).catch(() => undefined);
+  }
+
+  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): Promise<readonly MessageRow[]> {
+    const kinds: MessageKind[] = [];
+    if (mediaKinds !== undefined) {
+      for (const kind of mediaKinds) {
+        if (isMessageKind(kind)) kinds.push(kind);
+      }
+    }
+    return this.transport.search(roomIds, query, kinds, 40);
+  }
+
+  leaveRoom(roomId: string): void {
+    void this.transport.leaveRoom(roomId).catch(() => undefined);
+  }
+
+  setRoomTag(roomId: string, tag: "m.favourite" | "m.lowpriority", enabled: boolean): void {
+    void this.transport.setRoomTag(roomId, tag, enabled).catch(() => undefined);
+  }
+
+  setNotification(roomId: string, mode: RoomSummary["notification"]): void {
+    void this.transport.setNotification(roomId, mode).catch(() => undefined);
+  }
+
+  setRoomState(roomId: string, patch: RoomStatePatch): void {
+    void this.transport.setRoomState(roomId, patch).catch(() => undefined);
+  }
+
+  inviteUser(roomId: string, userId: string): void {
+    void this.transport.inviteUser(roomId, userId).catch(() => undefined);
+  }
+
+  joinRoom(roomIdOrAlias: string): Promise<string> {
+    return this.transport.joinRoom(roomIdOrAlias);
+  }
+
+  answerInvite(roomId: string, accept: boolean): void {
+    void this.transport.answerInvite(roomId, accept).catch(() => undefined);
+  }
+
+  createRoom(name: string, topic: string, directUserId: string | null): Promise<string> {
+    return this.transport.createRoom(name, topic, directUserId);
+  }
+
+  forward(targetRoomId: string, sources: readonly ForwardSource[]): void {
+    void this.transport.forward(targetRoomId, sources).catch(() => undefined);
+  }
+
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void {
+    void this.transport.memberAction(roomId, userId, action).catch(() => undefined);
   }
 
   async logout(): Promise<void> {
@@ -161,11 +260,20 @@ export class WorkerSource implements ChatSource {
       case "members":
         this.emit("members", event.payload);
         break;
+      case "devices":
+        this.emit("devices", event.payload);
+        break;
+      case "typing":
+        this.emit("typing", event.payload);
+        break;
       case "connection":
         this.emit("connection", event.payload);
         break;
       case "outbox":
         this.emit("outbox", event.payload);
+        break;
+      case "media":
+        this.emit("media", event.payload);
         break;
       default:
         break;

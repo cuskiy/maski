@@ -458,6 +458,18 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   const popoverReturnFocus = new Map<string, HTMLElement>();
   const room = (id: string | null): RoomSummary | null => state().rooms.find((entry) => entry.roomId === id) ?? null;
   const message = (id: string | null): MessageRow | null => state().messages.find((entry) => entry.id === id) ?? null;
+  let viewerMessageId: string | null = null;
+
+  function downloadMedia(roomId: string, messageId: string, name: string): void {
+    void actions.resolveMedia(roomId, messageId, "full").then((url) => {
+      if (url === null) return;
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = name === "" ? "attachment" : name;
+      anchor.rel = "noreferrer";
+      anchor.click();
+    });
+  }
 
   function refreshBody(id: string, overrideRoomId?: string | null): void {
     if (id === SURFACE.profile || id === SURFACE.viewer) return;
@@ -744,12 +756,18 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (title !== null && title !== undefined) title.textContent = t(c, key);
   }
 
-  function openMediaFiles(roomId: string): void {
+  async function openMediaFiles(roomId: string): Promise<void> {
     if (!capabilities.search) return;
     const dialog = document.getElementById(SURFACE.mediaFiles);
     const body = dialog?.querySelector<HTMLElement>(`[data-region="${SURFACE.mediaFiles}-body"]`);
     if (!(dialog instanceof HTMLDialogElement) || body === null || body === undefined) return;
-    replaceHtml(body, mediaFilesBody(c, actions.search([roomId], "")));
+    let files: readonly MessageRow[] = [];
+    try {
+      files = await actions.search([roomId], "");
+    } catch {
+      files = [];
+    }
+    replaceHtml(body, mediaFilesBody(c, files));
     body.scrollTop = 0;
     dialog.showModal();
   }
@@ -781,7 +799,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     } else if (action === "roomMenu.mediaFiles") {
       if (!capabilities.search) return;
       hide(SURFACE.roomMenu);
-      openMediaFiles(id);
+      void openMediaFiles(id);
       return;
     } else if (action === "roomMenu.search") {
       if (!capabilities.search) return;
@@ -862,7 +880,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     hide(SURFACE.messageMenu);
   }
 
-  function search(form: HTMLFormElement): void {
+  async function search(form: HTMLFormElement): Promise<void> {
     if (!capabilities.search) return;
     const input = form.querySelector<HTMLInputElement>("#search-field");
     const results = document.querySelector<HTMLElement>("[data-search-results]");
@@ -879,12 +897,17 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
             .rooms.filter((entry) => !isSpaceRoom(entry) && entry.membership === "join")
             .map((entry) => entry.roomId)
         : [scope];
-    const matches = actions.search(roomIds, query, mediaKindsForQuery(c, query)).slice(0, 40);
+    let matches: readonly MessageRow[] = [];
+    try {
+      matches = await actions.search(roomIds, query, mediaKindsForQuery(c, query));
+    } catch {
+      matches = [];
+    }
     replaceHtml(
       results,
       matches.length === 0
         ? html`<p class="note">${t(c, "surface.search.empty")}</p>`
-        : html`${matches.map(
+        : html`${matches.slice(0, 40).map(
             (entry) => html`<button
               class="search-result"
               type="button"
@@ -906,7 +929,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     }
     if (!(target instanceof HTMLInputElement) || target.id !== "search-field") return;
     const form = target.closest<HTMLFormElement>(".search-form");
-    if (form !== null) search(form);
+    if (form !== null) void search(form);
   }
 
   function onClick(event: MouseEvent): void {
@@ -992,7 +1015,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         for (const option of form.querySelectorAll<HTMLElement>("[data-search-scope-option]")) {
           option.setAttribute("aria-selected", String(option === scopeOption));
         }
-        search(form);
+        void search(form);
       }
       scopeOption.closest<HTMLElement>("[popover]")?.hidePopover();
       return;
@@ -1092,12 +1115,26 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
     const media = target.closest<HTMLElement>("[data-media-open]");
     if (media !== null) {
-      showViewer(
-        media.dataset["mediaOpen"] ?? "",
-        media.dataset["mediaKind"] ?? "file",
-        media.dataset["mediaUrl"] ?? null,
-        c,
-      );
+      const messageId = media.dataset["mediaOpen"] ?? "";
+      const kind = media.dataset["mediaKind"] ?? "file";
+      const targetRoomId = state().roomId;
+      const row = message(messageId);
+      if (targetRoomId === null || row === null || row.media === null) return;
+      const name = row.media.name;
+      if (kind === "file") {
+        event.preventDefault();
+        downloadMedia(targetRoomId, messageId, name);
+        return;
+      }
+      showViewer(name, kind, media.dataset["mediaUrl"] ?? null, c);
+      viewerMessageId = messageId;
+      const previewId = messageId;
+      void actions.resolveMedia(targetRoomId, messageId, "full").then((url) => {
+        if (url === null || viewerMessageId !== previewId || !(viewer instanceof HTMLDialogElement) || !viewer.open) {
+          return;
+        }
+        showViewer(name, kind, url, c);
+      });
       return;
     }
 
@@ -1124,7 +1161,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       hide(SURFACE.profile);
       const existing = state().rooms.find((entry) => entry.directUserId === profileTarget?.userId);
       if (existing !== undefined) actions.selectRoom(existing.roomId);
-      else actions.startDirect(profileTarget.userId);
+      else void actions.startDirect(profileTarget.userId);
       return;
     }
 
@@ -1250,20 +1287,21 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const id = form.dataset["surface"];
     if (id === undefined) return;
     event.preventDefault();
-    if (id === "search") search(form);
+    if (id === "search") void search(form);
     else if (id === "new-message") {
       const input = form.querySelector<HTMLInputElement>("#new-message-field");
       const value = input?.value.trim() ?? "";
       if (input === null || value === "") return;
       input.setCustomValidity("");
-      const result = actions.startDirect(value);
-      if (result === "invalid") {
-        input.setCustomValidity(t(c, "surface.newMessage.invalid"));
-        input.reportValidity();
-        return;
-      }
-      hide(SURFACE.newMessage);
-      queueMicrotask(() => hide(SURFACE.newMessage));
+      void actions.startDirect(value).then((result) => {
+        if (result === "invalid") {
+          input.setCustomValidity(t(c, "surface.newMessage.invalid"));
+          input.reportValidity();
+          return;
+        }
+        hide(SURFACE.newMessage);
+        queueMicrotask(() => hide(SURFACE.newMessage));
+      });
     } else if (id === "reset-identity") {
       if (!capabilities.resetIdentity) return;
       const input = form.querySelector<HTMLInputElement>("#reset-identity-password");
@@ -1279,13 +1317,15 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       const value = input?.value.trim() ?? "";
       if (input === null || value === "") return;
       input.setCustomValidity("");
-      if (actions.joinRoom(value) === "notFound") {
-        input.setCustomValidity(t(c, "surface.join.notFound"));
-        input.reportValidity();
-        return;
-      }
-      hide(SURFACE.join);
-      queueMicrotask(() => hide(SURFACE.join));
+      void actions.joinRoom(value).then((result) => {
+        if (result === "notFound") {
+          input.setCustomValidity(t(c, "surface.join.notFound"));
+          input.reportValidity();
+          return;
+        }
+        hide(SURFACE.join);
+        queueMicrotask(() => hide(SURFACE.join));
+      });
     } else if (id === "room-invite") {
       const input = form.querySelector<HTMLInputElement>("#room-invite-field");
       const value = input?.value.trim() ?? "";
@@ -1333,7 +1373,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       const name = form.querySelector<HTMLInputElement>("#create-name")?.value.trim() ?? "";
       const topic = form.querySelector<HTMLInputElement>("#create-topic")?.value.trim() ?? "";
       if (name === "") return;
-      actions.createRoom(name, topic);
+      void actions.createRoom(name, topic);
       hide(SURFACE.create);
       queueMicrotask(() => hide(SURFACE.create));
     }
@@ -1639,6 +1679,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
   const viewer = document.getElementById(SURFACE.viewer);
   const onViewerClose = (): void => {
+    viewerMessageId = null;
     for (const media of viewer?.querySelectorAll<HTMLMediaElement>("video, audio") ?? []) media.pause();
     const body = viewer?.querySelector<HTMLElement>(`.surface-body`);
     if (body !== null && body !== undefined) body.replaceChildren();

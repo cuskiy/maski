@@ -1,11 +1,31 @@
 /**
  * The worker-owned outbox state machine. A row is written before the request and stays until the
- * remote echo replaces it or the reader discards it. The store is injected so this module is pure
- * enough to test without an SDK or IndexedDB.
+ * remote echo replaces it or the reader discards it. An attachment is uploaded at most once: the
+ * uploaded reference is persisted before the event send, so a retry only repeats the send.
  */
 import type { Media, MessageKind, MessageRow } from "../core/types.ts";
 import { queuedRow } from "../core/message.ts";
+import { isRecord } from "../lib/json.ts";
+import { isMessageRow } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
+import { isMediaReference, type MediaReference } from "./mediaTypes.ts";
+
+export interface OutboxMedia {
+  readonly kind: Media["kind"];
+  readonly name: string;
+  readonly mime: string;
+  readonly width: number | null;
+  readonly height: number | null;
+  readonly size: number;
+  readonly duration: number | null;
+  readonly hash: string;
+  readonly blob: Blob;
+  readonly previewUrl: string | null;
+}
+
+export interface UploadedMedia {
+  readonly source: MediaReference;
+}
 
 export interface OutboxRecord {
   readonly roomId: string;
@@ -14,6 +34,9 @@ export interface OutboxRecord {
   readonly replyTo: string | null;
   readonly row: MessageRow;
   readonly retryable: boolean;
+  /** The sanitized bytes and metadata; the record is the only place they are stored. */
+  readonly media: OutboxMedia | null;
+  readonly uploaded: UploadedMedia | null;
 }
 
 export interface OutboxBackend {
@@ -40,7 +63,7 @@ export interface OutboxInput {
   readonly body: string;
   readonly html: string | null;
   readonly kind: MessageKind;
-  readonly media: Media | null;
+  readonly media: OutboxMedia | null;
   readonly replyTo: string | null;
 }
 
@@ -53,6 +76,8 @@ export interface OutboxOptions {
   readonly backend: OutboxBackend;
   readonly identity: () => OutboxIdentity | null;
   readonly emit: (event: OutboxEvent) => void;
+  /** Uploads the attachment bytes once; the returned reference is persisted before the send. */
+  readonly upload: (record: OutboxRecord) => Promise<UploadedMedia>;
   readonly deliver: (record: OutboxRecord) => Promise<string>;
   readonly now: () => number;
 }
@@ -67,20 +92,73 @@ export interface Outbox {
   rows(roomId: string): Promise<readonly MessageRow[]>;
 }
 
+const ATTACHMENT_KINDS: ReadonlySet<string> = new Set(["image", "video", "audio", "file", "sticker"]);
+const TEXT_KINDS: ReadonlySet<string> = new Set(["text", "notice", "emote"]);
+
+export function isOutboxMedia(value: unknown): value is OutboxMedia {
+  return (
+    isRecord(value) &&
+    typeof value["kind"] === "string" &&
+    ATTACHMENT_KINDS.has(value["kind"]) &&
+    typeof value["name"] === "string" &&
+    typeof value["mime"] === "string" &&
+    (value["width"] === null || typeof value["width"] === "number") &&
+    (value["height"] === null || typeof value["height"] === "number") &&
+    typeof value["size"] === "number" &&
+    (value["duration"] === null || typeof value["duration"] === "number") &&
+    typeof value["hash"] === "string" &&
+    value["blob"] instanceof Blob &&
+    (value["previewUrl"] === null || typeof value["previewUrl"] === "string")
+  );
+}
+
+export function isUploadedMedia(value: unknown): value is UploadedMedia {
+  return isRecord(value) && isMediaReference(value["source"]);
+}
+
+/** Older records predate the media fields; an absent value reads as null. */
+export function isOutboxRecord(value: unknown): value is OutboxRecord {
+  if (!isRecord(value)) return false;
+  const media = value["media"];
+  const uploaded = value["uploaded"];
+  return (
+    typeof value["roomId"] === "string" &&
+    typeof value["transactionId"] === "string" &&
+    typeof value["messageId"] === "string" &&
+    (value["replyTo"] === null || typeof value["replyTo"] === "string") &&
+    isMessageRow(value["row"]) &&
+    typeof value["retryable"] === "boolean" &&
+    (media === null || media === undefined || isOutboxMedia(media)) &&
+    (uploaded === null || uploaded === undefined || isUploadedMedia(uploaded))
+  );
+}
+
 export function createOutbox(options: OutboxOptions): Outbox {
-  const { backend, identity, emit, deliver, now } = options;
+  const { backend, identity, emit, upload, deliver, now } = options;
   const inFlight = new Set<string>();
 
   async function deliverRow(record: OutboxRecord): Promise<void> {
     if (!record.retryable || inFlight.has(record.transactionId)) return;
     inFlight.add(record.transactionId);
-    const sending: MessageRow = { ...record.row, status: "sending", error: null, retryable: true };
-    await backend.put({ ...record, row: sending });
-    emit({ roomId: record.roomId, messageId: record.messageId, row: sending, retryable: true });
     try {
-      const eventId = await deliver(record);
-      const current = await backend.read(record.messageId);
+      let current = await backend.read(record.messageId);
       if (current === null) return;
+      if ((current.media ?? null) !== null && (current.uploaded ?? null) === null) {
+        const sending: MessageRow = { ...current.row, status: "sending", error: null, retryable: true };
+        await backend.put({ ...current, row: sending });
+        emit({ roomId: current.roomId, messageId: current.messageId, row: sending, retryable: true });
+        const uploaded = await upload(current);
+        const afterUpload = await backend.read(record.messageId);
+        if (afterUpload === null) return;
+        current = { ...afterUpload, uploaded };
+        await backend.put(current);
+      }
+      const sending: MessageRow = { ...current.row, status: "sending", error: null, retryable: true };
+      await backend.put({ ...current, row: sending });
+      emit({ roomId: current.roomId, messageId: current.messageId, row: sending, retryable: true });
+      const eventId = await deliver({ ...current, row: sending });
+      const afterSend = await backend.read(record.messageId);
+      if (afterSend === null) return;
       const sent: MessageRow = {
         ...sending,
         eventId,
@@ -88,8 +166,8 @@ export function createOutbox(options: OutboxOptions): Outbox {
         error: null,
         retryable: false,
       };
-      await backend.complete(current, sent);
-      emit({ roomId: record.roomId, messageId: record.messageId, row: sent, retryable: false });
+      await backend.complete(afterSend, sent);
+      emit({ roomId: current.roomId, messageId: current.messageId, row: sent, retryable: false });
     } catch (error) {
       const current = await backend.read(record.messageId);
       if (current === null) return;
@@ -100,7 +178,7 @@ export function createOutbox(options: OutboxOptions): Outbox {
         retryable: true,
       };
       await backend.put({ ...current, row: failed, retryable: true });
-      emit({ roomId: record.roomId, messageId: record.messageId, row: failed, retryable: true });
+      emit({ roomId: current.roomId, messageId: current.messageId, row: failed, retryable: true });
     } finally {
       inFlight.delete(record.transactionId);
     }
@@ -110,8 +188,18 @@ export function createOutbox(options: OutboxOptions): Outbox {
     async queue(input) {
       const account = identity();
       if (account === null) throw new WorkerFailure("not-signed-in");
-      const allowed =
-        input.media === null && (input.kind === "text" || input.kind === "notice" || input.kind === "emote");
+      const allowed = input.media !== null ? ATTACHMENT_KINDS.has(input.media.kind) : TEXT_KINDS.has(input.kind);
+      const media: Media | null =
+        input.media === null
+          ? null
+          : {
+              kind: input.media.kind,
+              name: input.media.name,
+              width: input.media.width,
+              height: input.media.height,
+              size: input.media.size,
+              url: input.media.previewUrl,
+            };
       const row = queuedRow({
         roomId: input.roomId,
         messageId: input.messageId,
@@ -119,7 +207,7 @@ export function createOutbox(options: OutboxOptions): Outbox {
         body: input.body,
         html: input.html,
         kind: input.kind,
-        media: input.media === null ? null : { ...input.media, url: null },
+        media,
         reply: null,
         ownUserId: account.userId,
         ownName: account.displayName,
@@ -135,6 +223,8 @@ export function createOutbox(options: OutboxOptions): Outbox {
         replyTo: input.replyTo,
         row,
         retryable: allowed,
+        media: input.media,
+        uploaded: null,
       };
       await backend.put(record);
       emit({ roomId: input.roomId, messageId: input.messageId, row, retryable: allowed });

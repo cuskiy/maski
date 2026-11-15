@@ -312,7 +312,7 @@ export const zhCN = {
   "message.failed": "未发送",
   "composer.tray": "附件",
   "composer.remove": "移除",
-  "composer.imageFailed": "无法安全处理这张图片。",
+  "composer.mediaFailed": "附件发送失败。",
   "composer.label": "消息",
   "composer.placeholder": "输入消息",
   "composer.placeholderRoom": "发送到 {room}",

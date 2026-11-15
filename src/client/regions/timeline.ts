@@ -155,6 +155,23 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     }
   };
 
+  const requestedMedia = new Set<string>();
+  const requestMedia = (): void => {
+    const state = store.snapshot();
+    const roomId = state.roomId;
+    if (roomId === null || !actions.capabilities.media) return;
+    const rows = new Map(state.messages.map((message) => [message.id, message]));
+    for (const id of visibleMessageIds()) {
+      const media = rows.get(id)?.media ?? null;
+      if (media === null || media.url !== null) continue;
+      if (media.kind !== "image" && media.kind !== "video" && media.kind !== "sticker") continue;
+      const key = `${roomId}\n${id}`;
+      if (requestedMedia.has(key)) continue;
+      requestedMedia.add(key);
+      actions.media(roomId, id, "thumbnail");
+    }
+  };
+
   const updateJump = (): void => {
     const jump = region.querySelector<HTMLButtonElement>(".jump-newest");
     if (jump === null) return;
@@ -303,6 +320,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         room.latestEventId !== null &&
         room.readReceipt !== room.latestEventId;
       readRequest = null;
+      requestedMedia.clear();
       stopSelection();
     }
     if (room !== null && readRequest !== null && room.readReceipt === readRequest) readRequest = null;
@@ -342,6 +360,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     }
     paintSelection();
     updateJump();
+    requestMedia();
   };
 
   const onScroll = (): void => {
@@ -352,6 +371,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       actions.loadOlder();
     }
     updateJump();
+    requestMedia();
   };
 
   const onClick = (event: MouseEvent): void => {

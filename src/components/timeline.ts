@@ -252,27 +252,43 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   if (media === null) return html``;
   const label = t(c, MEDIA_LABELS[media.kind]);
   const mediaUrl = safeMediaUrl(media.url, media.kind);
-  if (media.kind === "sticker" && mediaUrl === null) {
+  const caption =
+    media.kind === "sticker" || message.body === ""
+      ? html``
+      : html`<figcaption class="media-caption" dir="auto">${message.body}</figcaption>`;
+  if (media.kind === "sticker") {
+    const content =
+      mediaUrl === null
+        ? html`<span class="sticker" role="img" aria-label="${media.name}">${message.body}</span>`
+        : html`<img
+            class="media-element"
+            src="${mediaUrl}"
+            alt="${media.name}"
+            data-media-image
+            width="${String(media.width ?? 16)}"
+            height="${String(media.height ?? 16)}"
+            loading="lazy"
+            decoding="async"
+          />`;
     return html`<figure class="message-media is-sticker">
       <div class="media-frame">
-        <span class="sticker" role="img" aria-label="${media.name}">${message.body}</span>
+        ${content}
         <div class="media-footer">${meta}</div>
       </div>
     </figure>`;
   }
   if (media.kind === "video") {
-    const title = message.body === "" ? media.name : message.body;
     return html`<figure class="message-media is-video">
       <div class="media-frame">
         <button
           class="video-preview media-open"
           type="button"
-          data-media-open="${media.name}"
+          data-media-open="${message.id}"
           data-media-kind="video"
           ${mediaUrl === null ? html`` : html` data-media-url="${mediaUrl}"`}
           commandfor="${SURFACE.viewer}"
           command="show-modal"
-          aria-label="${label}: ${title}"
+          aria-label="${label}: ${media.name}"
         >${
           mediaUrl === null
             ? html``
@@ -285,6 +301,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             playsinline
           ></video><span class="video-play" aria-hidden="true">${icons.play}</span>`
         }</button>
+        ${caption}
         <div class="media-footer">${meta}</div>
       </div>
     </figure>`;
@@ -302,7 +319,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
         ? html`<button
             class="attachment media-open"
             type="button"
-            data-media-open="${media.name}"
+            data-media-open="${message.id}"
             data-media-kind="${media.kind}"
             commandfor="${SURFACE.viewer}"
             command="show-modal"
@@ -310,14 +327,16 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             ${details}${meta}
           </button>`
         : html`<a class="attachment" href="${mediaUrl}" download rel="noreferrer">${details}${meta}</a>`;
-    return content;
+    return html`<figure class="message-media is-${media.kind}">
+      ${content}${caption}
+    </figure>`;
   }
   const content =
     mediaUrl === null
       ? html`<button
           class="media-placeholder media-open"
           type="button"
-          data-media-open="${media.name}"
+          data-media-open="${message.id}"
           data-media-kind="${media.kind}"
           commandfor="${SURFACE.viewer}"
           command="show-modal"
@@ -326,11 +345,12 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
       : html`<button
           class="media-open"
           type="button"
-          data-media-open="${media.name}"
+          data-media-open="${message.id}"
           data-media-kind="${media.kind}"
           data-media-url="${mediaUrl}"
           commandfor="${SURFACE.viewer}"
           command="show-modal"
+          aria-label="${label}: ${media.name}"
         >
           <img
             class="media-element"
@@ -345,7 +365,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
         </button>`;
   return html`<figure class="message-media is-${media.kind}">
     <div class="media-frame">
-      ${content}
+      ${content}${caption}
       <div class="media-footer">${meta}</div>
     </div>
   </figure>`;

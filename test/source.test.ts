@@ -3,6 +3,8 @@ import test from "node:test";
 import { createRoom } from "../src/core/rooms.ts";
 import type { RoomSummary } from "../src/core/types.ts";
 import { MockSource } from "../src/client/mockSource.ts";
+import { mockMessagesFor } from "../src/core/mock.ts";
+import type { SourceEvents } from "../src/client/source.ts";
 
 void test("the source owns room state and emits the room projection", () => {
   const source = new MockSource(false);
@@ -21,4 +23,30 @@ void test("the source owns room state and emits the room projection", () => {
 
   source.leaveRoom("!room:matrix.org");
   assert.equal(events[events.length - 1]?.length, 0);
+});
+
+void test("the mock source re-projects message actions as window patches", () => {
+  const source = new MockSource(true);
+  const windows: SourceEvents["window"][] = [];
+  source.on("window", (payload) => windows.push(payload));
+  const row = mockMessagesFor("design").find((message) => message.eventId !== null);
+  assert.ok(row?.eventId);
+
+  source.react("design", row.eventId, "🎉");
+  const reacted = windows.findLast((payload) => payload.patch)?.messages[0];
+  assert.deepEqual(
+    reacted?.reactions.find((entry) => entry.key === "🎉"),
+    { key: "🎉", count: 1, mine: true },
+  );
+
+  source.edit("design", row.eventId, "edited body", null);
+  const edited = windows.findLast((payload) => payload.patch)?.messages[0];
+  assert.equal(edited?.body, "edited body");
+  assert.equal(edited?.edited, true);
+
+  source.redact("design", row.eventId);
+  const redacted = windows.findLast((payload) => payload.patch)?.messages[0];
+  assert.equal(redacted?.redacted, true);
+  assert.equal(redacted?.body, "");
+  assert.deepEqual(redacted?.reactions, []);
 });

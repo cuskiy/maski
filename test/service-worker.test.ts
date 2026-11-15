@@ -16,7 +16,6 @@ const shellAssets = [
   "/assets/guard-abc1234567.js",
   "/assets/prepaint-abc1234567.js",
   "/assets/client-abc1234567.js",
-  "/assets/image-worker-abc1234567.js",
   "/assets/matrix-worker-abc1234567.js",
   "/assets/matrix-sdk-crypto-abc1234567.wasm",
   "/assets/watermark-abc1234567.svg",

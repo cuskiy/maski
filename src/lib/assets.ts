@@ -9,7 +9,6 @@ export interface Assets {
   readonly prepaint: string;
   readonly client: string;
   readonly reviewClient: string;
-  readonly imageWorker: string;
   readonly matrixWorker: string;
   readonly cryptoWasm: string;
 }
@@ -31,8 +30,6 @@ export function isAssets(value: unknown): value is Assets {
     typeof value.client === "string" &&
     "reviewClient" in value &&
     typeof value.reviewClient === "string" &&
-    "imageWorker" in value &&
-    typeof value.imageWorker === "string" &&
     "matrixWorker" in value &&
     typeof value.matrixWorker === "string" &&
     "cryptoWasm" in value &&

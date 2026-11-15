@@ -5,12 +5,11 @@ import type { Catalog } from "../../lib/catalog.ts";
 import { html } from "../../lib/html.ts";
 import { formatBytes } from "../../lib/bytes.ts";
 import { REGION, SURFACE } from "../../core/regions.ts";
-import type { ChatState, Media, Member, MessageRow, ReplyRef } from "../../core/types.ts";
+import type { ChatState, Member, MessageRow, ReplyRef } from "../../core/types.ts";
 import { icons } from "../../components/icons.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
 import { readDraft, saveDraft } from "../uiDb.ts";
-import { sanitizeImage } from "../imagePrivacy.ts";
 import { roomPermissions } from "../../core/permissions.ts";
 import { safeAvatarUrl } from "../../lib/safeUrl.ts";
 import { replaceHtml } from "../dom.ts";
@@ -123,17 +122,6 @@ function fileKind(file: File): TrayKind {
   return "file";
 }
 
-function mediaForFile(file: File, kind: TrayKind): Media {
-  return {
-    kind,
-    name: file.name,
-    width: null,
-    height: null,
-    size: file.size,
-    url: URL.createObjectURL(file),
-  };
-}
-
 function escapeHtmlText(value: string): string {
   return value.replace(/[&<>"']/gu, (character) => {
     switch (character) {
@@ -188,6 +176,9 @@ export class Composer {
   private roomId: string | null;
   private draftRoom: string | null = null;
   private draftTimer: number | null = null;
+  private typingTimer: number | null = null;
+  private typingRoom: string | null = null;
+  private typingActive = false;
   private mentionMenu: HTMLElement | null = null;
   private mentionOptions: readonly Member[] = [];
   private mentionIndex = 0;
@@ -214,7 +205,41 @@ export class Composer {
     this.unsubscribe();
     this.abort.abort();
     this.clearDraftTimer();
+    this.stopTyping();
     this.releasePreviews();
+  }
+
+  private updateTyping(): void {
+    if (!this.actions.capabilities.typing) return;
+    const roomId = this.roomId;
+    const input = this.input;
+    if (roomId === null || input === null || composerText(input).trim() === "") {
+      this.stopTyping();
+      return;
+    }
+    if (this.typingRoom !== roomId) {
+      this.stopTyping();
+      this.typingRoom = roomId;
+    }
+    if (!this.typingActive) {
+      this.actions.typing(roomId, true);
+      this.typingActive = true;
+    }
+    if (this.typingTimer !== null) window.clearTimeout(this.typingTimer);
+    this.typingTimer = window.setTimeout(() => {
+      this.typingTimer = null;
+      this.stopTyping();
+    }, 8_000);
+  }
+
+  private stopTyping(): void {
+    if (this.typingTimer !== null) {
+      window.clearTimeout(this.typingTimer);
+      this.typingTimer = null;
+    }
+    if (this.typingActive && this.typingRoom !== null) this.actions.typing(this.typingRoom, false);
+    this.typingActive = false;
+    this.typingRoom = null;
   }
 
   focus(): void {
@@ -473,6 +498,7 @@ export class Composer {
       () => {
         if (this.input !== null) updateEmptyState(this.input);
         this.refreshMentionMenu();
+        this.updateTyping();
         this.scheduleDraft();
       },
       { signal },
@@ -526,6 +552,7 @@ export class Composer {
       } else {
         this.saveDraft();
       }
+      this.stopTyping();
       this.roomId = state.roomId;
       this.hideMentionMenu();
       this.clearTray();
@@ -588,9 +615,9 @@ export class Composer {
     this.errorRegion.textContent = "";
   }
 
-  private showImageError(): void {
+  private showMediaError(): void {
     if (this.errorRegion === null) return;
-    this.errorRegion.textContent = t(this.c, "composer.imageFailed");
+    this.errorRegion.textContent = t(this.c, "composer.mediaFailed");
     this.errorRegion.hidden = false;
   }
 
@@ -599,19 +626,6 @@ export class Composer {
     if (this.form === null) return;
     if (busy) this.form.setAttribute("aria-busy", "true");
     else this.form.removeAttribute("aria-busy");
-  }
-
-  private async prepareImage(
-    file: File,
-  ): Promise<{ readonly file: File; readonly width: number; readonly height: number; readonly url: string } | null> {
-    try {
-      const sanitized = await sanitizeImage(file);
-      const url = await readFileDataUrl(sanitized.file);
-      if (url === null) return null;
-      return { file: sanitized.file, width: sanitized.width, height: sanitized.height, url };
-    } catch {
-      return null;
-    }
   }
 
   private clearReplyState(): void {
@@ -848,53 +862,34 @@ export class Composer {
     const renderedHtml = text === "" ? null : await this.markdown(mode, text);
     if (this.roomId !== roomId) return;
 
-    const now = Date.now();
-    const rows: MessageRow[] = [];
-    for (const [index, entry] of tray.entries()) {
-      const file = entry.file;
-      if (entry.kind === "image") {
-        const prepared = await this.prepareImage(file);
-        if (prepared === null) {
-          this.showImageError();
-          return;
+    if (tray.length > 0) {
+      // The bytes go to the worker; the queued row arrives through the outbox, not from here.
+      try {
+        for (const [index, entry] of tray.entries()) {
+          await this.actions.sendMedia(
+            roomId,
+            entry.file,
+            entry.kind,
+            index === 0 ? text : "",
+            index === 0 ? renderedHtml : null,
+            index === 0 && reply !== null ? reply.messageId : null,
+          );
+          if (this.roomId !== roomId) return;
         }
-        rows.push(
-          this.actions.createRow(roomId, "", {
-            kind: "image",
-            media: {
-              kind: "image",
-              name: prepared.file.name,
-              width: prepared.width,
-              height: prepared.height,
-              size: prepared.file.size,
-              url: prepared.url,
-            },
-            ts: now + index,
-            status: "sending",
-          }),
-        );
-      } else {
-        rows.push(
-          this.actions.createRow(roomId, "", {
-            kind: entry.kind,
-            media: mediaForFile(file, entry.kind),
-            ts: now + index,
-            status: "sending",
-          }),
-        );
+      } catch {
+        this.showMediaError();
+        return;
       }
+      this.clearComposer();
+      return;
     }
-    if (this.roomId !== roomId) return;
-    if (text !== "") {
-      rows.push(
-        this.actions.createRow(roomId, text, {
-          html: renderedHtml,
-          reply,
-          ts: now + tray.length,
-        }),
-      );
-    }
-    this.actions.appendRows(roomId, rows);
+
+    const row = this.actions.createRow(roomId, text, {
+      html: renderedHtml,
+      reply,
+      ts: Date.now(),
+    });
+    this.actions.appendRows(roomId, [row]);
     this.clearComposer();
   }
 
@@ -909,6 +904,7 @@ export class Composer {
   }
 
   private clearComposer(): void {
+    this.stopTyping();
     const input = this.input;
     if (input !== null) setComposerText(input, "");
     if (this.roomId !== null) saveDraft(this.account, this.roomId, "");
@@ -958,43 +954,12 @@ export class Composer {
     this.setBusy(true);
     this.clearError();
     try {
-      const now = Date.now();
-      const rows: MessageRow[] = [];
-      for (const [index, file] of files.entries()) {
-        if (file.type.startsWith("image/")) {
-          const prepared = await this.prepareImage(file);
-          if (prepared === null) {
-            this.showImageError();
-            return;
-          }
-          rows.push(
-            this.actions.createRow(roomId, "", {
-              kind: "image",
-              media: {
-                kind: "image",
-                name: prepared.file.name,
-                width: prepared.width,
-                height: prepared.height,
-                size: prepared.file.size,
-                url: prepared.url,
-              },
-              ts: now + index,
-              status: "sending",
-            }),
-          );
-        } else {
-          const kind = fileKind(file);
-          rows.push(
-            this.actions.createRow(roomId, "", {
-              kind,
-              media: mediaForFile(file, kind),
-              ts: now + index,
-              status: "sending",
-            }),
-          );
-        }
+      for (const file of files) {
+        await this.actions.sendMedia(roomId, file, fileKind(file), "", null, null);
+        if (this.roomId !== roomId) return;
       }
-      if (rows.length > 0) this.actions.appendRows(roomId, rows);
+    } catch {
+      this.showMediaError();
     } finally {
       this.setBusy(false);
     }
@@ -1040,13 +1005,4 @@ export class Composer {
     }
     return false;
   }
-}
-
-function readFileDataUrl(file: File): Promise<string | null> {
-  const { promise, resolve } = Promise.withResolvers<string | null>();
-  const reader = new FileReader();
-  reader.addEventListener("load", () => resolve(typeof reader.result === "string" ? reader.result : null));
-  reader.addEventListener("error", () => resolve(null));
-  reader.readAsDataURL(file);
-  return promise;
 }

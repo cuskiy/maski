@@ -56,10 +56,13 @@ anchor positioning and `anchor-size()` are recorded from MDN.
 
 | feature | Baseline | Chrome / Firefox / Safari | use |
 |---|---|---|---|
-| dedicated workers | 2015-07 | 4 / 4 / 4 | the Matrix and image workers |
+| dedicated workers | 2015-07 | 4 / 4 / 4 | the Matrix worker |
 | JavaScript modules in workers | 2023-06 | 80 / 114 / 15 | ESM Matrix worker with rust crypto wasm |
 | IndexedDB | 2021-09 | 58 / 51 / 15 | worker-owned account/sync stores and the account-scoped UI draft store |
 | WebAssembly | 2017-03 | 57 / 52 / 11 | `@matrix-org/matrix-sdk-crypto-wasm` |
 | service workers | 2018-04 | 45 / 44 / 11.1 | generated shell worker, `updateViaCache: "none"` |
 | `CacheStorage` / `Cache` | — | 43 / 41 / 11.1 | installed shell precache and navigation revalidation |
 | `StorageManager.persist()` | — | 55 / 57 / 15.2 | post-load persistence request |
+| OffscreenCanvas | 2023-03 | 69 / 105 / 16.4 | worker image re-encode/EXIF strip |
+| `createImageBitmap` | 2023-12 | 59 / 98 / 17.2 | decode and orient untrusted images in the worker |
+| Web Cryptography | 2017-09 | 37 / 34 / 11 | AES-CTR media encryption and SHA-256 hashes |

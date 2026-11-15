@@ -36,27 +36,13 @@ export function decodeRecoveryKey(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(decoded.slice(PREFIX.length, PREFIX.length + KEY_SIZE));
 }
 
-function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
-  let binary: string;
-  try {
-    binary = atob(value);
-  } catch {
-    throw new Error("invalid secret storage salt");
-  }
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
 export interface PassphraseDerivation {
   readonly salt: string;
   readonly iterations: number;
   readonly bits?: number;
 }
 
-/** Derive an SSSS private key from a passphrase using the spec's PBKDF2 parameters. */
+/** Derive an SSSS private key using the spec's PBKDF2-SHA-512 and UTF-8 salt. */
 export async function derivePassphraseKey(
   passphrase: string,
   derivation: PassphraseDerivation,
@@ -67,9 +53,9 @@ export async function derivePassphraseKey(
   const bits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: decodeBase64(derivation.salt),
+      salt: new TextEncoder().encode(derivation.salt),
       iterations: derivation.iterations,
-      hash: "SHA-256",
+      hash: "SHA-512",
     },
     material,
     derivation.bits ?? 256,

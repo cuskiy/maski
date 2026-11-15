@@ -8,9 +8,11 @@ import { isRecord } from "../lib/json.ts";
 import { isMessageRow, isRoomSummary } from "../protocol/index.ts";
 import type { ReadMarker, Segment } from "./projection.ts";
 import { rowCursor } from "./projection.ts";
-import type { OutboxBackend, OutboxRecord } from "./outbox.ts";
+import { isOutboxRecord, type OutboxBackend, type OutboxRecord } from "./outbox.ts";
+import { isMediaCacheRecord, isMediaSource } from "./mediaTypes.ts";
+import type { MediaCacheRecord, MediaCacheUsage, MediaSource } from "./mediaTypes.ts";
 
-const ACCOUNT_DB_VERSION = 1;
+const ACCOUNT_DB_VERSION = 3;
 
 const ACCOUNT_STORES = {
   rooms: "rooms",
@@ -18,12 +20,17 @@ const ACCOUNT_STORES = {
   outbox: "outbox",
   markers: "markers",
   segments: "segments",
+  media: "media",
+  mediaUsage: "mediaUsage",
+  mediaSources: "mediaSources",
 } as const;
 
 const ACCOUNT_INDEXES = {
   eventsRoomTs: "roomTs",
+  eventsRoomEvent: "roomEvent",
   outboxMessage: "messageId",
   outboxRoom: "roomId",
+  mediaUsageLastUsed: "lastUsed",
 } as const;
 
 export interface RoomRecord {
@@ -48,6 +55,12 @@ function openDatabase(userId: string): Promise<IDBDatabase> {
         keyPath: ["roomId", "id"],
       });
       events.createIndex(ACCOUNT_INDEXES.eventsRoomTs, ["roomId", "ts"]);
+      events.createIndex(ACCOUNT_INDEXES.eventsRoomEvent, ["roomId", "eventId"]);
+    } else {
+      const events = request.transaction?.objectStore(ACCOUNT_STORES.events);
+      if (events !== undefined && !events.indexNames.contains(ACCOUNT_INDEXES.eventsRoomEvent)) {
+        events.createIndex(ACCOUNT_INDEXES.eventsRoomEvent, ["roomId", "eventId"]);
+      }
     }
     if (!database.objectStoreNames.contains(ACCOUNT_STORES.outbox)) {
       const outbox = database.createObjectStore(ACCOUNT_STORES.outbox, {
@@ -61,6 +74,18 @@ function openDatabase(userId: string): Promise<IDBDatabase> {
     }
     if (!database.objectStoreNames.contains(ACCOUNT_STORES.segments)) {
       database.createObjectStore(ACCOUNT_STORES.segments, { keyPath: "roomId" });
+    }
+    if (!database.objectStoreNames.contains(ACCOUNT_STORES.media)) {
+      database.createObjectStore(ACCOUNT_STORES.media, { keyPath: "key" });
+    }
+    if (!database.objectStoreNames.contains(ACCOUNT_STORES.mediaUsage)) {
+      const usage = database.createObjectStore(ACCOUNT_STORES.mediaUsage, { keyPath: "key" });
+      usage.createIndex(ACCOUNT_INDEXES.mediaUsageLastUsed, "lastUsed");
+    }
+    if (!database.objectStoreNames.contains(ACCOUNT_STORES.mediaSources)) {
+      database.createObjectStore(ACCOUNT_STORES.mediaSources, {
+        keyPath: ["roomId", "messageId"],
+      });
     }
   };
   request.onsuccess = () => resolve(request.result);
@@ -115,15 +140,12 @@ function isSegment(value: unknown): value is Segment {
   );
 }
 
-function isOutboxRecord(value: unknown): value is OutboxRecord {
+function isMediaUsage(value: unknown): value is MediaCacheUsage {
   return (
     isRecord(value) &&
-    typeof value["roomId"] === "string" &&
-    typeof value["transactionId"] === "string" &&
-    typeof value["messageId"] === "string" &&
-    (value["replyTo"] === null || typeof value["replyTo"] === "string") &&
-    isMessageRow(value["row"]) &&
-    typeof value["retryable"] === "boolean"
+    typeof value["key"] === "string" &&
+    typeof value["size"] === "number" &&
+    typeof value["lastUsed"] === "number"
   );
 }
 
@@ -199,11 +221,20 @@ export class AccountDatabase implements OutboxBackend {
       ACCOUNT_STORES.events,
       ACCOUNT_STORES.markers,
       ACCOUNT_STORES.segments,
+      ACCOUNT_STORES.mediaSources,
     ]);
     const events = transaction.objectStore(ACCOUNT_STORES.events);
+    const sources = transaction.objectStore(ACCOUNT_STORES.mediaSources);
     transaction.objectStore(ACCOUNT_STORES.rooms).delete(roomId);
     transaction.objectStore(ACCOUNT_STORES.markers).delete(roomId);
     transaction.objectStore(ACCOUNT_STORES.segments).delete(roomId);
+    const sourceCursor = sources.openCursor(IDBKeyRange.bound([roomId], [roomId, []]));
+    sourceCursor.onsuccess = () => {
+      const cursor = sourceCursor.result;
+      if (cursor === null) return;
+      cursor.delete();
+      cursor.continue();
+    };
     const request = events
       .index(ACCOUNT_INDEXES.eventsRoomTs)
       .openKeyCursor(eventRange(roomId, 0, Number.MAX_SAFE_INTEGER));
@@ -214,6 +245,14 @@ export class AccountDatabase implements OutboxBackend {
       cursor.continue();
     };
     return finished(transaction);
+  }
+
+  readEvent(roomId: string, eventId: string): Promise<MessageRow | null> {
+    const index = this.database
+      .transaction(ACCOUNT_STORES.events, "readonly")
+      .objectStore(ACCOUNT_STORES.events)
+      .index(ACCOUNT_INDEXES.eventsRoomEvent);
+    return readOne(index.get([roomId, eventId]), isMessageRow);
   }
 
   readEvents(roomId: string): Promise<readonly MessageRow[]> {
@@ -319,6 +358,55 @@ export class AccountDatabase implements OutboxBackend {
     const transaction = writeTransaction(this.database, [ACCOUNT_STORES.segments]);
     transaction.objectStore(ACCOUNT_STORES.segments).put(segment);
     return finished(transaction);
+  }
+
+  // Worker-only media: the source rows keep mxc/keys out of the client projection.
+
+  readMediaSource(roomId: string, messageId: string): Promise<MediaSource | null> {
+    const store = this.database
+      .transaction(ACCOUNT_STORES.mediaSources, "readonly")
+      .objectStore(ACCOUNT_STORES.mediaSources);
+    return readOne(store.get([roomId, messageId]), isMediaSource);
+  }
+
+  writeMediaSource(source: MediaSource): Promise<void> {
+    return this.writeMediaSources([source]);
+  }
+
+  async writeMediaSources(sources: readonly MediaSource[]): Promise<void> {
+    if (sources.length === 0) return;
+    const transaction = writeTransaction(this.database, [ACCOUNT_STORES.mediaSources]);
+    const store = transaction.objectStore(ACCOUNT_STORES.mediaSources);
+    for (const source of sources) store.put(source);
+    await finished(transaction);
+  }
+
+  readMediaCache(key: string): Promise<MediaCacheRecord | null> {
+    const store = this.database.transaction(ACCOUNT_STORES.media, "readonly").objectStore(ACCOUNT_STORES.media);
+    return readOne(store.get(key), isMediaCacheRecord);
+  }
+
+  async writeMediaCache(record: MediaCacheRecord): Promise<void> {
+    const transaction = writeTransaction(this.database, [ACCOUNT_STORES.media, ACCOUNT_STORES.mediaUsage]);
+    transaction.objectStore(ACCOUNT_STORES.media).put(record);
+    transaction
+      .objectStore(ACCOUNT_STORES.mediaUsage)
+      .put({ key: record.key, size: record.size, lastUsed: record.lastUsed });
+    await finished(transaction);
+  }
+
+  async removeMediaCache(key: string): Promise<void> {
+    const transaction = writeTransaction(this.database, [ACCOUNT_STORES.media, ACCOUNT_STORES.mediaUsage]);
+    transaction.objectStore(ACCOUNT_STORES.media).delete(key);
+    transaction.objectStore(ACCOUNT_STORES.mediaUsage).delete(key);
+    await finished(transaction);
+  }
+
+  readMediaUsage(): Promise<readonly MediaCacheUsage[]> {
+    const store = this.database
+      .transaction(ACCOUNT_STORES.mediaUsage, "readonly")
+      .objectStore(ACCOUNT_STORES.mediaUsage);
+    return readMany(store, null, isMediaUsage);
   }
 
   // OutboxBackend

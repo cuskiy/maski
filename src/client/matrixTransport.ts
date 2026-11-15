@@ -1,14 +1,29 @@
-import type { MessageRow, SessionSummary } from "../core/types.ts";
+import type { DeviceSession, MessageKind, MessageRow, RoomStatePatch, SessionSummary } from "../core/types.ts";
 import type {
   CommandMap,
   CommandName,
   Event,
   KeyStatus,
+  MediaReply,
+  MediaVariant,
   ReplyData,
   ReplyEnvelope,
   StartData,
 } from "../protocol/index.ts";
 import { parseEvent, parseReply, REPLY_DATA_GUARDS } from "../protocol/index.ts";
+
+const DEFAULT_TIMEOUT = 30_000;
+const TIMEOUTS: Partial<Record<CommandName, number>> = {
+  login: 60_000,
+  recover: 120_000,
+  resetIdentity: 120_000,
+  createRoom: 60_000,
+  joinRoom: 60_000,
+  leaveRoom: 60_000,
+  // An upload outlives the default; progress keeps the worker busy, not the main thread.
+  sendMedia: 15 * 60_000,
+  media: 180_000,
+};
 
 type Pending = {
   readonly resolve: (reply: ReplyEnvelope) => void;
@@ -104,6 +119,34 @@ export class MatrixTransport {
     return this.request("retrySend", { roomId, messageId });
   }
 
+  sendMedia(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    caption: string,
+    html: string | null,
+    replyTo: string | null,
+    kind: CommandMap["sendMedia"]["kind"],
+    name: string,
+    file: Blob,
+  ): Promise<MessageRow> {
+    return this.request("sendMedia", {
+      roomId,
+      messageId,
+      transactionId,
+      caption,
+      html,
+      replyTo,
+      kind,
+      name,
+      file,
+    });
+  }
+
+  media(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply> {
+    return this.request("media", { roomId, messageId, variant });
+  }
+
   discardSend(roomId: string, messageId: string): void {
     void this.request("discardSend", { roomId, messageId }).catch(() => undefined);
   }
@@ -116,8 +159,80 @@ export class MatrixTransport {
     void this.request("members", { roomId }).catch(() => undefined);
   }
 
+  devices(): Promise<readonly DeviceSession[]> {
+    return this.request("devices", {});
+  }
+
   resetIdentity(password: string): Promise<string | null> {
     return this.request("resetIdentity", { password });
+  }
+
+  react(roomId: string, eventId: string, key: string): Promise<null> {
+    return this.request("react", { roomId, eventId, key });
+  }
+
+  edit(roomId: string, eventId: string, body: string, html: string | null): Promise<null> {
+    return this.request("edit", { roomId, eventId, body, html });
+  }
+
+  redact(roomId: string, eventId: string): Promise<null> {
+    return this.request("redact", { roomId, eventId });
+  }
+
+  typing(roomId: string, typing: boolean): Promise<null> {
+    return this.request("typing", { roomId, typing });
+  }
+
+  search(
+    roomIds: readonly string[],
+    query: string,
+    mediaKinds: readonly MessageKind[],
+    limit: number,
+  ): Promise<readonly MessageRow[]> {
+    return this.request("search", { roomIds, query, mediaKinds, limit });
+  }
+
+  leaveRoom(roomId: string): Promise<null> {
+    return this.request("leaveRoom", { roomId });
+  }
+
+  setRoomTag(roomId: string, tag: CommandMap["setRoomTag"]["tag"], enabled: boolean): Promise<null> {
+    return this.request("setRoomTag", { roomId, tag, enabled });
+  }
+
+  setNotification(roomId: string, mode: CommandMap["setNotification"]["mode"]): Promise<null> {
+    return this.request("setNotification", { roomId, mode });
+  }
+
+  setRoomState(roomId: string, patch: RoomStatePatch): Promise<null> {
+    return this.request("setRoomState", { roomId, patch });
+  }
+
+  inviteUser(roomId: string, userId: string): Promise<null> {
+    return this.request("inviteUser", { roomId, userId });
+  }
+
+  joinRoom(roomIdOrAlias: string): Promise<string> {
+    return this.request("joinRoom", { roomIdOrAlias });
+  }
+
+  answerInvite(roomId: string, accept: boolean): Promise<string | null> {
+    return this.request("answerInvite", { roomId, accept });
+  }
+
+  createRoom(name: string, topic: string, directUserId: string | null): Promise<string> {
+    return this.request("createRoom", { name, topic, directUserId });
+  }
+
+  forward(
+    targetRoomId: string,
+    sources: readonly { readonly roomId: string; readonly eventId: string }[],
+  ): Promise<null> {
+    return this.request("forward", { targetRoomId, sources });
+  }
+
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<null> {
+    return this.request("memberAction", { roomId, userId, action });
   }
 
   dispose(): void {
@@ -137,7 +252,7 @@ export class MatrixTransport {
           this.pending.delete(id);
           this.timers.delete(id);
           reject(new Error("worker timeout"));
-        }, 30_000),
+        }, TIMEOUTS[type] ?? DEFAULT_TIMEOUT),
       );
     });
     this.worker.postMessage({ id, type, payload });

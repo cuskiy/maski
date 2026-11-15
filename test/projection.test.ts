@@ -9,6 +9,7 @@ import {
   projectRoomState,
   readState,
   rowCursor,
+  searchRows,
   WINDOW_LIMIT,
   windowSlice,
   type Segment,
@@ -146,6 +147,66 @@ void test("a timeline reset keeps a readable segment and its rows", () => {
   assert.equal(reset.beforeEventId, "$e10:example.org");
   assert.equal(reset.gapped, true);
   assert.equal(markTimelineReset(null, ROOM).readable, false);
+});
+
+void test("search merges the outbox, drops hidden rows and honours scope and media filters", () => {
+  const rows = events(6);
+  const image: MessageRow = {
+    ...event(100),
+    kind: "image",
+    body: "",
+    media: { kind: "image", name: "layout.png", width: 10, height: 10, size: 100, url: null },
+  };
+  const redacted = { ...event(101), redacted: true };
+  const system = { ...event(102), system: true };
+  const undecryptable: MessageRow = {
+    ...event(103),
+    body: "",
+    encryption: { state: "undecryptable", reason: "missing-key" },
+  };
+  const otherRoom = { ...event(104), roomId: "!other:example.org", body: "hello other" };
+  const selected = [...rows, image, redacted, system, undecryptable];
+
+  const matches = searchRows(selected, [], "hello", [], 40);
+  assert.equal(
+    matches.some((row) => row.redacted || row.system),
+    false,
+  );
+  assert.equal(
+    matches.some((row) => row.encryption.state !== "ok"),
+    false,
+  );
+  assert.equal(matches.length, rows.length);
+
+  const scoped = searchRows(
+    selected.filter((row) => row.roomId === ROOM),
+    [],
+    "hello",
+    [],
+    40,
+  );
+  assert.equal(
+    scoped.some((row) => row.roomId === "!other:example.org"),
+    false,
+  );
+
+  const byKind = searchRows([...selected, otherRoom], [], "image", ["image"], 40);
+  assert.deepEqual(
+    byKind.map((row) => row.id),
+    [image.id],
+  );
+  assert.deepEqual(searchRows(selected, [], "image", ["video"], 40), []);
+
+  const echoed = { ...event(5), body: "hello edited" };
+  const merged = searchRows([event(5)], [echoed], "edited", [], 40);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.body, "hello edited");
+
+  const newest = searchRows(events(10), [], "hello", [], 3);
+  assert.deepEqual(
+    newest.map((row) => row.id),
+    [9, 8, 7].map((index) => `$e${String(index)}:example.org`),
+  );
 });
 
 void test("an echo replaces the queued row by transaction id without duplicating it", () => {

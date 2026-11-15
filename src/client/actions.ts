@@ -16,11 +16,9 @@ import type {
   SectionId,
   SourceCapabilities,
 } from "../core/types.ts";
+import type { CommandMap, MediaVariant } from "../protocol/index.ts";
 import { createRoom, hasTag, roomFromInvite } from "../core/rooms.ts";
-import { messageMatches } from "../core/search.ts";
 import { memberPermissions, messagePermissions, roomPermissions } from "../core/permissions.ts";
-import { toggledReactions } from "../core/reactions.ts";
-import { redactRow } from "../core/message.ts";
 import type { Store } from "./store.ts";
 import * as prefs from "./prefs.ts";
 import { clearSession } from "./session.ts";
@@ -64,16 +62,30 @@ export interface Actions {
   memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
   inviteUser(roomId: string, userId: string): "ok" | "invalid" | "exists";
   loadMembers(roomId: string): void;
-  createRoom(name: string, topic: string): void;
-  joinRoom(value: string): "ok" | "notFound";
-  startDirect(userId: string): "ok" | "invalid" | "exists";
+  typing(roomId: string, typing: boolean): void;
+  createRoom(name: string, topic: string): Promise<void>;
+  joinRoom(value: string): Promise<"ok" | "notFound">;
+  startDirect(userId: string): Promise<"ok" | "invalid" | "exists">;
   setNotification(roomId: string, mode: RoomSummary["notification"]): void;
   setNotificationLevel(level: NotificationLevel): void;
   react(messageId: string, key: string): void;
   edit(messageId: string, body: string, html: string | null): void;
   redact(messageId: string): void;
-  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[];
+  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): Promise<readonly MessageRow[]>;
   forward(messageIds: readonly string[], targetRoomId: string): void;
+  /** Sends one attachment through the worker; no client-side row is created. */
+  sendMedia(
+    roomId: string,
+    file: File,
+    kind: CommandMap["sendMedia"]["kind"],
+    caption: string,
+    html: string | null,
+    replyTo: string | null,
+  ): Promise<void>;
+  /** Fire-and-forget preview resolution; the row is patched when the worker answers. */
+  media(roomId: string, messageId: string, variant: MediaVariant): void;
+  /** Resolves for the viewer or a download and patches the row; null means no URL. */
+  resolveMedia(roomId: string, messageId: string, variant: MediaVariant): Promise<string | null>;
   retryMessage(messageId: string): void;
   discardMessage(messageId: string): void;
   recordEmoji(emoji: string): void;
@@ -106,6 +118,18 @@ function cleanRow(row: MessageRow): MessageRow {
   return row.html === null ? row : { ...row, html: sanitizeMessageHtml(row.html) };
 }
 
+/** The one writer of a resolved media URL on a visible row. */
+function patchMediaUrl(store: Store, roomId: string, messageId: string, url: string | null): void {
+  if (store.read("roomId") !== roomId) return;
+  const messages = store.read("messages");
+  const index = messages.findIndex((message) => message.id === messageId || message.eventId === messageId);
+  const row = messages[index];
+  if (row === undefined || row.media === null || row.media.url === url) return;
+  const next = messages.slice();
+  next[index] = { ...row, media: { ...row.media, url } };
+  store.write("messages", next);
+}
+
 export function createActions({ store, source, c, account }: Context): Actions {
   const userId = (): string | null => store.read("session")?.userId ?? null;
   const caps = source.capabilities;
@@ -125,11 +149,39 @@ export function createActions({ store, source, c, account }: Context): Actions {
     source.members(room.roomId);
   }
 
+  function openCreatedRoom(roomId: string): void {
+    store.batch(() => {
+      store.write("roomId", roomId);
+      store.write("messages", []);
+      store.write("windowLoading", true);
+      store.write("hasOlder", false);
+      store.write("typing", []);
+      store.write("members", []);
+      store.write("membersLoading", true);
+    });
+    setRootView(true);
+    source.open(roomId);
+    source.members(roomId);
+  }
+
   function markRead(roomId: string): void {
     const room = store.read("rooms").find((entry) => entry.roomId === roomId);
     if (room === undefined || room.latestEventId === null) return;
     if (room.readReceipt === room.latestEventId) return;
     source.markRead(roomId, room.latestEventId);
+  }
+
+  /** Replaces only the resolved URL; the row identity and everything else stay put. */
+  async function resolveMedia(roomId: string, messageId: string, variant: MediaVariant): Promise<string | null> {
+    if (source.media === undefined) return null;
+    try {
+      const reply = await source.media(roomId, messageId, variant);
+      patchMediaUrl(store, roomId, messageId, reply.url);
+      return reply.url;
+    } catch {
+      // A typed worker failure leaves the row as a placeholder; the caller shows that state.
+      return null;
+    }
   }
 
   return {
@@ -251,8 +303,21 @@ export function createActions({ store, source, c, account }: Context): Actions {
       });
       source.members(roomId);
     },
-    createRoom(name, topic) {
+    typing(roomId, typing) {
+      if (!caps.typing) return;
+      source.typing?.(roomId, typing);
+    },
+    async createRoom(name, topic) {
       if (!caps.addRoom) return;
+      if (source.createRoom !== undefined) {
+        try {
+          const roomId = await source.createRoom(name, topic, null);
+          openCreatedRoom(roomId);
+        } catch {
+          // The room list stays the server's answer; a failed create adds no local row.
+        }
+        return;
+      }
       const self = userId();
       const roomId = `local-${crypto.randomUUID()}`;
       const room = createRoom({
@@ -265,15 +330,29 @@ export function createActions({ store, source, c, account }: Context): Actions {
       });
       openLocalRoom(room);
     },
-    joinRoom(value) {
+    async joinRoom(value) {
       if (!caps.addRoom) return "notFound";
       const wanted = value.trim();
-      const room = store.read("rooms").find((entry) => entry.roomId === wanted || entry.aliases.includes(wanted));
-      if (room === undefined) return "notFound";
-      this.selectRoom(room.roomId);
+      const known = store.read("rooms").find((entry) => entry.roomId === wanted || entry.aliases.includes(wanted));
+      if (known !== undefined && known.membership === "join") {
+        this.selectRoom(known.roomId);
+        return "ok";
+      }
+      if (source.joinRoom !== undefined) {
+        if (!/^[!#][^:\s]+:[^:\s]+$/u.test(wanted)) return "notFound";
+        try {
+          const roomId = await source.joinRoom(wanted);
+          openCreatedRoom(roomId);
+          return "ok";
+        } catch {
+          return "notFound";
+        }
+      }
+      if (known === undefined) return "notFound";
+      this.selectRoom(known.roomId);
       return "ok";
     },
-    startDirect(targetUserId) {
+    async startDirect(targetUserId) {
       if (!caps.addRoom || !caps.inviteUser) return "invalid";
       if (!/^@[^:\s]+:[^:\s]+$/u.test(targetUserId) || targetUserId === store.read("session")?.userId) {
         return "invalid";
@@ -283,8 +362,17 @@ export function createActions({ store, source, c, account }: Context): Actions {
         this.selectRoom(existing.roomId);
         return "exists";
       }
-      const self = store.read("session")?.userId ?? null;
       const localpart = targetUserId.slice(1).split(":")[0] ?? targetUserId;
+      if (source.createRoom !== undefined) {
+        try {
+          const roomId = await source.createRoom(localpart, t(c, "room.directTopic"), targetUserId);
+          openCreatedRoom(roomId);
+          return "ok";
+        } catch {
+          return "invalid";
+        }
+      }
+      const self = store.read("session")?.userId ?? null;
       const roomId = `local-${crypto.randomUUID()}`;
       const room = createRoom({
         roomId,
@@ -371,75 +459,62 @@ export function createActions({ store, source, c, account }: Context): Actions {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       const room = store.read("rooms").find((entry) => entry.roomId === message?.roomId) ?? null;
       if (message === undefined || !caps.react || !messagePermissions(message, room, userId()).react) return;
-      const updated = { ...message, reactions: toggledReactions(message.reactions, key) };
-      store.write(
-        "messages",
-        store.read("messages").map((entry) => (entry.id === messageId ? updated : entry)),
-      );
-      if (message.eventId !== null) source.react?.(message.roomId, message.eventId, key);
+      if (message.eventId === null) return;
+      source.react?.(message.roomId, message.eventId, key);
     },
     edit(messageId, body, html) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       const room = store.read("rooms").find((entry) => entry.roomId === message?.roomId) ?? null;
       if (message === undefined || !caps.edit || !messagePermissions(message, room, userId()).edit) return;
+      if (message.eventId === null) return;
       const cleanHtml = html === null ? null : sanitizeMessageHtml(html);
-      const updated = { ...message, body, html: cleanHtml, edited: true, status: "sent" as const, error: null };
-      store.write(
-        "messages",
-        store.read("messages").map((entry) => (entry.id === messageId ? updated : entry)),
-      );
-      if (message.eventId !== null) source.edit?.(message.roomId, message.eventId, body, cleanHtml);
+      source.edit?.(message.roomId, message.eventId, body, cleanHtml);
     },
     redact(messageId) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       const room = store.read("rooms").find((entry) => entry.roomId === message?.roomId) ?? null;
       if (message === undefined || !caps.redact || !messagePermissions(message, room, userId()).redact) return;
-      store.write(
-        "messages",
-        store.read("messages").map((entry) => (entry.id === messageId ? redactRow(entry) : entry)),
-      );
-      if (message.eventId !== null) source.redact?.(message.roomId, message.eventId);
+      if (message.eventId === null) return;
+      source.redact?.(message.roomId, message.eventId);
     },
-    search(roomIds, query, mediaKinds) {
-      if (!caps.search) return [];
-      const remote = source.search?.(roomIds, query, mediaKinds) ?? [];
-      const local = store
-        .read("messages")
-        .filter((message) => roomIds.includes(message.roomId) && messageMatches(message, query, mediaKinds));
-      return [...new Map([...remote, ...local].map((message) => [message.id, message])).values()];
+    async search(roomIds, query, mediaKinds) {
+      if (!caps.search || source.search === undefined) return [];
+      return source.search(roomIds, query, mediaKinds);
     },
     forward(messageIds, targetRoomId) {
       if (!caps.forward || messageIds.length === 0) return;
       const target = store.read("rooms").find((entry) => entry.roomId === targetRoomId);
       if (target === undefined) return;
-      const session = store.read("session");
       const wanted = new Set(messageIds);
-      const rows = store
+      const sources = store
         .read("messages")
-        .filter((message) => wanted.has(message.id) && !message.redacted)
-        .map((message) => {
-          const id = `local-forward-${crypto.randomUUID()}`;
-          return Object.assign({}, message, {
-            id,
-            eventId: null,
-            transactionId: `txn-${id}`,
-            roomId: targetRoomId,
-            sender: session?.userId ?? "",
-            senderName: session?.displayName ?? t(c, "chat.you"),
-            senderAvatar: session?.avatar ?? null,
-            own: true,
-            reactions: [],
-            reply: null,
-            mentions: [],
-            edited: false,
-            redacted: false,
-            status: "sending" as const,
-            error: null,
-            retryable: true,
-          });
-        });
-      source.forward?.(targetRoomId, rows);
-      for (const row of rows) void source.send(targetRoomId, row).catch(() => undefined);
+        .filter((message) => wanted.has(message.id) && !message.redacted && message.eventId !== null)
+        .map((message) => ({ roomId: message.roomId, eventId: message.eventId ?? "" }))
+        .filter((entry) => entry.eventId !== "");
+      if (sources.length > 0) source.forward?.(targetRoomId, sources);
+    },
+    async sendMedia(roomId, file, kind, caption, html, replyTo) {
+      if (!caps.media || source.sendMedia === undefined) return;
+      const id = `local-${crypto.randomUUID()}`;
+      await source.sendMedia(
+        roomId,
+        id,
+        `txn-${id}`,
+        caption,
+        html,
+        replyTo,
+        kind,
+        file.name === "" ? kind : file.name,
+        file,
+      );
+    },
+    media(roomId, messageId, variant) {
+      if (!caps.media) return;
+      void resolveMedia(roomId, messageId, variant);
+    },
+    resolveMedia(roomId, messageId, variant) {
+      if (!caps.media) return Promise.resolve(null);
+      return resolveMedia(roomId, messageId, variant);
     },
     retryMessage(messageId) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
@@ -606,7 +681,12 @@ export function wireSources(store: Store, source: ChatSource): () => void {
         store.write("membersLoading", false);
       });
     }),
+    source.on("typing", ({ roomId, userIds }) => {
+      if (roomId !== store.read("roomId")) return;
+      store.write("typing", userIds);
+    }),
     source.on("recoveryKey", (recoveryKey) => store.write("recoveryKey", recoveryKey)),
+    source.on("media", ({ roomId, messageId, url }) => patchMediaUrl(store, roomId, messageId, url)),
     source.on("outbox", ({ roomId, messageId, row }) => {
       if (roomId !== store.read("roomId")) return;
       if (row === null) {

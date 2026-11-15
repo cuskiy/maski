@@ -742,17 +742,23 @@ One dedicated module worker per tab, created when the page needs data.
 - Threads are out of scope in 2.8. The SDK starts with `threadSupport: false`; no thread surface exists,
   and thread notifications must not be claimed. Turning thread support on is a product decision with a
   projection, notification policy and tests.
-- Media upload/download/thumbnail and search live here when implemented. Search must read the account
-  projection, not the current window. Both are absent today and their production controls are hidden
-  (6.4).
+- Media upload/download/thumbnail and search live here. Upload validates magic bytes and MIME, strips
+  image metadata, encrypts with AES-CTR in encrypted rooms, uploads once and sends `m.image/m.file/
+  m.video/m.audio/m.sticker` with txn ids. Download is authenticated, `cache: "no-store"`, hash-verified
+  before decrypt, MIME-allowlisted, cached by content address and exposed only as a `blob:` URL. Search
+  reads the account projection plus outbox, never the current window or server `/search`.
+- The projected `MessageRow` never carries an mxc URI, token, encrypted file key or local file bytes.
+  Worker-only `MediaSource` rows and the media cache live in the account DB; every emitted row is
+  checked by the protocol guard.
 - A worker error marks the connection offline. A bounded restart is not implemented yet; every command
   still has a timeout and must clear its visible wait on failure. There is no main-thread SDK fallback.
 
 ## 3.5 Data
 
-The account database currently stores rooms, events (by room and room+time), read markers, segment tokens
-and the outbox. The session record lives in the separate `maski:matrix` store. Members and media are not
-yet persisted in the projection DB; their worker paths are 6.4 items. The account database is worker-only.
+The account database stores rooms, events (by room and room+time), read markers, segment tokens, outbox,
+worker-only media sources and the verified media cache (blobs, usage/LRU). The session record lives in the
+separate `maski:matrix` store. Members are not persisted in the projection DB. The account database is
+worker-only.
 
 A message row carries identity, room, sender, name, avatar, time, kind, body, HTML, media, reply, edited,
 reactions, mentions, status, failure code, encrypted state and redaction. HTML is stored raw and crosses
@@ -764,13 +770,15 @@ window, because an edit, reaction, or redaction can change an older row without 
 from the oldest stored id through the segment/token chain. A store is never cleared for a room except an
 explicit leave.
 
-The outbox is an ordinary row keyed by transaction id, written before the request. The echo carries the
-same transaction id and replaces it. A failed send keeps the row with a typed code; retry resets; discard
-deletes.
+The outbox is an ordinary row keyed by transaction id, written before the request. For media it carries
+the sanitized Blob and upload metadata; the worker uploads once and persists the worker-only reference
+before sending the event. The echo carries the same transaction id and replaces the row. A failed send
+keeps the row with a typed code; retry repeats only the missing upload or send; discard deletes.
 
 Reactions and replies are projected into the message row when the SDK aggregate provides them; there is no
 second replay store. An annotation counts once per sender per key; `me` is the viewer. Production react,
-edit and redact commands are not wired yet (6.4), so their controls are absent.
+edit and redact commands re-project the target row and emit a patch; the client never toggles the row
+itself.
 
 Read state is one advancing call that moves the public read receipt and `m.fully_read` together. The room
 row stores the marker id so the timeline can draw where reading stopped.
@@ -791,13 +799,32 @@ none is a secret or message history. The split is deliberate: drafts and message
 | `recover` | typed gate | recovery key/passphrase → secret storage → cross-signing signing |
 | `open` | window | stored window first; ingest on miss |
 | `older` | one page | before oldest stored id, segment-aware |
-| `send` | queued row | body, html, reply relation, transaction id, typed kind/media |
+| `send` | queued row | text body, html, reply relation, transaction id; media bytes never use this path |
+| `sendMedia` | queued row | Blob + caption + kind; worker validates/sanitizes/encrypts/upload once |
+| `media` | blob URL | worker-only source → verified, allowlisted blob; `thumbnail`/`full` |
+| `devices` | device rows | read-only device list with verification state; no key material |
 | `retrySend`, `discardSend` | row / empty | worker-owned outbox state |
 | `markRead` | empty | one advancing public marker plus `m.fully_read` |
 | `members` | members event | the SDK member projection |
 | `resetIdentity` | recovery key once | destructive reset; the key is displayed once |
+| `react` | empty | `m.reaction` annotation, or redaction of the viewer's own live reaction |
+| `edit` | empty | `m.new_content` plus `m.relates_to` `m.replace`; the original event id is the target |
+| `redact` | empty | `redactEvent`; the row stays as a redacted tombstone |
+| `typing` | empty | `sendTyping` 30 s on, 0 off; nothing is persisted |
+| `search` | rows | account projection plus outbox, deduped, bounded, one matcher |
+| `leaveRoom` | empty | `leave`; the projection is deleted only after success |
+| `setRoomTag` | empty | `setRoomTag`/`deleteRoomTag` with order 0.5 |
+| `setNotification` | empty | room mute push rule only; `all`/`mentions` are unsupported |
+| `setRoomState` | empty | name/topic/join rule/guest/history/aliases/directory, one field per command |
+| `inviteUser` | empty | `invite` with the SDK permission check |
+| `joinRoom` | room id | `joinRoom` for an id or alias |
+| `answerInvite` | room id or empty | accept joins, decline leaves |
+| `createRoom` | room id | private room or DM, with a merged `m.direct` entry for a DM |
+| `forward` | empty | decrypted content re-sent without relations or mentions |
+| `memberAction` | empty | `kick`/`ban`/`unban` with a worker power-level guard |
 
-Events: `session`, `keys`, `rooms`, `window` (`patch` or page), `members`, `connection`, `outbox`.
+Events: `session`, `keys`, `rooms`, `window` (`patch` or page), `members`, `devices`, `typing`,
+`connection`, `outbox`, `media` (blob URL or revocation).
 Payloads are bounded; a lost event costs one window, not a rebuild. Every inbound command and event
 crosses a parser; a malformed command keeps its valid id and returns `invalid`. A reply that matches no
 pending id is ignored and does not leak.
@@ -912,8 +939,9 @@ notification granularity/batching, generated page structure and locale addresses
 data-free shell, per-paper color roles, grouped avatars and bubble corners, CSS token/selector invariants,
 watermark determinism, protocol parser, source capability parity, projection at 1/30/1,000/10,000 events,
 permissions, URL policy, sanitizer allowlist, outbox state machine, cursor/gap rules, recovery key decode,
-service-worker cache allowlist and the account-scoped UI draft store. Auth error mapping is not complete
-until the remaining `M_*` map exists.
+service-worker cache allowlist, the account-scoped UI draft store, media MIME sniffing, AES-CTR
+encryption/decryption with ciphertext hash verification, upload-once/retry-send outbox state, and the
+no-mxc/no-key media projection. Auth error mapping is not complete until the remaining `M_*` map exists.
 
 Browser surface tests: live chat at 390/856/1280, light/dark, scriptless, RTL, keyboard, reduced motion;
 dialogs and popovers; selection and focus; computed style where appearance is the claim; first-paint
@@ -1207,7 +1235,8 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 - `src/protocol/` - command/reply/event types, failure codes, runtime parsers.
 - `src/worker/` - entry, api, ports, failure, matrix, project, projection, account DB, outbox, recovery,
-  session DB. Only this layer imports the SDK and crypto wasm.
+  media format/crypto/transport/resolver/cache, session DB. Only this layer imports the SDK and crypto
+  wasm.
 - `src/client/` - boot, guard, prepaint, real WorkerSource/MatrixTransport, auth, actions, store, regions,
   surfaces, inert DOM admission, shell registration, UI draft store. Production chat uses the worker.
   `review.ts`/`reviewChat.ts` are a separate review bundle; only that bundle imports `MockSource` and
@@ -1224,19 +1253,36 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 Measured on 2026-11-15 after baseline commit `33ccbb5`. This is the only current-status section;
 counts and claims in `advice.md`, `past/`, browser history and old commits are evidence, not status.
 
-- `npm run check` is green: **149 tests**, 11 generated pages, 317 catalog keys, 2 languages.
-- Build sizes: stylesheet 85.7 KB, client 299.7 KB, matrix worker 1.26 MB, crypto wasm 7.79 MB,
+- `npm run check` is green: **164 tests**, 11 generated pages, 317 catalog keys, 2 languages.
+- Build sizes: stylesheet 85.7 KB, client 302.9 KB, matrix worker 1.30 MB, crypto wasm 7.79 MB,
   watermark 69.9 KB (was 263 KB), generated service worker 2.8 KB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
-  non-retryable failed send.
+  non-retryable failed send. Media tests cover MIME sniffing/scriptable rejection, unencrypted/encrypted/
+  sticker content shapes, AES-CTR round-trip and hash mismatch, thumbnail dimensions, no-mxc projection,
+  object URL revocation and upload-once/retry-send. A real server and browser worker protocol were not run.
+- The production command set includes react (add and own-reaction redaction), edit with `m.new_content`
+  and `m.replace`, redact, typing, worker search, leave, room tag, room mute, room state, invite, join,
+  answer-invite, room/DM create, forward, member actions, `sendMedia`, `media` and read-only `devices`.
+  Pure tests cover protocol shapes, reaction aggregation/removal, edit/redaction projection, search,
+  the mock patch path and the dispatcher.
+- `PRODUCTION_CAPABILITIES` is true for media, search, react, edit, redact, forward, typing, memberAction,
+  inviteUser, addRoom, leaveRoom, setRoomState, setRoomTag, setNotification, answerInvite and resetIdentity.
+  It stays false for stickers, resetRecoveryKey, signOutDevice, signOutOthers and saveNotifications.
+- Media is worker-owned: upload validates/sanitizes/EXIF-strips, encrypts in encrypted rooms, uploads once,
+  sends with a txn id, downloads authenticated with no-store, hash-verifies before decrypt, allowlists MIME,
+  caches by content address and emits only `blob:` URLs. The projection never emits mxc/token/key.
+- Recovery key/passphrase derivation now uses PBKDF2-SHA-512 with a UTF-8 salt, validates the candidate
+  against `secretStorage.checkKey`, and refuses to create a new cross-signing identity during recovery.
+  The device list is read-only; SAS, sign-out and backup setup are still absent.
 - The shell service worker is written at `/service-worker.js` with the hashed manifest inlined: install
   precaches the 11 generated pages and 9 shell assets, navigation is cache-first with background
   revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache. A real
   offline reload was not run.
-- Chromium surface evidence: a cached-gate chat reaches `/en/key/`; the key page has one recovery form and
-  no fake SAS/reset dialog; production attach/search/settings controls are absent/hidden. This was a
-  headless check with a synthetic session, not a real account.
+- Chromium evidence: `/review/` loaded with no console errors and the composer rendered; an earlier
+  production check reached `/en/key/` with one recovery form and no fake SAS/reset dialog. Media upload,
+  worker search, actions, room management, device list and the encrypted media path were **not** exercised
+  in a browser or against a real account. The earlier production check used a synthetic session.
 - CSS: `no-descending-specificity` is enabled. The reorder preserved the declaration multiset, but a
   computed-style before/after comparison and screenshot pair were not run; do not claim visual equivalence.
 - `git` is clean at the baseline. The commit was not pushed: `git push origin main` failed with
@@ -1254,13 +1300,13 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
 1. **Key gate is incomplete.**
    - Symptom: a new device that cannot use recovery has no second path; a real recovery has not been
      proven against a homeserver.
-   - Known: recovery key/passphrase → secret storage → cross-signing signing exists in the worker; the
-     key page has one recovery form; the gate redirect is wired; SAS, device list, backup and reset-key
-     display are absent.
-   - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, and treating the cached gate hint as
-     authority. All were deleted.
-   - Next: run recovery against a real server; then add SAS, device list, backup and reset-key display with
-     typed failures and a browser run. Do not re-add a gate that cannot decide.
+   - Known: recovery key/passphrase validates the candidate against secret storage, uses PBKDF2-SHA-512,
+     imports cross-signing and signs this device; the device list is read-only and the gate redirect is
+     wired. SAS, sign-out one/others, backup setup and reset-key display are absent.
+   - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, a wrong KDF and treating the cached
+     gate hint as authority. All were deleted or corrected.
+   - Next: run recovery against a real server; then add SAS, device sign-out with UIA, backup state/setup
+     and reset-key display with typed failures and a browser run. Do not re-add a gate that cannot decide.
 
 2. **Registration and SSO are unavailable.**
    - Symptom: `/register/` says registration is unavailable; SSO says it is unavailable.
@@ -1278,30 +1324,31 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Next: map the remaining `M_*` codes, implement `/login` flow discovery, and serialize
      start/login/logout with a queue that has one outcome per command.
 
-4. **Media is absent.**
-   - Symptom: attach/paste/sticker controls are hidden; sending a media row ends as a failed outbox row.
-   - Known: the outbox stores and emits the failure, retry is disabled for unsupported media, discard works;
-     no `mxc://` enters the DOM.
-   - Ruled out: main-thread blob URLs, a media fallback outside the worker, and an optimistic media row.
-   - Next: worker upload with EXIF strip, authenticated download/thumbnail, content-addressed cache,
-     MIME/size limits, blob URLs and a protocol parser; enable composer media only after that.
+4. **Media has bounded residual gaps.**
+   - Symptom: sticker sending is hidden; encrypted video/audio/file thumbnails show a placeholder; video/
+     audio uploads carry no duration or dimensions; and no media path has run against a real server.
+   - Known: unencrypted image/file/video/audio upload and download, encrypted image/file/video/audio full
+     download, AES-CTR v2, ciphertext hash verification, content-addressed LRU cache, object URL
+     revocation, MIME allowlist, EXIF stripping and upload-once/retry-send are implemented and pure-tested.
+   - Ruled out: sending raw mxc/token/key across the port, main-thread upload/EXIF ownership, an optimistic
+     media row, SVG/HTML/scriptable blobs, and a second media cache.
+   - Next: add encrypted thumbnail generation (or a local downscale path), probe media dimensions/duration,
+     enable sticker sending only with an image-backed picker, and exercise encrypted/unencrypted upload,
+     download, cancel and real-server thumbnails in Chromium.
 
-5. **Search is absent.**
-   - Symptom: search controls are hidden in production.
-   - Known: the account projection has the events, indexes and cursor needed for a worker query.
-   - Ruled out: searching only the rendered window or the review fixture.
-   - Next: add `search` with body/sender/filename/media-kind matching, stable results across timeline
-     changes, and a surface that demonstrates the result.
+5. **Invites, spaces and global notifications remain partial.**
+   - Symptom: the invite inbox is empty in production, a space cannot be created and the global
+     notification level is local only.
+   - Known: room settings, member moderation, invites sent, join/leave, DM creation (`m.direct`), tags,
+     mute push rules and local search are worker commands; `answerInvite` joins or leaves but no invites
+     projection feeds the inbox; space creation and `SpaceChild` are absent; `saveNotifications` is false.
+   - Ruled out: enabling a no-op control, a fake notification mapping for `all`/`mentions`, or keeping a
+     mock response in the production source.
+   - Next: project membership invites into `invites`, add space creation with `SpaceChild`, and implement
+     the notification preferences the product actually stores; each needs a record, command, projection
+     and test before its control returns.
 
-6. **Settings, invites, spaces and notifications remain mock-only.**
-   - Symptom: their controls are absent or inert in production.
-   - Known: the review fixture still shows the full surface; capabilities hide the unimplemented production
-     paths.
-   - Ruled out: enabling a no-op control or keeping a mock response in the production source.
-   - Next: each feature gets a `types.ts` record, a protocol command, a worker handler, a projection and a
-     test before its control returns; otherwise keep it absent.
-
-7. **CSP is broad.**
+6. **CSP is broad.**
    - Symptom: `connect-src https: wss:` permits every origin.
    - Known: the exact allowlist is the shell origin, the chosen homeserver origin and its websocket origin;
      the response-header builder and service worker must consume the same policy.
@@ -1309,14 +1356,14 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Next: the user decides the arbitrary-homeserver policy in 2.10; then generate the exact response header
      and add a negative test.
 
-8. **Review surfaces still replace whole bodies.**
+7. **Review surfaces still replace whole bodies.**
    - Symptom: a surface update can lose focus, caret, selection or scroll.
    - Known: `replaceHtml` uses an inert DOMParser path, not `innerHTML`; production hides the unfinished
      surfaces, but the review fixture still reparses bodies.
    - Ruled out: accepting whole-body replacement as reconciliation.
    - Next: field-level patches for each surface, with a browser test that preserves focus/caret/scroll.
 
-9. **Browser evidence is incomplete.**
+8. **Browser evidence is incomplete.**
    - Symptom: there is no committed worker harness, no first-paint screenshot pair at 390/856/1280 in both
      schemes and no two-tab lock test.
    - Known: pure tests cover projection/outbox/capability/cache rules; Chromium headless checked the gate
@@ -1339,16 +1386,19 @@ Do not pull a later UI surface forward to make the product look complete.
    before-cursor pages, reset gaps, and pure tests at 1/30/1,000/10,000 events.
 4. **Worker-owned outbox.** Done: queued row before request, status, retry/discard, echo replacement and
    typed failures. The client has no optimistic row writer.
-5. **Finish the key gate.** Run recovery against a real server; add SAS, backup, reset-key display and the
-   device list. Do not re-add a fake gate or a local unlock flag.
-6. **Media in the worker.** Upload with EXIF strip, authenticated download/thumbnail, content-addressed
-   cache, MIME/size limits, blob URLs. Enable composer media only after the command, projection and test.
-7. **Search in the worker.** Account projection query, media/file filters, stable results across timeline
-   changes. No search of the current window only.
+5. **Finish the key gate.** Run recovery against a real server; add SAS, device sign-out with UIA, backup
+   state/setup and reset-key display. The read-only device list is done. Do not re-add a fake gate or a
+   local unlock flag.
+6. **Finish media residuals.** Encrypted thumbnail strategy, media dimensions/duration, image-backed
+   sticker sending, cancel/progress, and real-server encrypted/unencrypted upload/download/thumbnail.
+7. **Search in the worker.** Done: `search` reads the account projection plus the outbox, dedupes, filters
+   redacted/system/undecryptable rows and uses one matcher. No search of the current window only.
 8. **Auth lifecycle and registration.** Typed `M_*` mapping, `/login` flow discovery, serialized
    start/login/logout, then registration with interactive auth and the SSO callback.
-9. **Settings/invites/spaces/notifications.** Only after each has a record in `types.ts`, a command, a
-   projection and a test. Delete mock-only surfaces until then.
+9. **Settings/invites/spaces/notifications.** Done for room settings, member moderation, send-invite,
+   join/leave, DM creation, tags, room mute and local search. Remaining: an invites projection, space
+   creation with `SpaceChild`, and global notification prefs. Only after each has a record in `types.ts`,
+   a command, a projection and a test; delete mock-only surfaces until then.
 10. **CSP and field-level surfaces.** The user chooses the arbitrary-homeserver policy in 2.10; generate
     the exact response header and replace whole-body surface replacement with field-level patches.
 11. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,

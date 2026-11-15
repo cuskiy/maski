@@ -951,7 +951,7 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
         dataName: "room-join",
         layout: "inline",
         disabled: !permissions.access,
-        options: (["public", "invite", "knock", "restricted", "knock_restricted"] as const).map((value) => ({
+        options: (["public", "invite", "knock", "restricted"] as const).map((value) => ({
           value,
           label: t(c, JOIN_RULE_KEYS[value]),
         })),
@@ -1031,10 +1031,9 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
         dataName: "room-notifications",
         layout: "inline",
         disabled: !permissions.notifications,
+        // Only default and mute are room push-rule states; all/mentions have no per-room rule here.
         options: [
           { value: "default", label: t(c, "roomSettings.followGlobal") },
-          { value: "all", label: t(c, "roomSettings.allMessages") },
-          { value: "mentions", label: t(c, "roomSettings.mentions") },
           { value: "mute", label: t(c, "roomSettings.mute") },
         ],
       })}

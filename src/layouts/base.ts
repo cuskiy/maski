@@ -34,7 +34,6 @@ export function base(input: BaseInput): Html {
         <meta http-equiv="Content-Security-Policy" content="${csp}" />
         <meta name="referrer" content="no-referrer" />
         <meta http-equiv="x-dns-prefetch-control" content="off" />
-        <meta name="image-worker" content="${input.assets.imageWorker}" />
         <meta name="matrix-worker" content="${input.assets.matrixWorker}" />
         <meta name="crypto-wasm" content="${input.assets.cryptoWasm}" />
         <meta name="service-worker" content="${SERVICE_WORKER_PATH}" />

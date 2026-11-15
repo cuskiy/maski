@@ -1,5 +1,6 @@
 import type {
   Connection,
+  DeviceSession,
   GuestAccess,
   KeyGate,
   Media,
@@ -17,6 +18,7 @@ import type {
   RoomEncryption,
   RoomHistoryVisibility,
   RoomJoinRule,
+  RoomStatePatch,
   RoomSummary,
   RoomTag,
   SessionSummary,
@@ -39,10 +41,48 @@ export type CommandName =
   | "discardSend"
   | "markRead"
   | "members"
-  | "resetIdentity";
+  | "devices"
+  | "resetIdentity"
+  | "react"
+  | "edit"
+  | "redact"
+  | "typing"
+  | "search"
+  | "leaveRoom"
+  | "setRoomTag"
+  | "setNotification"
+  | "setRoomState"
+  | "inviteUser"
+  | "joinRoom"
+  | "answerInvite"
+  | "createRoom"
+  | "forward"
+  | "memberAction"
+  | "sendMedia"
+  | "media";
 export type KeyStatus = KeyGate;
 export type FailureCode =
-  "invalid" | "unknown-command" | "unavailable" | "auth" | "network" | "locked" | "not-signed-in";
+  | "invalid"
+  | "unknown-command"
+  | "unavailable"
+  | "auth"
+  | "network"
+  | "locked"
+  | "not-signed-in"
+  | "too-large"
+  | "unsupported"
+  | "corrupt";
+
+/** `thumbnail` feeds a row preview; `full` feeds the viewer and a file download. */
+export type MediaVariant = "thumbnail" | "full";
+
+/** The only media shape the main thread may receive: a worker-minted object URL and safe MIME. */
+export interface MediaReply {
+  readonly url: string;
+  readonly mime: string;
+  readonly width: number | null;
+  readonly height: number | null;
+}
 
 export interface CommandMap {
   readonly start: { readonly wasmUrl: string };
@@ -70,7 +110,68 @@ export interface CommandMap {
   readonly discardSend: { readonly roomId: string; readonly messageId: string };
   readonly markRead: { readonly roomId: string; readonly eventId: string };
   readonly members: { readonly roomId: string };
+  readonly devices: Record<string, never>;
   readonly resetIdentity: { readonly password: string };
+  readonly react: { readonly roomId: string; readonly eventId: string; readonly key: string };
+  readonly edit: {
+    readonly roomId: string;
+    readonly eventId: string;
+    readonly body: string;
+    readonly html: string | null;
+  };
+  readonly redact: { readonly roomId: string; readonly eventId: string };
+  readonly typing: { readonly roomId: string; readonly typing: boolean };
+  readonly search: {
+    readonly roomIds: readonly string[];
+    readonly query: string;
+    readonly mediaKinds: readonly MessageKind[];
+    readonly limit: number;
+  };
+  readonly leaveRoom: { readonly roomId: string };
+  readonly setRoomTag: {
+    readonly roomId: string;
+    readonly tag: "m.favourite" | "m.lowpriority";
+    readonly enabled: boolean;
+  };
+  readonly setNotification: {
+    readonly roomId: string;
+    readonly mode: NotificationLevel | "default";
+  };
+  readonly setRoomState: { readonly roomId: string; readonly patch: RoomStatePatch };
+  readonly inviteUser: { readonly roomId: string; readonly userId: string };
+  readonly joinRoom: { readonly roomIdOrAlias: string };
+  readonly answerInvite: { readonly roomId: string; readonly accept: boolean };
+  readonly createRoom: {
+    readonly name: string;
+    readonly topic: string;
+    readonly directUserId: string | null;
+  };
+  readonly forward: {
+    readonly targetRoomId: string;
+    readonly sources: readonly { readonly roomId: string; readonly eventId: string }[];
+  };
+  readonly memberAction: {
+    readonly roomId: string;
+    readonly userId: string;
+    readonly action: "kick" | "ban" | "unban";
+  };
+  /** The bytes stay a `Blob`; the worker validates, strips, encrypts and uploads them. */
+  readonly sendMedia: {
+    readonly roomId: string;
+    readonly messageId: string;
+    readonly transactionId: string;
+    readonly caption: string;
+    readonly html: string | null;
+    readonly replyTo: string | null;
+    readonly kind: "image" | "video" | "audio" | "file" | "sticker";
+    readonly name: string;
+    readonly file: Blob;
+  };
+  readonly media: {
+    readonly roomId: string;
+    readonly messageId: string;
+    readonly variant: MediaVariant;
+  };
 }
 
 export interface StartData {
@@ -92,7 +193,25 @@ export interface ReplyData {
   readonly discardSend: null;
   readonly markRead: null;
   readonly members: null;
+  readonly devices: readonly DeviceSession[];
   readonly resetIdentity: string | null;
+  readonly react: null;
+  readonly edit: null;
+  readonly redact: null;
+  readonly typing: null;
+  readonly search: readonly MessageRow[];
+  readonly leaveRoom: null;
+  readonly setRoomTag: null;
+  readonly setNotification: null;
+  readonly setRoomState: null;
+  readonly inviteUser: null;
+  readonly joinRoom: string;
+  readonly answerInvite: string | null;
+  readonly createRoom: string;
+  readonly forward: null;
+  readonly memberAction: null;
+  readonly sendMedia: MessageRow;
+  readonly media: MediaReply;
 }
 
 export interface EventMap {
@@ -109,6 +228,9 @@ export interface EventMap {
     readonly patch: boolean;
   };
   readonly members: { readonly roomId: string; readonly members: readonly Member[] };
+  readonly devices: readonly DeviceSession[];
+  /** An ephemeral typing event replaces the whole user list; it is never stored. */
+  readonly typing: { readonly roomId: string; readonly userIds: readonly string[] };
   readonly connection: Connection;
   readonly outbox: {
     readonly roomId: string;
@@ -116,6 +238,13 @@ export interface EventMap {
     /** The queued row and each later status; null removes the row after discard. */
     readonly row: MessageRow | null;
     readonly retryable: boolean;
+  };
+  /** Null means a worker-minted object URL was revoked and the row must resolve again. */
+  readonly media: {
+    readonly roomId: string;
+    readonly messageId: string;
+    readonly variant: MediaVariant;
+    readonly url: string | null;
   };
 }
 
@@ -151,7 +280,25 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "discardSend",
   "markRead",
   "members",
+  "devices",
   "resetIdentity",
+  "react",
+  "edit",
+  "redact",
+  "typing",
+  "search",
+  "leaveRoom",
+  "setRoomTag",
+  "setNotification",
+  "setRoomState",
+  "inviteUser",
+  "joinRoom",
+  "answerInvite",
+  "createRoom",
+  "forward",
+  "memberAction",
+  "sendMedia",
+  "media",
 ]);
 
 const FAILURE_CODES: ReadonlySet<string> = new Set<FailureCode>([
@@ -162,6 +309,9 @@ const FAILURE_CODES: ReadonlySet<string> = new Set<FailureCode>([
   "network",
   "locked",
   "not-signed-in",
+  "too-large",
+  "unsupported",
+  "corrupt",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
@@ -170,9 +320,16 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
   "rooms",
   "window",
   "members",
+  "devices",
+  "typing",
   "connection",
   "outbox",
+  "media",
 ]);
+
+const ATTACHMENT_KINDS: ReadonlySet<string> = new Set(["image", "video", "audio", "file", "sticker"]);
+
+const MEDIA_VARIANTS: ReadonlySet<string> = new Set(["thumbnail", "full"]);
 
 const MESSAGE_KINDS: ReadonlySet<string> = new Set<MessageKind>([
   "text",
@@ -254,6 +411,37 @@ function isArrayOf<T>(value: unknown, guard: (item: unknown) => item is T): valu
 
 function isInSet<T>(value: unknown, allowed: ReadonlySet<string>): value is T {
   return typeof value === "string" && allowed.has(value);
+}
+
+function isAttachmentKind(value: unknown): value is CommandMap["sendMedia"]["kind"] {
+  return isInSet<CommandMap["sendMedia"]["kind"]>(value, ATTACHMENT_KINDS);
+}
+
+function isMediaVariant(value: unknown): value is MediaVariant {
+  return isInSet<MediaVariant>(value, MEDIA_VARIANTS);
+}
+
+/** The main thread only ever receives a worker-minted object URL for media. */
+function isMediaReply(value: unknown): value is MediaReply {
+  return (
+    isRecord(value) &&
+    isString(value["url"]) &&
+    value["url"].startsWith("blob:") &&
+    isString(value["mime"]) &&
+    value["mime"].includes("/") &&
+    isNumberOrNull(value["width"]) &&
+    isNumberOrNull(value["height"])
+  );
+}
+
+function isMediaPayload(value: unknown): value is EventMap["media"] {
+  return (
+    isRecord(value) &&
+    isRoomId(value["roomId"]) &&
+    isString(value["messageId"]) &&
+    isMediaVariant(value["variant"]) &&
+    (value["url"] === null || (isString(value["url"]) && value["url"].startsWith("blob:")))
+  );
 }
 
 function assertNever(value: never): never {
@@ -466,6 +654,10 @@ export function isMessageRow(value: unknown): value is MessageRow {
   );
 }
 
+function isMessageRows(value: unknown): value is readonly MessageRow[] {
+  return isArrayOf(value, isMessageRow);
+}
+
 function isMember(value: unknown): value is Member {
   return (
     isRecord(value) &&
@@ -475,6 +667,25 @@ function isMember(value: unknown): value is Member {
     isBoolean(value["profile"]) &&
     isMembership(value["membership"])
   );
+}
+
+function isDeviceSession(value: unknown): value is DeviceSession {
+  if (!isRecord(value)) return false;
+  const capabilities = value["capabilities"];
+  return (
+    isString(value["id"]) &&
+    isText(value["name"]) &&
+    isText(value["lastSeen"]) &&
+    isBoolean(value["verified"]) &&
+    isBoolean(value["current"]) &&
+    isRecord(capabilities) &&
+    isBoolean(capabilities["verify"]) &&
+    isBoolean(capabilities["signOut"])
+  );
+}
+
+function isDevicesPayload(value: unknown): value is EventMap["devices"] {
+  return isArrayOf(value, isDeviceSession);
 }
 
 function isRoomsPayload(value: unknown): value is EventMap["rooms"] {
@@ -494,6 +705,67 @@ function isWindowPayload(value: unknown): value is EventMap["window"] {
 
 function isMembersPayload(value: unknown): value is EventMap["members"] {
   return isRecord(value) && isString(value["roomId"]) && isArrayOf(value["members"], isMember);
+}
+
+function isTypingPayload(value: unknown): value is EventMap["typing"] {
+  return isRecord(value) && isString(value["roomId"]) && isArrayOf(value["userIds"], isString);
+}
+
+const ROOM_TAGS: ReadonlySet<string> = new Set(["m.favourite", "m.lowpriority"]);
+
+const NOTIFICATION_MODES: ReadonlySet<string> = new Set(["default", "all", "mentions", "mute"]);
+
+const MEMBER_ACTIONS: ReadonlySet<string> = new Set(["kick", "ban", "unban"]);
+
+function isRoomTagName(value: unknown): value is CommandMap["setRoomTag"]["tag"] {
+  return isInSet<CommandMap["setRoomTag"]["tag"]>(value, ROOM_TAGS);
+}
+
+function isNotificationMode(value: unknown): value is CommandMap["setNotification"]["mode"] {
+  return isInSet<CommandMap["setNotification"]["mode"]>(value, NOTIFICATION_MODES);
+}
+
+function isMemberAction(value: unknown): value is CommandMap["memberAction"]["action"] {
+  return isInSet<CommandMap["memberAction"]["action"]>(value, MEMBER_ACTIONS);
+}
+
+function isForwardSource(value: unknown): value is CommandMap["forward"]["sources"][number] {
+  return isRecord(value) && isRoomId(value["roomId"]) && isString(value["eventId"]);
+}
+
+function isRoomStatePatch(value: unknown): value is RoomStatePatch {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length === 0) return false;
+  for (const key of keys) {
+    const entry = value[key];
+    if (key === "name" || key === "topic") {
+      if (!isText(entry) || entry.length > (key === "name" ? 255 : 1024)) return false;
+      continue;
+    }
+    if (key === "aliases") {
+      if (!isArrayOf(entry, isAlias)) return false;
+      continue;
+    }
+    if (key === "joinRule") {
+      if (!isJoinRule(entry)) return false;
+      continue;
+    }
+    if (key === "guestAccess") {
+      if (!isGuestAccess(entry)) return false;
+      continue;
+    }
+    if (key === "historyVisibility") {
+      if (!isHistoryVisibility(entry)) return false;
+      continue;
+    }
+    if (key === "directoryPublished") {
+      if (!isBoolean(entry)) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
 }
 
 function isOutboxPayload(value: unknown): value is EventMap["outbox"] {
@@ -522,7 +794,25 @@ export const REPLY_DATA_GUARDS: {
   discardSend: isNull,
   markRead: isNull,
   members: isNull,
+  devices: isDevicesPayload,
   resetIdentity: isStringOrNull,
+  react: isNull,
+  edit: isNull,
+  redact: isNull,
+  typing: isNull,
+  search: isMessageRows,
+  leaveRoom: isNull,
+  setRoomTag: isNull,
+  setNotification: isNull,
+  setRoomState: isNull,
+  inviteUser: isNull,
+  joinRoom: isString,
+  answerInvite: isStringOrNull,
+  createRoom: isString,
+  forward: isNull,
+  memberAction: isNull,
+  sendMedia: isMessageRow,
+  media: isMediaReply,
 };
 
 export function parseReply(value: unknown): ReplyEnvelope | null {
@@ -556,10 +846,16 @@ export function parseEvent(value: unknown): Event | null {
       return isWindowPayload(payload) ? { type, payload } : null;
     case "members":
       return isMembersPayload(payload) ? { type, payload } : null;
+    case "devices":
+      return isDevicesPayload(payload) ? { type, payload } : null;
+    case "typing":
+      return isTypingPayload(payload) ? { type, payload } : null;
     case "connection":
       return isConnection(payload) ? { type, payload } : null;
     case "outbox":
       return isOutboxPayload(payload) ? { type, payload } : null;
+    case "media":
+      return isMediaPayload(payload) ? { type, payload } : null;
     default:
       return assertNever(type);
   }
@@ -624,6 +920,171 @@ function validMarkRead(fields: Record<string, unknown>): fields is CommandMap["m
   return isRoomId(fields["roomId"]) && isString(fields["eventId"]);
 }
 
+function isEventId(value: unknown): value is string {
+  return isString(value) && value.length <= 255;
+}
+
+function isUserId(value: unknown): value is string {
+  return isString(value) && value.startsWith("@") && value.includes(":") && value.length <= 255;
+}
+
+function isRoomIdOrAlias(value: unknown): value is string {
+  return (
+    isString(value) && value.length <= 255 && (value.startsWith("!") || value.startsWith("#")) && value.includes(":")
+  );
+}
+
+function isAlias(value: unknown): value is string {
+  return isString(value) && value.startsWith("#") && value.includes(":") && value.length <= 255;
+}
+
+function validReact(fields: Record<string, unknown>): fields is CommandMap["react"] {
+  return (
+    isRoomId(fields["roomId"]) && isEventId(fields["eventId"]) && isString(fields["key"]) && fields["key"].length <= 256
+  );
+}
+
+function validEdit(fields: Record<string, unknown>): fields is CommandMap["edit"] {
+  const html = fields["html"];
+  return (
+    isRoomId(fields["roomId"]) &&
+    isEventId(fields["eventId"]) &&
+    isText(fields["body"]) &&
+    fields["body"].length <= 65536 &&
+    (html === null || (isString(html) && html.length <= 65536))
+  );
+}
+
+function validRedact(fields: Record<string, unknown>): fields is CommandMap["redact"] {
+  return isRoomId(fields["roomId"]) && isEventId(fields["eventId"]);
+}
+
+function validTyping(fields: Record<string, unknown>): fields is CommandMap["typing"] {
+  return isRoomId(fields["roomId"]) && isBoolean(fields["typing"]);
+}
+
+const SEARCH_LIMIT = 100;
+
+function validSearch(fields: Record<string, unknown>): fields is CommandMap["search"] {
+  const roomIds = fields["roomIds"];
+  const mediaKinds = fields["mediaKinds"];
+  const limit = fields["limit"];
+  return (
+    isArrayOf(roomIds, isRoomId) &&
+    roomIds.length > 0 &&
+    roomIds.length <= SEARCH_LIMIT &&
+    isText(fields["query"]) &&
+    fields["query"].length <= 512 &&
+    isArrayOf(mediaKinds, isMessageKind) &&
+    isNumber(limit) &&
+    Number.isSafeInteger(limit) &&
+    limit >= 1 &&
+    limit <= SEARCH_LIMIT
+  );
+}
+
+function validSetRoomTag(fields: Record<string, unknown>): fields is CommandMap["setRoomTag"] {
+  return isRoomId(fields["roomId"]) && isRoomTagName(fields["tag"]) && isBoolean(fields["enabled"]);
+}
+
+function validSetNotification(fields: Record<string, unknown>): fields is CommandMap["setNotification"] {
+  return isRoomId(fields["roomId"]) && isNotificationMode(fields["mode"]);
+}
+
+function validSetRoomState(fields: Record<string, unknown>): fields is CommandMap["setRoomState"] {
+  return isRoomId(fields["roomId"]) && isRoomStatePatch(fields["patch"]);
+}
+
+function validInviteUser(fields: Record<string, unknown>): fields is CommandMap["inviteUser"] {
+  return isRoomId(fields["roomId"]) && isUserId(fields["userId"]);
+}
+
+function validJoinRoom(fields: Record<string, unknown>): fields is CommandMap["joinRoom"] {
+  return isRoomIdOrAlias(fields["roomIdOrAlias"]);
+}
+
+function validAnswerInvite(fields: Record<string, unknown>): fields is CommandMap["answerInvite"] {
+  return isRoomId(fields["roomId"]) && isBoolean(fields["accept"]);
+}
+
+function validCreateRoom(fields: Record<string, unknown>): fields is CommandMap["createRoom"] {
+  const directUserId = fields["directUserId"];
+  return (
+    isString(fields["name"]) &&
+    fields["name"].length <= 255 &&
+    isText(fields["topic"]) &&
+    fields["topic"].length <= 1024 &&
+    (directUserId === null || isUserId(directUserId))
+  );
+}
+
+function validForward(fields: Record<string, unknown>): fields is CommandMap["forward"] {
+  const sources = fields["sources"];
+  return (
+    isRoomId(fields["targetRoomId"]) &&
+    isArrayOf(sources, isForwardSource) &&
+    sources.length > 0 &&
+    sources.length <= 50
+  );
+}
+
+function validMemberAction(fields: Record<string, unknown>): fields is CommandMap["memberAction"] {
+  return isRoomId(fields["roomId"]) && isUserId(fields["userId"]) && isMemberAction(fields["action"]);
+}
+
+function validSendMedia(fields: Record<string, unknown>): fields is CommandMap["sendMedia"] {
+  const html = fields["html"];
+  const replyTo = fields["replyTo"];
+  const file = fields["file"];
+  return (
+    isRoomId(fields["roomId"]) &&
+    isString(fields["messageId"]) &&
+    fields["messageId"].length <= 128 &&
+    isString(fields["transactionId"]) &&
+    fields["transactionId"].length <= 128 &&
+    isText(fields["caption"]) &&
+    fields["caption"].length <= 65536 &&
+    (html === null || (isString(html) && html.length <= 65536)) &&
+    (replyTo === null || isString(replyTo)) &&
+    isAttachmentKind(fields["kind"]) &&
+    isString(fields["name"]) &&
+    fields["name"].length <= 255 &&
+    file instanceof Blob &&
+    file.size > 0
+  );
+}
+
+function validMediaCommand(fields: Record<string, unknown>): fields is CommandMap["media"] {
+  return (
+    isRoomId(fields["roomId"]) &&
+    isString(fields["messageId"]) &&
+    fields["messageId"].length <= 128 &&
+    isMediaVariant(fields["variant"])
+  );
+}
+
+/** Copies only the present patch fields, so an absent field never becomes `undefined`. */
+function parseRoomStatePatch(value: unknown): RoomStatePatch | null {
+  if (!isRoomStatePatch(value)) return null;
+  const patch: {
+    name?: string;
+    topic?: string;
+    aliases?: readonly string[];
+    joinRule?: RoomJoinRule;
+    guestAccess?: GuestAccess;
+    historyVisibility?: RoomHistoryVisibility;
+    directoryPublished?: boolean;
+  } = {};
+  if (value.name !== undefined) patch.name = value.name;
+  if (value.topic !== undefined) patch.topic = value.topic;
+  if (value.aliases !== undefined) patch.aliases = value.aliases;
+  if (value.joinRule !== undefined) patch.joinRule = value.joinRule;
+  if (value.guestAccess !== undefined) patch.guestAccess = value.guestAccess;
+  if (value.historyVisibility !== undefined) patch.historyVisibility = value.historyVisibility;
+  if (value.directoryPublished !== undefined) patch.directoryPublished = value.directoryPublished;
+  return patch;
+}
+
 function empty(fields: Record<string, unknown>): fields is Record<string, never> {
   return Object.keys(fields).length === 0;
 }
@@ -671,6 +1132,9 @@ export function parseCommand(value: unknown): Command | null {
     case "members":
       if (!validRoom(fields)) return null;
       return { id, type, payload: { roomId: fields.roomId } };
+    case "devices":
+      if (!empty(fields)) return null;
+      return { id, type, payload: {} };
     case "send":
       if (!validSend(fields)) return null;
       return {
@@ -697,6 +1161,110 @@ export function parseCommand(value: unknown): Command | null {
     case "resetIdentity":
       if (!isString(fields["password"]) || fields["password"].length > 4096) return null;
       return { id, type, payload: { password: fields["password"] } };
+    case "react":
+      if (!validReact(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { roomId: fields.roomId, eventId: fields.eventId, key: fields.key },
+      };
+    case "edit":
+      if (!validEdit(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { roomId: fields.roomId, eventId: fields.eventId, body: fields.body, html: fields.html },
+      };
+    case "redact":
+      if (!validRedact(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, eventId: fields.eventId } };
+    case "typing":
+      if (!validTyping(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, typing: fields.typing } };
+    case "search":
+      if (!validSearch(fields)) return null;
+      return {
+        id,
+        type,
+        payload: {
+          roomIds: fields.roomIds,
+          query: fields.query,
+          mediaKinds: fields.mediaKinds,
+          limit: fields.limit,
+        },
+      };
+    case "leaveRoom":
+      if (!validRoom(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId } };
+    case "setRoomTag":
+      if (!validSetRoomTag(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, tag: fields.tag, enabled: fields.enabled } };
+    case "setNotification":
+      if (!validSetNotification(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, mode: fields.mode } };
+    case "setRoomState": {
+      if (!validSetRoomState(fields)) return null;
+      const patch = parseRoomStatePatch(fields.patch);
+      if (patch === null) return null;
+      return { id, type, payload: { roomId: fields.roomId, patch } };
+    }
+    case "inviteUser":
+      if (!validInviteUser(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, userId: fields.userId } };
+    case "joinRoom":
+      if (!validJoinRoom(fields)) return null;
+      return { id, type, payload: { roomIdOrAlias: fields.roomIdOrAlias } };
+    case "answerInvite":
+      if (!validAnswerInvite(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, accept: fields.accept } };
+    case "createRoom":
+      if (!validCreateRoom(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { name: fields.name, topic: fields.topic, directUserId: fields.directUserId },
+      };
+    case "forward":
+      if (!validForward(fields)) return null;
+      return {
+        id,
+        type,
+        payload: {
+          targetRoomId: fields.targetRoomId,
+          sources: fields.sources.map((source) => ({ roomId: source.roomId, eventId: source.eventId })),
+        },
+      };
+    case "memberAction":
+      if (!validMemberAction(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { roomId: fields.roomId, userId: fields.userId, action: fields.action },
+      };
+    case "sendMedia":
+      if (!validSendMedia(fields)) return null;
+      return {
+        id,
+        type,
+        payload: {
+          roomId: fields.roomId,
+          messageId: fields.messageId,
+          transactionId: fields.transactionId,
+          caption: fields.caption,
+          html: fields.html,
+          replyTo: fields.replyTo,
+          kind: fields.kind,
+          name: fields.name,
+          file: fields.file,
+        },
+      };
+    case "media":
+      if (!validMediaCommand(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { roomId: fields.roomId, messageId: fields.messageId, variant: fields.variant },
+      };
     default:
       return null;
   }

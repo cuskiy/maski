@@ -21,7 +21,6 @@ const assets = {
   prepaint: "/assets/prepaint-x.js",
   client: "/assets/client-x.js",
   reviewClient: "/assets/review-client-x.js",
-  imageWorker: "/assets/image-worker-x.js",
   matrixWorker: "/assets/matrix-worker-x.js",
   cryptoWasm: "/assets/matrix-sdk-crypto-x.wasm",
 };

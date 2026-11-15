@@ -1,7 +1,6 @@
 import type {
   Connection,
   DeviceSession,
-  GuestAccess,
   KeyGate,
   Invite,
   Member,
@@ -9,21 +8,18 @@ import type {
   NotificationPrefs,
   Phase,
   RecoveryKey,
-  RoomHistoryVisibility,
-  RoomJoinRule,
+  RoomStatePatch,
   RoomSummary,
   SessionSummary,
   SourceCapabilities,
 } from "../core/types.ts";
+import type { CommandMap, MediaReply, MediaVariant } from "../protocol/index.ts";
 
-export interface RoomStatePatch {
-  readonly name?: string;
-  readonly topic?: string;
-  readonly aliases?: readonly string[];
-  readonly joinRule?: RoomJoinRule;
-  readonly guestAccess?: GuestAccess;
-  readonly historyVisibility?: RoomHistoryVisibility;
-  readonly directoryPublished?: boolean;
+export type { RoomStatePatch };
+
+export interface ForwardSource {
+  readonly roomId: string;
+  readonly eventId: string;
 }
 
 export interface SourceEvents {
@@ -38,6 +34,7 @@ export interface SourceEvents {
     readonly patch: boolean;
   };
   readonly members: { readonly roomId: string; readonly members: readonly Member[] };
+  readonly typing: { readonly roomId: string; readonly userIds: readonly string[] };
   readonly phase: Phase;
   readonly devices: readonly DeviceSession[];
   readonly invites: readonly Invite[];
@@ -48,6 +45,13 @@ export interface SourceEvents {
     readonly messageId: string;
     readonly row: MessageRow | null;
     readonly retryable: boolean;
+  };
+  /** A worker-minted object URL was revoked; the row must resolve again. */
+  readonly media: {
+    readonly roomId: string;
+    readonly messageId: string;
+    readonly variant: MediaVariant;
+    readonly url: string | null;
   };
 }
 
@@ -65,12 +69,14 @@ export function createSourceListeners(): SourceListeners {
     rooms: new Set(),
     window: new Set(),
     members: new Set(),
+    typing: new Set(),
     phase: new Set(),
     devices: new Set(),
     invites: new Set(),
     connection: new Set(),
     recoveryKey: new Set(),
     outbox: new Set(),
+    media: new Set(),
   };
 }
 
@@ -85,6 +91,20 @@ export interface ChatSource {
   open(roomId: string): void;
   older(roomId: string): void;
   send(roomId: string, row: MessageRow): Promise<MessageRow>;
+  /** Sends bytes through the worker; the queued row arrives as an `outbox` event. */
+  sendMedia?(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    caption: string,
+    html: string | null,
+    replyTo: string | null,
+    kind: CommandMap["sendMedia"]["kind"],
+    name: string,
+    file: Blob,
+  ): Promise<MessageRow>;
+  /** Resolves a worker-only source to a `blob:` URL; absent means the surface is hidden. */
+  media?(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply>;
   retrySend(roomId: string, messageId: string): Promise<MessageRow>;
   discardSend(roomId: string, messageId: string): void;
   markRead(roomId: string, eventId: string): void;
@@ -92,13 +112,16 @@ export interface ChatSource {
   react?(roomId: string, eventId: string, key: string): void;
   edit?(roomId: string, eventId: string, body: string, html: string | null): void;
   redact?(roomId: string, eventId: string): void;
-  search?(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[];
-  forward?(roomId: string, rows: readonly MessageRow[]): void;
-  typing?(roomId: string): void;
+  search?(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): Promise<readonly MessageRow[]>;
+  forward?(targetRoomId: string, sources: readonly ForwardSource[]): void;
+  typing?(roomId: string, typing: boolean): void;
   members(roomId: string): void;
   memberAction?(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
   inviteUser?(roomId: string, userId: string): void;
+  /** The review fixture inserts a local room; production creates through `createRoom`. */
   addRoom?(room: RoomSummary): void;
+  createRoom?(name: string, topic: string, directUserId: string | null): Promise<string>;
+  joinRoom?(roomIdOrAlias: string): Promise<string>;
   leaveRoom?(roomId: string): void;
   setRoomState?(roomId: string, patch: RoomStatePatch): void;
   setRoomTag?(roomId: string, tag: "m.favourite" | "m.lowpriority", enabled: boolean): void;

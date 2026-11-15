@@ -51,6 +51,16 @@ function method(prototype: object, name: string): unknown {
 void test("the production source advertises only the commands it implements", () => {
   const capabilities = Object.entries(PRODUCTION_CAPABILITIES).filter(([, enabled]) => enabled);
   for (const [name] of capabilities) {
+    if (name === "addRoom") {
+      assert.equal(typeof method(WorkerSource.prototype, "createRoom"), "function");
+      assert.equal(typeof method(WorkerSource.prototype, "joinRoom"), "function");
+      continue;
+    }
+    if (name === "media") {
+      assert.equal(typeof method(WorkerSource.prototype, "media"), "function");
+      assert.equal(typeof method(WorkerSource.prototype, "sendMedia"), "function");
+      continue;
+    }
     if ((METHOD_CAPABILITIES as readonly string[]).includes(name)) {
       assert.equal(
         typeof method(WorkerSource.prototype, name),
@@ -67,13 +77,26 @@ void test("the production source advertises only the commands it implements", ()
 });
 
 void test("the worker source leaves every unimplemented command absent", () => {
-  for (const name of METHOD_CAPABILITIES) {
-    if (name === "resetIdentity") continue;
-    assert.equal(typeof method(WorkerSource.prototype, name), "undefined", name);
+  const absent = [
+    "stickers",
+    "resetRecoveryKey",
+    "signOutDevice",
+    "signOutOthers",
+    "saveNotifications",
+  ] as const satisfies readonly SourceCapability[];
+  for (const name of absent) {
     assert.equal(PRODUCTION_CAPABILITIES[name], false, name);
   }
-  assert.equal(PRODUCTION_CAPABILITIES.media, false);
-  assert.equal(PRODUCTION_CAPABILITIES.stickers, false);
+  assert.equal(typeof method(WorkerSource.prototype, "resetRecoveryKey"), "undefined");
+  assert.equal(typeof method(WorkerSource.prototype, "signOutDevice"), "undefined");
+  assert.equal(typeof method(WorkerSource.prototype, "signOutOthers"), "undefined");
+  assert.equal(typeof method(WorkerSource.prototype, "saveNotifications"), "undefined");
+  for (const name of METHOD_CAPABILITIES) {
+    if ((absent as readonly string[]).includes(name)) continue;
+    assert.equal(PRODUCTION_CAPABILITIES[name], true, name);
+    if (name === "addRoom") continue;
+    assert.equal(typeof method(WorkerSource.prototype, name), "function", name);
+  }
   assert.equal(typeof method(WorkerSource.prototype, "resetIdentity"), "function");
   assert.equal(PRODUCTION_CAPABILITIES.resetIdentity, true);
 });
