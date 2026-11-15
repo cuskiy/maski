@@ -4,6 +4,7 @@ import { safeAvatarUrl, safeMediaUrl } from "../src/lib/safeUrl.ts";
 import { mockChatState } from "../src/core/mock.ts";
 import { en } from "../src/catalogs/en.ts";
 import { timeline } from "../src/components/timeline.ts";
+import { phaseFor, startPhase } from "../src/client/workerSource.ts";
 
 void test("avatars and media only accept local, blob, or raster data URLs", () => {
   assert.equal(safeAvatarUrl("/assets/avatar.png"), "/assets/avatar.png");
@@ -39,4 +40,20 @@ void test("remote media URLs render as placeholders, not image sources", () => {
   ).value;
   assert.doesNotMatch(markup, /tracker\.invalid/u);
   assert.match(markup, /media-placeholder/u);
+});
+
+void test("an unknown or incomplete gate never opens chat", () => {
+  assert.equal(phaseFor("ready"), "ready");
+  assert.equal(phaseFor("missing"), "signedOut");
+  assert.equal(phaseFor("unknown"), "locked");
+  assert.equal(phaseFor("needs-recovery"), "locked");
+  assert.equal(phaseFor("needs-verification"), "locked");
+});
+
+void test("only a cached ready gate may paint before the worker verifies it", () => {
+  assert.equal(startPhase("unknown", "ready"), "ready");
+  assert.equal(startPhase("unknown", "needs-recovery"), null);
+  assert.equal(startPhase("unknown", "missing"), null);
+  assert.equal(startPhase("ready", "needs-recovery"), "ready");
+  assert.equal(startPhase("needs-recovery", "ready"), "locked");
 });

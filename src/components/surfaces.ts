@@ -123,7 +123,7 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
                 return html`<button
                     class="media-file is-${kind}"
                     type="button"
-                    data-media-open="${message.media?.name ?? ""}"
+                    data-media-open="${message.id}"
                     data-media-kind="${kind}"
                     ${url === null ? html`` : html` data-media-url="${url}"`}
                     commandfor="${SURFACE.viewer}"
@@ -172,7 +172,7 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
                 (message) => html`<button
                   class="media-file-row"
                   type="button"
-                  data-media-open="${message.media?.name ?? ""}"
+                  data-media-open="${message.id}"
                   data-media-kind="${message.media?.kind ?? "file"}"
                   commandfor="${SURFACE.viewer}"
                   command="show-modal"
@@ -632,7 +632,8 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
               </div>
               <button class="button-quiet" type="button" data-settings-action="logout">
                 ${t(c, "settings.logout")}
-              </button>`
+              </button>
+              <p class="form-error" data-settings-error role="alert" hidden></p>`
       }
     </section>
     ${

@@ -5,17 +5,23 @@ import type { ChatSource, ForwardSource, SourceEvent, SourceEvents } from "./sou
 import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { localeForPath, localeRoot } from "../core/locales.ts";
-import { clearSession, setGate } from "./session.ts";
+import { clearAccount, mockSession, setGate } from "./session.ts";
 
 function loginPath(): string {
   const locale = localeForPath(location.pathname) ?? "en";
   return `${localeRoot(locale)}login/`;
 }
 
-function phaseFor(gate: KeyGate): Phase {
+export function phaseFor(gate: KeyGate): Phase {
   if (gate === "missing") return "signedOut";
-  if (gate === "ready" || gate === "unknown") return "ready";
+  if (gate === "ready") return "ready";
   return "locked";
+}
+
+/** A cached ready gate may paint chat until the worker verifies it; no other cached gate does. */
+export function startPhase(gate: KeyGate, cached: KeyGate): Phase | null {
+  if (gate !== "unknown") return phaseFor(gate);
+  return cached === "ready" ? "ready" : null;
 }
 
 const MESSAGE_KINDS: ReadonlySet<string> = new Set<MessageKind>([
@@ -62,7 +68,7 @@ export class WorkerSource implements ChatSource {
     void this.transport.start().then(
       (data) => {
         if (data.session === null) {
-          clearSession();
+          clearAccount();
           this.emit("phase", "signedOut");
           this.emit("connection", "offline");
           this.emit("rooms", { rooms: [], loading: false });
@@ -70,10 +76,12 @@ export class WorkerSource implements ChatSource {
           return;
         }
         this.emit("session", data.session);
-        setGate(data.key);
-        this.emit("keys", data.key);
         this.emit("connection", data.connection);
-        this.emit("phase", phaseFor(data.key));
+        if (data.key !== "unknown") setGate(data.key);
+        const phase = startPhase(data.key, mockSession().gate);
+        if (phase === null) return;
+        this.emit("keys", phase === "ready" ? "ready" : data.key);
+        this.emit("phase", phase);
       },
       (error: unknown) => {
         if (error instanceof Error && error.message === "locked") {
@@ -262,7 +270,7 @@ export class WorkerSource implements ChatSource {
     switch (event.type) {
       case "session":
         if (event.payload === null) {
-          clearSession();
+          clearAccount();
           this.emit("session", null);
           this.emit("phase", "signedOut");
           location.assign(loginPath());

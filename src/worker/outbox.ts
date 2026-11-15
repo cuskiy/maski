@@ -166,7 +166,8 @@ export function createOutbox(options: OutboxOptions): Outbox {
         error: null,
         retryable: false,
       };
-      await backend.complete(afterSend, sent);
+      const stored: MessageRow = sent.media === null ? sent : { ...sent, media: { ...sent.media, url: null } };
+      await backend.complete(afterSend, stored);
       emit({ roomId: current.roomId, messageId: current.messageId, row: sent, retryable: false });
     } catch (error) {
       const current = await backend.read(record.messageId);
@@ -216,12 +217,13 @@ export function createOutbox(options: OutboxOptions): Outbox {
         error: allowed ? null : "unavailable",
         retryable: allowed,
       });
+      const storedRow: MessageRow = row.media === null ? row : { ...row, media: { ...row.media, url: null } };
       const record: OutboxRecord = {
         roomId: input.roomId,
         transactionId: input.transactionId,
         messageId: input.messageId,
         replyTo: input.replyTo,
-        row,
+        row: storedRow,
         retryable: allowed,
         media: input.media,
         uploaded: null,

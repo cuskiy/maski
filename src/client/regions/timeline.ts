@@ -57,7 +57,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let activeRoomId = store.read("roomId");
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
-  let readOnLoad = false;
+
   let readRequest: string | null = null;
 
   const selectionBar = region.querySelector<HTMLElement>("[data-selection-bar]");
@@ -155,7 +155,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     }
   };
 
-  const requestedMedia = new Set<string>();
+  const requestedMedia = new Map<string, NonNullable<MessageRow["media"]>>();
   const requestMedia = (): void => {
     const state = store.snapshot();
     const roomId = state.roomId;
@@ -166,8 +166,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       if (media === null || media.url !== null) continue;
       if (media.kind !== "image" && media.kind !== "video" && media.kind !== "sticker") continue;
       const key = `${roomId}\n${id}`;
-      if (requestedMedia.has(key)) continue;
-      requestedMedia.add(key);
+      if (requestedMedia.get(key) === media) continue;
+      requestedMedia.set(key, media);
       actions.media(roomId, id, "thumbnail");
     }
   };
@@ -314,11 +314,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       activeRoomId = state.roomId;
       pendingRoomId = state.roomId;
       pinned = true;
-      readOnLoad =
-        state.roomId !== null &&
-        room !== null &&
-        room.latestEventId !== null &&
-        room.readReceipt !== room.latestEventId;
       readRequest = null;
       requestedMedia.clear();
       stopSelection();
@@ -333,7 +328,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     layout();
 
     if (pendingRoomId !== null && state.messages.length > 0 && state.messages[0]?.roomId === pendingRoomId) {
-      const roomId = pendingRoomId;
       pendingRoomId = null;
       const receipt = room?.readReceipt ?? null;
       const receiptIndex = receipt === null ? -1 : state.messages.findIndex((message) => message.eventId === receipt);
@@ -348,10 +342,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         wrap.scrollTop = wrap.scrollHeight;
         pinned = true;
       }
-      if (readOnLoad) {
-        actions.markRead(roomId);
-        readOnLoad = false;
-      }
+      if (pinned) markAtBottom();
     } else if (pinned) {
       wrap.scrollTop = wrap.scrollHeight;
       markAtBottom();

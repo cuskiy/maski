@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { emptyChatState } from "../src/core/state.ts";
 import type { SasState } from "../src/core/types.ts";
+import { PRODUCTION_CAPABILITIES } from "../src/core/types.ts";
 import { SURFACE } from "../src/core/regions.ts";
 import { CHAT_SURFACES } from "../src/core/surfaces.ts";
 import { surfaceBodyFor } from "../src/components/surfaces.ts";
@@ -140,6 +141,8 @@ void test("room menus, scoped search, and media files expose the new controls", 
   assert.match(media, /data-media-files-tab="media"/u);
   assert.match(media, /data-media-files-tab="files"/u);
   assert.match(media, /data-media-files-tab="links"/u);
+  assert.match(media, /data-media-open="d4"/u);
+  assert.doesNotMatch(media, /data-media-open="layout\.png"/u);
 });
 
 void test("settings expose notification levels, keys, devices, reset and licenses", () => {
@@ -164,6 +167,14 @@ void test("settings expose notification levels, keys, devices, reset and license
   const preview = markup.indexOf('data-setting="preview"');
   const level = markup.indexOf('data-select-name="notification-level"');
   assert.ok(desktop < badge && badge < title && title < preview && preview < level);
+});
+
+void test("production settings omit controls without a production command", () => {
+  const markup = surfaceBodyFor(en, SURFACE.settings, mockChatState(), PRODUCTION_CAPABILITIES).value;
+  assert.doesNotMatch(markup, /data-settings-action="reset-key"/u);
+  assert.doesNotMatch(markup, /data-settings-action="sign-out-device"/u);
+  assert.doesNotMatch(markup, /data-settings-action="sign-out-others"/u);
+  assert.match(markup, /data-surface="reset-identity"/u);
 });
 
 void test("room access controls are disabled without management permission", () => {

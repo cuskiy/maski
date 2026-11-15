@@ -436,6 +436,13 @@ function clearSettingsHash(): void {
   history.replaceState(null, "", `${location.pathname}${location.search}`);
 }
 
+function showSettingsError(message: string): void {
+  const error = document.querySelector<HTMLElement>("[data-settings-error]");
+  if (error === null) return;
+  error.textContent = message;
+  error.hidden = false;
+}
+
 export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): () => void {
   let activeRoomId: string | null = null;
   let activeMessageId: string | null = null;
@@ -458,6 +465,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   let confirmFocus: HTMLElement | null = null;
   let desktopRequest = 0;
   let pendingResetKey = false;
+  let pendingSearch: { readonly roomId: string; readonly messageId: string } | null = null;
   let sasError: CatalogKey | null = null;
   let sasConfirmedId: string | null = null;
   let sasDismissedId: string | null = null;
@@ -598,7 +606,6 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
           if (permissions.favorite) allowed.add("roomMenu.favorite");
           if (permissions.leave) allowed.add("roomMenu.leave");
         } else {
-          allowed.add("roomMenu.markRead");
           allowed.add("roomMenu.settings");
           allowed.add("roomMenu.mediaFiles");
           allowed.add("roomMenu.search");
@@ -772,7 +779,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   function handleSettingsAction(action: string, element: HTMLElement): void {
     if (action === "logout") {
       askConfirm(t(c, "settings.logoutConfirm"), () => {
-        void actions.logout();
+        void actions.logout().catch(() => showSettingsError(t(c, "settings.logoutFailed")));
       });
       return;
     } else if (action === "reset-key") {
@@ -826,12 +833,18 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const body = dialog?.querySelector<HTMLElement>(`[data-region="${SURFACE.mediaFiles}-body"]`);
     if (!(dialog instanceof HTMLDialogElement) || body === null || body === undefined) return;
     let files: readonly MessageRow[] = [];
+    let failed = false;
     try {
       files = await actions.search([roomId], "");
     } catch {
-      files = [];
+      failed = true;
     }
-    replaceHtml(body, mediaFilesBody(c, files));
+    replaceHtml(
+      body,
+      failed
+        ? html`<p class="form-error" role="alert">${t(c, "surface.mediaFiles.failed")}</p>`
+        : mediaFilesBody(c, files),
+    );
     body.scrollTop = 0;
     dialog.showModal();
   }
@@ -962,17 +975,20 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
             .map((entry) => entry.roomId)
         : [scope];
     let matches: readonly MessageRow[] = [];
+    let failed = false;
     try {
       matches = await actions.search(roomIds, query, mediaKindsForQuery(c, query));
     } catch {
-      matches = [];
+      failed = true;
     }
     replaceHtml(
       results,
-      matches.length === 0
-        ? html`<p class="note">${t(c, "surface.search.empty")}</p>`
-        : html`${matches.slice(0, 40).map(
-            (entry) => html`<button
+      failed
+        ? html`<p class="form-error" role="alert">${t(c, "surface.search.failed")}</p>`
+        : matches.length === 0
+          ? html`<p class="note">${t(c, "surface.search.empty")}</p>`
+          : html`${matches.slice(0, 40).map(
+              (entry) => html`<button
               class="search-result"
               type="button"
               data-search-room="${entry.roomId}"
@@ -981,7 +997,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
               <span class="search-result-room" dir="auto">${room(entry.roomId)?.name ?? ""}</span
               ><bdi dir="auto">${searchResultText(c, entry)}</bdi>
             </button>`,
-          )}`,
+            )}`,
     );
   }
 
@@ -1188,11 +1204,11 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (media !== null) {
       const messageId = media.dataset["mediaOpen"] ?? "";
       const kind = media.dataset["mediaKind"] ?? "file";
-      const targetRoomId = state().roomId;
       const row = message(messageId);
-      if (targetRoomId === null || row === null || row.media === null) return;
+      if (row === null || row.media === null) return;
+      const targetRoomId = row.roomId;
       const name = row.media.name;
-      if (kind === "file") {
+      if (kind !== "image" && kind !== "video" && kind !== "sticker") {
         event.preventDefault();
         downloadMedia(targetRoomId, messageId, name);
         return;
@@ -1217,10 +1233,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         actions.selectRoom(roomId);
         hide(SURFACE.search);
         if (messageId !== undefined) {
-          requestAnimationFrame(() => {
-            const row = document.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(messageId)}"]`);
-            row?.scrollIntoView({ block: "center" });
-          });
+          pendingSearch = { roomId, messageId };
         }
       }
       return;
@@ -1840,6 +1853,21 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       refreshBody(SURFACE.roomSettings, activeRoomId ?? state().roomId);
     }
   });
+  const unwatchBackup = store.watch(["backupReady", "backupError"], () => {
+    const dialog = document.getElementById(SURFACE.settings);
+    if (dialog instanceof HTMLDialogElement && dialog.open) refreshBody(SURFACE.settings);
+  });
+  const unwatchSearchTarget = store.watch(["roomId", "messages"], () => {
+    if (pendingSearch === null) return;
+    if (state().roomId !== pendingSearch.roomId) {
+      pendingSearch = null;
+      return;
+    }
+    const row = document.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(pendingSearch.messageId)}"]`);
+    if (row === null) return;
+    pendingSearch = null;
+    requestAnimationFrame(() => row.scrollIntoView({ block: "center" }));
+  });
 
   document.addEventListener("click", onClick);
   document.addEventListener("maski:forward-open", onForwardOpen);
@@ -1865,6 +1893,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     unwatchSas();
     sasElement?.removeEventListener("close", onSasClose);
     unwatchMembers();
+    unwatchBackup();
+    unwatchSearchTarget();
     document.removeEventListener("click", onClick);
     document.removeEventListener("maski:forward-open", onForwardOpen);
     document.removeEventListener("maski:reply-message", onReplyMessage);

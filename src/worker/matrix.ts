@@ -69,6 +69,7 @@ import {
   projectMessage,
   projectRoom,
   projectWindow,
+  spaceParents,
 } from "./project.ts";
 import { decodeRecoveryKey, derivePassphraseKey } from "./recovery.ts";
 import { SasSessions, type SasEvents } from "./sas.ts";
@@ -361,10 +362,13 @@ export class MatrixSession implements SessionPort {
   private stored: StoredSession | null = null;
   private activeRoomId: string | null = null;
   private keyReady: KeyStatus = "unknown";
+  private startTask: Promise<SessionSummary> | null = null;
   private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
   private readonly secretStorageKeys = new Map<string, Uint8Array<ArrayBuffer>>();
   private releaseLock: (() => void) | null = null;
+  private lockUserId: string | null = null;
+  private generation = 0;
   private roomsQueued = false;
   private readonly directoryPublished = new Map<string, boolean>();
   private readonly reactionTransactions = new Map<string, string>();
@@ -390,15 +394,27 @@ export class MatrixSession implements SessionPort {
     this.account = account;
     this.outbox = this.createOutbox(account);
     this.openMedia(account);
-    const cached = sortRooms(await account.readRooms());
+    const cached = sortRooms(
+      (await account.readRooms()).filter(
+        (record) => record.room.membership === "join" || record.room.membership === "invite",
+      ),
+    );
     this.emitCachedRooms(cached);
     const recent = [...cached].toSorted((left, right) => right.lastOpened - left.lastOpened)[0];
     if (recent !== undefined) await this.emitStoredWindow(recent.room.roomId);
     void this.outbox.resume().catch(() => undefined);
-    void this.startClient(stored).catch(() => {
-      this.emit({ type: "connection", payload: "offline" });
-      this.emit({ type: "session", payload: summary(null, stored) });
-    });
+    const generation = this.generation;
+    const task = this.startClient(stored, generation);
+    this.startTask = task;
+    void task
+      .catch(() => {
+        if (generation !== this.generation) return;
+        this.emit({ type: "connection", payload: "offline" });
+        this.emit({ type: "session", payload: summary(null, stored) });
+      })
+      .finally(() => {
+        if (this.startTask === task) this.startTask = null;
+      });
     return { session: summary(null, stored), connection: "connecting", key: "unknown" };
   }
 
@@ -415,6 +431,7 @@ export class MatrixSession implements SessionPort {
         type: "m.login.password",
         identifier: { type: "m.id.user", user: input.username },
         password: input.password,
+        refresh_token: true,
         initial_device_display_name: "maski",
       });
     } catch {
@@ -434,6 +451,7 @@ export class MatrixSession implements SessionPort {
       response = await provisional.loginRequest({
         type: "m.login.token",
         token: input.token,
+        refresh_token: true,
         initial_device_display_name: "maski",
       });
     } catch {
@@ -509,6 +527,14 @@ export class MatrixSession implements SessionPort {
   }
 
   async keyStatus(): Promise<KeyStatus> {
+    const task = this.startTask;
+    if (task !== null) {
+      try {
+        await task;
+      } catch {
+        throw new WorkerFailure("unavailable");
+      }
+    }
     if (this.client === null) return "missing";
     this.keyReady = await this.refreshGate();
     return this.keyReady;
@@ -535,6 +561,7 @@ export class MatrixSession implements SessionPort {
       throw new WorkerFailure("auth");
     }
     this.pendingSecret = { key: candidate, passphrase: "" };
+    this.secretStorageKeys.set(keyTuple[0], candidate);
     try {
       await crypto.bootstrapSecretStorage({});
       if (!(await crypto.isSecretStorageReady())) throw new WorkerFailure("auth");
@@ -1258,6 +1285,7 @@ export class MatrixSession implements SessionPort {
     const client = this.requireClient();
     const target = this.requireRoom(targetRoomId);
     if (target.getMyMembership() !== "join") throw new WorkerFailure("unavailable");
+    let sent = 0;
     try {
       for (const source of sources) {
         const room = client.getRoom(source.roomId);
@@ -1272,10 +1300,12 @@ export class MatrixSession implements SessionPort {
         } else {
           await client.sendMessage(targetRoomId, forwardable.content, transactionId);
         }
+        sent += 1;
       }
     } catch (error) {
       throw this.transportFailure(error);
     }
+    if (sent !== sources.length) throw new WorkerFailure("unavailable");
     this.scheduleRooms();
     return null;
   }
@@ -1345,8 +1375,14 @@ export class MatrixSession implements SessionPort {
   }
 
   private async acquireLock(userId: string): Promise<void> {
-    if (this.releaseLock !== null) return;
-    if (navigator.locks === undefined) return;
+    if (this.releaseLock !== null) {
+      if (this.lockUserId === userId) return;
+      throw new WorkerFailure("locked");
+    }
+    if (navigator.locks === undefined) {
+      this.lockUserId = userId;
+      return;
+    }
     const acquired = Promise.withResolvers<void>();
     const held = Promise.withResolvers<void>();
     this.releaseLock = held.resolve;
@@ -1356,6 +1392,7 @@ export class MatrixSession implements SessionPort {
           acquired.reject(new WorkerFailure("locked"));
           return;
         }
+        this.lockUserId = userId;
         acquired.resolve();
         await held.promise;
       })
@@ -1364,6 +1401,7 @@ export class MatrixSession implements SessionPort {
       await acquired.promise;
     } catch (error) {
       this.releaseLock = null;
+      this.lockUserId = null;
       throw error;
     }
   }
@@ -1647,13 +1685,14 @@ export class MatrixSession implements SessionPort {
     if (client === null) return null;
     const room = client.getRoom(roomId);
     if (room === null) return null;
-    return projectRoom(
+    const projected = projectRoom(
       room,
       client.getUserId() ?? "",
       directRooms(client),
       this.notificationFor(roomId),
       this.directoryPublished.get(roomId) ?? false,
     );
+    return projected === null ? null : { ...projected, spaceId: spaceParents(client).get(roomId) ?? null };
   }
 
   private notificationFor(roomId: string): RoomSummary["notification"] {
@@ -1732,7 +1771,9 @@ export class MatrixSession implements SessionPort {
     }
     const own = client.getUserId() ?? "";
     const direct = directRooms(client);
+    const spaces = spaceParents(client);
     const rooms: RoomRecord[] = [];
+    const live = new Set<string>();
     for (const room of client.getRooms()) {
       if (this.leftRooms.has(room.roomId)) continue;
       const base = projectRoom(
@@ -1743,15 +1784,24 @@ export class MatrixSession implements SessionPort {
         this.directoryPublished.get(room.roomId) ?? false,
       );
       if (base === null) continue;
+      live.add(room.roomId);
       const marker = await account.readMarker(room.roomId);
       const latest = await account.readLatest(room.roomId, WINDOW_LIMIT);
       const queued = this.outbox === null ? [] : await this.outbox.rows(room.roomId);
       const projected = projectRoomState(base, latest, queued, marker, own);
       const unread = readState(await account.readEventsAfter(room.roomId, marker?.ts ?? 0), marker, own);
-      const summaryRoom = { ...projected, unread: unread.unread, highlight: unread.highlight };
+      const summaryRoom = {
+        ...projected,
+        spaceId: spaces.get(room.roomId) ?? projected.spaceId,
+        unread: unread.unread,
+        highlight: unread.highlight,
+      };
       const record = { room: summaryRoom, lastOpened: lastOpened.get(room.roomId) ?? 0 };
       await account.writeRoom(record);
       rooms.push(record);
+    }
+    for (const record of records) {
+      if (!live.has(record.room.roomId)) await account.deleteRoom(record.room.roomId);
     }
     this.emit({
       type: "rooms",
@@ -1867,6 +1917,7 @@ export class MatrixSession implements SessionPort {
     const row = projectMessage(room, event, client.getUserId() ?? "");
     if (row === null) {
       await this.refreshRelatedTarget(room, event);
+      this.scheduleRooms();
       return;
     }
     const stored = await this.persistEvent(row);
@@ -1884,6 +1935,7 @@ export class MatrixSession implements SessionPort {
         },
       });
     }
+    this.scheduleRooms();
   }
 
   private async handleTimelineReset(roomId: string): Promise<void> {
@@ -1953,7 +2005,12 @@ export class MatrixSession implements SessionPort {
     client.on(RoomEvent.Name, () => this.scheduleRooms());
     client.on(RoomEvent.Tags, () => this.scheduleRooms());
     client.on(RoomEvent.MyMembership, (room: Room) => {
-      if (room.getMyMembership() === "join") this.leftRooms.delete(room.roomId);
+      if (room.getMyMembership() === "join") {
+        this.leftRooms.delete(room.roomId);
+      } else {
+        this.leftRooms.add(room.roomId);
+        void this.account?.deleteRoom(room.roomId).catch(() => undefined);
+      }
       this.scheduleRooms();
       this.emitInvites();
     });
@@ -2001,6 +2058,7 @@ export class MatrixSession implements SessionPort {
     if (response.device_id === undefined || response.access_token === undefined) {
       throw new WorkerFailure("auth");
     }
+    if (this.client !== null) throw new WorkerFailure("unavailable");
     const stored: StoredSession = {
       baseUrl,
       userId: response.user_id,
@@ -2008,17 +2066,28 @@ export class MatrixSession implements SessionPort {
       accessToken: response.access_token,
       refreshToken: response.refresh_token ?? null,
     };
-    await writeSession(stored);
-    this.stored = stored;
     await this.acquireLock(stored.userId);
+    try {
+      await writeSession(stored);
+    } catch (error) {
+      this.releaseLock?.();
+      this.releaseLock = null;
+      this.lockUserId = null;
+      throw error;
+    }
+    this.stored = stored;
     const account = await AccountDatabase.open(stored.userId);
     this.account = account;
     this.outbox = this.createOutbox(account);
     this.openMedia(account);
-    return this.startClient(stored);
+    return this.startClient(stored, this.generation);
   }
 
-  private async startClient(stored: StoredSession): Promise<SessionSummary> {
+  private ensureGeneration(generation: number): void {
+    if (generation !== this.generation) throw new WorkerFailure("unavailable");
+  }
+
+  private async startClient(stored: StoredSession, generation: number): Promise<SessionSummary> {
     const wasmUrl = this.wasmUrl;
     if (wasmUrl === null) throw new WorkerFailure("unavailable");
     const key = accountKey(stored.userId);
@@ -2061,8 +2130,11 @@ export class MatrixSession implements SessionPort {
     this.cryptoPrefix = `maski:crypto:${key}:${stored.deviceId}`;
     this.wire(client);
     await client.store.startup();
+    this.ensureGeneration(generation);
     await initAsync(wasmUrl);
+    this.ensureGeneration(generation);
     await client.initRustCrypto({ cryptoDatabasePrefix: this.cryptoPrefix });
+    this.ensureGeneration(generation);
     this.sas?.dispose();
     this.sas = new SasSessions({
       crypto: () => client.getCrypto(),
@@ -2076,12 +2148,14 @@ export class MatrixSession implements SessionPort {
     });
     this.sas.adoptInProgress();
     this.keyReady = await this.refreshGate();
+    this.ensureGeneration(generation);
     await client.startClient({
       initialSyncLimit: 20,
       lazyLoadMembers: true,
       pendingEventOrdering: PendingEventOrdering.Detached,
       threadSupport: false,
     });
+    this.ensureGeneration(generation);
     const session = summary(client, stored);
     this.emit({ type: "session", payload: session });
     this.emit({ type: "keys", payload: this.keyReady });
@@ -2102,6 +2176,8 @@ export class MatrixSession implements SessionPort {
   }
 
   private async softLogout(): Promise<void> {
+    this.generation += 1;
+    this.startTask = null;
     const client = this.client;
     this.sas?.dispose();
     this.sas = null;
@@ -2114,6 +2190,7 @@ export class MatrixSession implements SessionPort {
     this.keyReady = "missing";
     this.releaseLock?.();
     this.releaseLock = null;
+    this.lockUserId = null;
     if (client !== null) {
       try {
         client.stopClient();
@@ -2129,12 +2206,15 @@ export class MatrixSession implements SessionPort {
   }
 
   private async teardown(client: MatrixClient | null): Promise<void> {
+    this.generation += 1;
+    this.startTask = null;
     const prefix = this.cryptoPrefix;
     const account = this.account;
     this.sas?.dispose();
     this.sas = null;
     this.releaseLock?.();
     this.releaseLock = null;
+    this.lockUserId = null;
     this.client = null;
     this.cryptoPrefix = null;
     this.account = null;

@@ -392,32 +392,35 @@ function initKey(c: Catalog, locale: LocaleId): void {
     if (verifyButton !== null) verifyButton.disabled = false;
   });
 
-  void transport.start().then(
-    async (data) => {
-      if (data.session === null) {
-        transport.dispose();
-        navigate(`${localeRoot(locale)}login/`);
-        return;
-      }
-      const gate = await transport.keyStatus();
-      setGate(gate);
-      revealVerify(gate);
-      if (gate === "ready") {
-        transport.dispose();
-        navigate(localeRoot(locale));
-        return;
-      }
-      showStatus(keyStatusText(c, gate));
-    },
-    (error: unknown) => {
-      if (error instanceof Error && error.message === "locked") {
-        document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
-        showStatus(t(c, "auth.key.locked"));
-        return;
-      }
-      showStatus(t(c, "auth.key.unavailable"));
-    },
-  );
+  void transport
+    .start()
+    .then(
+      async (data) => {
+        if (data.session === null) {
+          transport.dispose();
+          navigate(`${localeRoot(locale)}login/`);
+          return;
+        }
+        const gate = await transport.keyStatus();
+        setGate(gate);
+        revealVerify(gate);
+        if (gate === "ready") {
+          transport.dispose();
+          navigate(localeRoot(locale));
+          return;
+        }
+        showStatus(keyStatusText(c, gate));
+      },
+      (error: unknown) => {
+        if (error instanceof Error && error.message === "locked") {
+          document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
+          showStatus(t(c, "auth.key.locked"));
+          return;
+        }
+        showStatus(t(c, "auth.key.unavailable"));
+      },
+    )
+    .catch(() => showStatus(t(c, "auth.key.unavailable")));
 
   const unlock = form("unlock");
   unlock?.addEventListener("submit", (event) => {

@@ -284,7 +284,7 @@ function isForwardableSticker(value: unknown): value is StickerContent {
  */
 export function forwardableEvent(event: MatrixEvent): ForwardableEvent | null {
   if (event.isRedacted()) return null;
-  const raw = event.getContent();
+  const raw = event.replacingEvent()?.getContent() ?? event.getContent();
   if (!isRecord(raw)) return null;
   const payload: Record<string, unknown> = { ...raw };
   delete payload["m.relates_to"];
@@ -465,6 +465,21 @@ export function projectMembers(room: Room): readonly Member[] {
     profile: true,
     membership: isMembership(member.membership) ? member.membership : "leave",
   }));
+}
+
+/** Children advertised by a space's `m.space.child` state; first valid parent wins. */
+export function spaceParents(client: MatrixClient): ReadonlyMap<string, string> {
+  const parents = new Map<string, string>();
+  for (const room of client.getRooms()) {
+    if (room.getType() !== "m.space") continue;
+    for (const event of room.currentState.getStateEvents(EventType.SpaceChild)) {
+      const childId = event.getStateKey();
+      const via = content(event)["via"];
+      if (typeof childId !== "string" || !Array.isArray(via) || via.length === 0) continue;
+      if (!parents.has(childId)) parents.set(childId, room.roomId);
+    }
+  }
+  return parents;
 }
 
 export function directRooms(client: MatrixClient): ReadonlyMap<string, string> {

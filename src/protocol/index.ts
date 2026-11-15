@@ -85,7 +85,8 @@ export type FailureCode =
   | "not-signed-in"
   | "too-large"
   | "unsupported"
-  | "corrupt";
+  | "corrupt"
+  | "restart";
 
 /** `thumbnail` feeds a row preview; `full` feeds the viewer and a file download. */
 export type MediaVariant = "thumbnail" | "full";
@@ -371,6 +372,7 @@ const FAILURE_CODES: ReadonlySet<string> = new Set<FailureCode>([
   "too-large",
   "unsupported",
   "corrupt",
+  "restart",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
@@ -736,7 +738,7 @@ export function isMessageRow(value: unknown): value is MessageRow {
     isBoolean(value["edited"]) &&
     isBoolean(value["redacted"]) &&
     isMessageStatus(value["status"]) &&
-    isStringOrNull(value["error"]) &&
+    (value["error"] === null || isFailureCode(value["error"])) &&
     isBoolean(value["retryable"]) &&
     isBoolean(value["system"]) &&
     isMessageEncryption(value["encryption"])

@@ -551,7 +551,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
     },
     acceptInvite(roomId) {
       const invite = store.read("invites").find((entry) => entry.roomId === roomId);
-      if (invite === undefined || !caps.addRoom || !caps.answerInvite || !invite.capabilities.accept) return;
+      if (invite === undefined || !caps.answerInvite || !invite.capabilities.accept) return;
       const room = roomFromInvite(invite);
       source.addRoom?.(room);
       store.batch(() => {
@@ -630,16 +630,14 @@ export function createActions({ store, source, c, account }: Context): Actions {
       source.signOutOthers?.();
     },
     async logout() {
+      await source.logout();
       try {
-        await source.logout();
-      } finally {
-        try {
-          await clearDrafts(account);
-        } finally {
-          clearSession();
-          location.assign("/");
-        }
+        await clearDrafts(account);
+      } catch {
+        // The account is already signed out; a local draft store failure cannot keep it alive.
       }
+      clearSession();
+      location.assign("/");
     },
   };
 }
@@ -656,6 +654,10 @@ export function wireSources(store: Store, source: ChatSource): () => void {
       });
     }),
     source.on("window", ({ roomId, messages, hasOlder, older, patch }) => {
+      if (!patch && !older && store.read("roomId") === null) {
+        store.write("roomId", roomId);
+        source.open(roomId);
+      }
       if (roomId !== store.read("roomId")) return;
       store.batch(() => {
         if (patch) {

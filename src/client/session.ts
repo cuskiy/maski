@@ -57,8 +57,13 @@ export function setGate(gate: KeyGate): void {
   storage.write(storage.STORAGE.gate, gate);
 }
 
-export function clearSession(): void {
-  storage.write(storage.STORAGE.server, null);
+/** Clears the account identity but keeps the selected homeserver for the next login. */
+export function clearAccount(): void {
   storage.write(storage.STORAGE.account, null);
   storage.write(storage.STORAGE.gate, null);
+}
+
+export function clearSession(): void {
+  storage.write(storage.STORAGE.server, null);
+  clearAccount();
 }

@@ -317,3 +317,35 @@ void test("a send that cannot run is a stored failed row with no request", async
   assert.equal(backend.queued()[0]?.row.error, "unavailable");
   assert.equal(emitted.length, 1);
 });
+
+void test("a queued row interrupted by a restart uses a typed failure", async () => {
+  const { backend, outbox, emitted } = harness();
+  const row = queuedRow({
+    roomId: ROOM,
+    messageId: "m6",
+    transactionId: "t6",
+    body: "interrupted",
+    html: null,
+    kind: "text",
+    media: null,
+    reply: null,
+    ownUserId: SESSION.userId,
+    ownName: SESSION.displayName,
+    ts: 1,
+    status: "sending",
+  });
+  await backend.put({
+    roomId: ROOM,
+    transactionId: "t6",
+    messageId: "m6",
+    replyTo: null,
+    row,
+    retryable: true,
+    media: null,
+    uploaded: null,
+  });
+  await outbox.resume();
+  assert.equal(backend.queued()[0]?.row.status, "failed");
+  assert.equal(backend.queued()[0]?.row.error, "restart");
+  assert.equal(emitted.at(-1)?.row?.error, "restart");
+});

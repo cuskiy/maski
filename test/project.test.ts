@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { MatrixEvent, Room, RoomMember } from "matrix-js-sdk";
-import { projectMessage } from "../src/worker/project.ts";
+import { forwardableEvent, projectMessage } from "../src/worker/project.ts";
 
 const ROOM = "!r:example.org";
 const OWN = "@alice:example.org";
@@ -123,4 +123,24 @@ void test("a redaction keeps a tombstone row and clears renderable fields", () =
   assert.equal(row?.reply, null);
   assert.deepEqual(row?.mentions, []);
   assert.equal(row?.status, "sent");
+});
+
+void test("a forward uses the replacement content and drops source relations", () => {
+  const replacement = fakeEvent({
+    content: {
+      msgtype: "m.text",
+      body: "new",
+      "m.relates_to": { rel_type: "m.replace", event_id: "$original:example.org" },
+      "m.mentions": { user_ids: ["@bob:example.org"] },
+    },
+  });
+  const original = fakeEvent({
+    content: { msgtype: "m.text", body: "old" },
+    replacement,
+  });
+  const forwarded = forwardableEvent(original);
+  assert.equal(forwarded?.kind, "message");
+  assert.equal(forwarded?.content.body, "new");
+  assert.equal("m.relates_to" in (forwarded?.content ?? {}), false);
+  assert.equal("m.mentions" in (forwarded?.content ?? {}), false);
 });

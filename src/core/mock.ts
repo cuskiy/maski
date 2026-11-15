@@ -409,7 +409,7 @@ const designMessages: readonly MessageRow[] = [
     kind: "text",
     body: "This one did not send.",
     status: "failed",
-    error: "No connection.",
+    error: "network",
     eventId: null,
     transactionId: "txn-d12",
   }),

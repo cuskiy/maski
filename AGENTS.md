@@ -1257,8 +1257,8 @@ Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and 
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **180 tests**, 11 generated pages, 339 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 310.0 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **186 tests**, 11 generated pages, 342 catalog keys, 2 languages.
+- Build sizes: stylesheet 83.8 KiB, client 311.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1267,8 +1267,11 @@ old commits are evidence, not status.
   object URL revocation and upload-once/retry-send. SAS tests exercise the worker state machine's
   projection, ready/started transition, confirm, mismatch, user cancel, unknown id, incoming request and
   restart adoption; no real device or homeserver completed a SAS handshake. A real server and browser
-  worker were run for password login, sync, key reset and chat load; the reset key dialog and a real
-  send were not re-run after the latest UI changes.
+  worker were run for password login, sync, key reset and chat load. Chromium runs verified that a
+  second tab on the key page shows the visible lock note, a fresh key status waits for crypto instead
+  of reporting `unknown`, the review media-files dialog opens the image by message id, and the topbar
+  room menu hides mark-read. A real send, SAS handshake, backup setup and a reload with a non-empty
+  stored window were not re-run after the latest changes.
 - The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
   registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM
@@ -1325,9 +1328,11 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
      imports cross-signing and signs this device. SAS is a worker state machine for own-user and per-device
      verification, including incoming and post-restart adoption, with confirm/mismatch/cancel and a
      projected state; the key page and settings device rows drive it. The gate is recomputed from crypto
-     device events and SAS completion, never by the UI. The device list is read-only and verification
-     state comes from `getDeviceVerificationStatus(...).isVerified()`. Backup status/setup is wired;
-     failures are surfaced and one-time keys are shown at registration and gate reset.
+     device events and SAS completion, never by the UI. `keyStatus` waits for the background startup;
+     `unknown` locks, and only a cached `ready` hint may paint chat before verification. The device list
+     is read-only and verification state comes from `getDeviceVerificationStatus(...).isVerified()`.
+     Backup status/setup is wired; failures are surfaced and one-time keys are shown at registration and
+     gate reset. A reset keeps the key page open until the one-time key dialog closes.
    - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, a wrong KDF, treating the cached
      gate hint as authority, sending request/verifier objects over the port, and resetting the gate from
      the SAS UI. All were deleted or never added.
@@ -1349,7 +1354,9 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
 
 3. **Auth lifecycle is incomplete.**
    - Symptom: some failures still collapse into one generic message; start/login/logout can overlap.
-   - Known: refresh tokens are persisted through `onTokenRefresh`; account lock is held; `M_UNKNOWN_TOKEN`
+   - Known: password and token login request refresh tokens, which are persisted through `onTokenRefresh`;
+     the account lock is acquired before a session is written and only reused for the same user; a
+     startup generation stops an in-flight client from re-emitting after logout; `M_UNKNOWN_TOKEN`
      performs soft logout.
    - Ruled out: an unlocked second tab, silent token loss, and redirecting a stale session into chat.
    - Next: map the remaining `M_*` codes, implement `/login` flow discovery, and serialize
@@ -1397,12 +1404,25 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Symptom: there is no committed worker harness, no first-paint screenshot pair at 390/856/1280 in both
      schemes and no two-tab lock test.
    - Known: pure tests cover projection/outbox/capability/cache rules; Chromium headless checked the gate
-     redirect, the single recovery form and hidden controls.
+     redirect, the single recovery form and hidden controls, the visible two-tab lock note, the media-files
+     dialog opening by message id and the topbar menu set.
    - Ruled out: calling source regexes, a mock screenshot or a pure fake `SessionPort` a browser proof.
    - Next: commit the Playwright harness for start, login against a fake homeserver, sync, open, older,
      send, echo, receipt, decrypt success/failure, malformed command and two-tab lock; capture first-paint
      pairs and run Firefox/Safari before claiming those engines. CSS reorder also needs a computed-style or
      before/after crop check.
+
+9. **Command failure state is incomplete.**
+   - Symptom: `open`, `older` and `members` can leave their visible loading state latched after a typed
+     failure or timeout; a failed device-list read is rendered as "No devices.", and several fire-and-forget
+     actions still convert a failure into silence.
+   - Known: the transport has timeouts and typed failure codes; `search`, media-file loading, sign-out and
+     the key page now surface their failures. The source still has no one failure event that clears a
+     loading flag and gives the invoking surface a retry.
+   - Ruled out: treating a timeout as an empty result, a successful sign-out or a successful edit.
+   - Next: add one typed source failure event keyed by command, clear the corresponding loading flag in
+     `wireSources`, render the retry in the timeline/member/device surface, and cover a forced rejection in
+     the browser harness.
 
 ## 6.5 Migration order
 

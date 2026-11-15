@@ -45,6 +45,9 @@ const CORE_METHODS = [
   "dispose",
 ] as const;
 
+/** SAS has no capability key; the production worker still owns these commands. */
+const WORKER_SAS_METHODS = ["startSas", "acceptSas", "confirmSas", "mismatchSas", "cancelSas"] as const;
+
 function method(prototype: object, name: string): unknown {
   return Reflect.get(prototype, name);
 }
@@ -73,6 +76,9 @@ void test("the production source advertises only the commands it implements", ()
     }
   }
   for (const name of CORE_METHODS) {
+    assert.equal(typeof method(WorkerSource.prototype, name), "function", name);
+  }
+  for (const name of WORKER_SAS_METHODS) {
     assert.equal(typeof method(WorkerSource.prototype, name), "function", name);
   }
 });

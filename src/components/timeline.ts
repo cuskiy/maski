@@ -183,7 +183,7 @@ function messageRow(
           <strong>${message.reply.senderName}</strong><span>${message.reply.body}</span>
         </a>`;
   const pending = message.status !== "sent";
-  const failure = `${t(c, "message.failed")}${message.error === null ? "" : `: ${message.error}`}`;
+  const failure = t(c, "message.failed");
   const status = pending
     ? message.status === "failed"
       ? html`<span class="message-failed" role="img" aria-label="${failure}" title="${failure}">!</span>`

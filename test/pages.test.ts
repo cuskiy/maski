@@ -140,3 +140,12 @@ for (const page of pages()) {
     assert.deepEqual(textRuns(await minify(page.html, minifyOptions)), textRuns(page.html));
   });
 }
+
+void test("the key lock status is outside the hidden form container", () => {
+  const page = renderPages(assets).find((entry) => entry.file === "en/key/index.html");
+  assert.ok(page);
+  const status = page.content.indexOf("data-key-status");
+  const paths = page.content.indexOf("data-key-paths");
+  assert.ok(status >= 0 && paths >= 0);
+  assert.ok(status < paths, "the status would be hidden with the forms");
+});
