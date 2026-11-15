@@ -153,8 +153,6 @@ export const zhCN = {
   "settings.security": "安全",
   "settings.stickers": "贴纸和表情包",
   "settings.stickersEnabled": "显示贴纸选择器",
-  "settings.stickersHint": "贴纸会把所选表情生成图片，并以 Matrix 贴纸发送。",
-  "settings.stickersCount": "{count} 张贴纸",
   "settings.recovery": "恢复密钥",
   "settings.recoveryShown": "已设置",
   "settings.recoveryNotSet": "未设置",

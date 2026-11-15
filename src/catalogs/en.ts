@@ -155,8 +155,6 @@ export const en = {
   "settings.security": "Security",
   "settings.stickers": "Stickers and emoji packs",
   "settings.stickersEnabled": "Show the sticker picker",
-  "settings.stickersHint": "Sticker images are generated from the selected emoji and sent as Matrix stickers.",
-  "settings.stickersCount": "{count} stickers",
   "settings.recovery": "Recovery key",
   "settings.recoveryShown": "Set",
   "settings.recoveryNotSet": "Not set",

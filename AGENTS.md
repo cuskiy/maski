@@ -1257,8 +1257,8 @@ Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and 
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **194 tests**, 11 generated pages, 351 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.0 KiB, client 317.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **194 tests**, 11 generated pages, 349 catalog keys, 2 languages.
+- Build sizes: stylesheet 84.0 KiB, client 318.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1286,7 +1286,11 @@ old commits are evidence, not status.
   composer is disabled, mark-read is blocked, and the key event either enters `ready` or redirects locked.
 - Production stickers are enabled. A sticker-picker emoji is rasterized to a 512×512 PNG in the client and
   sent through the worker `sendMedia` path as an `m.sticker`; picker emoji does not enter the composer.
-  Settings has a sticker-pack toggle and the built-in pack/list; disabling hides the sticker button.
+  Settings has a sticker-pack toggle and the built-in pack; disabling hides the sticker button.
+- Send appends the worker-visible row immediately with a sending spinner; the worker outbox echo replaces
+  it and a failure marks it failed/retryable. Edit and reaction update the visible row immediately and
+  restore it on a typed failure; redact shows the tombstone immediately and restores on failure. Mark-read
+  clears the room badge and receipt immediately, restoring the prior room row if the worker command fails.
 - The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
   registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM

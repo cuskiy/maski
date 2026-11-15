@@ -318,5 +318,4 @@ void test("settings exposes the sticker pack toggle", () => {
   const markup = surfaceBodyFor(en, SURFACE.settings, mockChatState()).value;
   assert.match(markup, /data-setting="stickers"/u);
   assert.match(markup, /Stickers and emoji packs/u);
-  assert.match(markup, /Sticker pack 1/u);
 });

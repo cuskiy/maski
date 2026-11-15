@@ -174,8 +174,8 @@ export class MatrixTransport {
     void this.request("discardSend", { roomId, messageId }).catch(() => undefined);
   }
 
-  markRead(roomId: string, eventId: string): void {
-    void this.request("markRead", { roomId, eventId }).catch(() => undefined);
+  markRead(roomId: string, eventId: string): Promise<null> {
+    return this.request("markRead", { roomId, eventId });
   }
 
   members(roomId: string): Promise<null> {

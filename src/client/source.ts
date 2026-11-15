@@ -121,11 +121,11 @@ export interface ChatSource {
   media?(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply>;
   retrySend(roomId: string, messageId: string): Promise<MessageRow>;
   discardSend(roomId: string, messageId: string): void;
-  markRead(roomId: string, eventId: string): void;
+  markRead(roomId: string, eventId: string): Promise<void> | void;
   /** A command the production worker does not implement is absent here and hidden by capability. */
-  react?(roomId: string, eventId: string, key: string): void;
-  edit?(roomId: string, eventId: string, body: string, html: string | null): void;
-  redact?(roomId: string, eventId: string): void;
+  react?(roomId: string, eventId: string, key: string): Promise<void> | void;
+  edit?(roomId: string, eventId: string, body: string, html: string | null): Promise<void> | void;
+  redact?(roomId: string, eventId: string): Promise<void> | void;
   search?(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): Promise<readonly MessageRow[]>;
   forward?(targetRoomId: string, sources: readonly ForwardSource[]): void;
   typing?(roomId: string, typing: boolean): void;

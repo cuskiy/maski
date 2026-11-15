@@ -146,24 +146,24 @@ export class WorkerSource implements ChatSource {
     this.transport.discardSend(roomId, messageId);
   }
 
-  markRead(roomId: string, eventId: string): void {
-    this.transport.markRead(roomId, eventId);
+  markRead(roomId: string, eventId: string): Promise<void> {
+    return this.transport.markRead(roomId, eventId).then(() => undefined);
   }
 
   members(roomId: string): void {
     void this.transport.members(roomId).catch((error: unknown) => this.report("members", error));
   }
 
-  react(roomId: string, eventId: string, key: string): void {
-    void this.transport.react(roomId, eventId, key).catch(() => undefined);
+  react(roomId: string, eventId: string, key: string): Promise<void> {
+    return this.transport.react(roomId, eventId, key).then(() => undefined);
   }
 
-  edit(roomId: string, eventId: string, body: string, html: string | null): void {
-    void this.transport.edit(roomId, eventId, body, html).catch(() => undefined);
+  edit(roomId: string, eventId: string, body: string, html: string | null): Promise<void> {
+    return this.transport.edit(roomId, eventId, body, html).then(() => undefined);
   }
 
-  redact(roomId: string, eventId: string): void {
-    void this.transport.redact(roomId, eventId).catch(() => undefined);
+  redact(roomId: string, eventId: string): Promise<void> {
+    return this.transport.redact(roomId, eventId).then(() => undefined);
   }
 
   typing(roomId: string, typing: boolean): void {

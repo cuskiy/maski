@@ -120,6 +120,10 @@ function setRootView(open: boolean): void {
   document.querySelector(".app")?.setAttribute("data-view", open ? "room" : "list");
 }
 
+function withReadReceipt(room: RoomSummary, eventId: string): RoomSummary {
+  return { ...room, readReceipt: eventId, unread: 0, highlight: 0 };
+}
+
 function cleanRow(row: MessageRow): MessageRow {
   return row.html === null ? row : { ...row, html: sanitizeMessageHtml(row.html) };
 }
@@ -134,6 +138,29 @@ function patchMediaUrl(store: Store, roomId: string, messageId: string, url: str
   const next = messages.slice();
   next[index] = { ...row, media: { ...row.media, url } };
   store.write("messages", next);
+}
+
+function visibleRowIndex(store: Store, roomId: string, messageId: string): number {
+  if (store.read("roomId") !== roomId) return -1;
+  return store.read("messages").findIndex((message) => message.id === messageId || message.eventId === messageId);
+}
+
+function patchVisibleRow(store: Store, roomId: string, row: MessageRow): void {
+  const index = visibleRowIndex(store, roomId, row.id);
+  if (index === -1) return;
+  const messages = store.read("messages");
+  const existing = messages[index];
+  if (existing === undefined) return;
+  const next = messages.slice();
+  next[index] = row;
+  store.write("messages", next);
+}
+
+function appendVisibleRow(store: Store, row: MessageRow): void {
+  if (store.read("roomId") !== row.roomId) return;
+  const messages = store.read("messages");
+  if (messages.some((message) => message.id === row.id || message.transactionId === row.transactionId)) return;
+  store.write("messages", [...messages, row]);
 }
 
 export function createActions({ store, source, c, account }: Context): Actions {
@@ -175,7 +202,25 @@ export function createActions({ store, source, c, account }: Context): Actions {
     const room = store.read("rooms").find((entry) => entry.roomId === roomId);
     if (room === undefined || room.latestEventId === null) return;
     if (room.readReceipt === room.latestEventId) return;
-    source.markRead(roomId, room.latestEventId);
+    const eventId = room.latestEventId;
+    const previous = room;
+    store.write(
+      "rooms",
+      store.read("rooms").map((entry) => (entry.roomId === roomId ? withReadReceipt(entry, eventId) : entry)),
+    );
+    const restore = (): void => {
+      store.write(
+        "rooms",
+        store
+          .read("rooms")
+          .map((entry) => (entry.roomId === roomId && entry.readReceipt === eventId ? previous : entry)),
+      );
+    };
+    try {
+      void Promise.resolve(source.markRead(roomId, eventId)).catch(restore);
+    } catch {
+      restore();
+    }
   }
 
   /** Replaces only the resolved URL; the row identity and everything else stay put. */
@@ -233,8 +278,16 @@ export function createActions({ store, source, c, account }: Context): Actions {
       if (rawRows.length === 0) return;
       if (!store.read("rooms").some((room) => room.roomId === roomId)) return;
       for (const raw of rawRows) {
-        const row = cleanRow(raw);
-        void source.send(roomId, row).catch(() => undefined);
+        const row = cleanRow({ ...raw, status: "sending" });
+        appendVisibleRow(store, row);
+        void source.send(roomId, row).catch(() => {
+          patchVisibleRow(store, roomId, {
+            ...row,
+            status: "failed",
+            error: "network",
+            retryable: true,
+          });
+        });
       }
     },
     createRow(roomId, body, options = {}) {
@@ -468,23 +521,72 @@ export function createActions({ store, source, c, account }: Context): Actions {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       const room = store.read("rooms").find((entry) => entry.roomId === message?.roomId) ?? null;
       if (message === undefined || !caps.react || !messagePermissions(message, room, userId()).react) return;
-      if (message.eventId === null) return;
-      source.react?.(message.roomId, message.eventId, key);
+      if (message.eventId === null || source.react === undefined) return;
+      const existing = message.reactions.find((reaction) => reaction.key === key);
+      const reactions = (
+        existing === undefined
+          ? [...message.reactions, { key, count: 1, mine: true }]
+          : existing.mine
+            ? existing.count <= 1
+              ? message.reactions.filter((reaction) => reaction.key !== key)
+              : message.reactions.map((reaction) =>
+                  reaction.key === key ? { ...reaction, count: reaction.count - 1, mine: false } : reaction,
+                )
+            : message.reactions.map((reaction) =>
+                reaction.key === key ? { ...reaction, count: reaction.count + 1, mine: true } : reaction,
+              )
+      ).toSorted((left, right) => right.count - left.count);
+      const optimistic: MessageRow = { ...message, reactions };
+      patchVisibleRow(store, message.roomId, optimistic);
+      const restore = (): void => patchVisibleRow(store, message.roomId, message);
+      try {
+        void Promise.resolve(source.react(message.roomId, message.eventId, key)).catch(restore);
+      } catch {
+        restore();
+      }
     },
     edit(messageId, body, html) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       const room = store.read("rooms").find((entry) => entry.roomId === message?.roomId) ?? null;
       if (message === undefined || !caps.edit || !messagePermissions(message, room, userId()).edit) return;
-      if (message.eventId === null) return;
+      if (message.eventId === null || source.edit === undefined) return;
       const cleanHtml = html === null ? null : sanitizeMessageHtml(html);
-      source.edit?.(message.roomId, message.eventId, body, cleanHtml);
+      const optimistic: MessageRow = {
+        ...message,
+        body,
+        html: cleanHtml,
+        edited: true,
+      };
+      patchVisibleRow(store, message.roomId, optimistic);
+      const restore = (): void => patchVisibleRow(store, message.roomId, message);
+      try {
+        void Promise.resolve(source.edit?.(message.roomId, message.eventId, body, cleanHtml)).catch(restore);
+      } catch {
+        restore();
+      }
     },
     redact(messageId) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       const room = store.read("rooms").find((entry) => entry.roomId === message?.roomId) ?? null;
       if (message === undefined || !caps.redact || !messagePermissions(message, room, userId()).redact) return;
-      if (message.eventId === null) return;
-      source.redact?.(message.roomId, message.eventId);
+      if (message.eventId === null || source.redact === undefined) return;
+      const optimistic: MessageRow = {
+        ...message,
+        body: "",
+        html: null,
+        media: null,
+        reactions: [],
+        reply: null,
+        mentions: [],
+        redacted: true,
+      };
+      patchVisibleRow(store, message.roomId, optimistic);
+      const restore = (): void => patchVisibleRow(store, message.roomId, message);
+      try {
+        void Promise.resolve(source.redact(message.roomId, message.eventId)).catch(restore);
+      } catch {
+        restore();
+      }
     },
     async search(roomIds, query, mediaKinds) {
       if (!caps.search || source.search === undefined) return [];
