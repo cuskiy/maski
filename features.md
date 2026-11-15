@@ -16,8 +16,7 @@ anchor positioning and `anchor-size()` are recorded from MDN.
 | anchor positioning (`anchor-name`, `position-anchor`, `position-area`, `position-try`, `anchor-size`) | — | 125 / 147 / 26 | popover placement and width from the invoker; no JS |
 | popover implicit anchor reference | — | 133 / 147 / 26 | `popovertarget` supplies the anchor |
 | `backdrop-filter` | 2024-09 | 76 / 103 / 18 | modal backdrop blur |
-| `@starting-style` | 2024-08 | 117 / 129 / 17.5 | overlay entrance |
-| `transition-behavior` | 2024-08 | 117 / 129 / 17.4 | `allow-discrete` for the entrance |
+| `@starting-style` | 2024-08 | 117 / 129 / 17.5 | overlay entrances |
 
 ## Layout, theme, timeline
 
@@ -52,3 +51,12 @@ anchor positioning and `anchor-size()` are recorded from MDN.
 | feature | Baseline | Chrome / Firefox / Safari | use |
 |---|---|---|---|
 | `scripting` media feature | 2023-12 | 120 / 113 / 17 | hide the router spinner when JavaScript is off |
+
+## Runtime
+
+| feature | Baseline | Chrome / Firefox / Safari | use |
+|---|---|---|---|
+| dedicated workers | 2015-07 | 4 / 4 / 4 | the Matrix and image workers |
+| JavaScript modules in workers | 2023-06 | 80 / 114 / 15 | ESM Matrix worker with rust crypto wasm |
+| IndexedDB | 2021-09 | 58 / 51 / 15 | worker-owned account/sync stores |
+| WebAssembly | 2017-03 | 57 / 52 / 11 | `@matrix-org/matrix-sdk-crypto-wasm` |

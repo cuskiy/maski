@@ -48,7 +48,7 @@ for (const page of generated) {
     fail("C4", `${page.id} was not generated`);
     continue;
   }
-  const language = /<html lang="([^"]+)"/u.exec(html)?.[1];
+  const language = /<html(?=[^>]*\slang="([^"]+)")/u.exec(html)?.[1];
   if (language !== page.locale) fail("C4", `${page.id} declares lang ${language ?? "none"}, expected ${page.locale}`);
   if ([...html.matchAll(/<h1[\s>]/gu)].length !== 1) fail("C4", `${page.id} does not have exactly one h1`);
   if (!/<noscript>/u.test(html)) fail("C4", `${page.id} has no note for a script-free reader`);
@@ -66,6 +66,10 @@ function isAssets(value: unknown): value is {
   guard: string;
   prepaint: string;
   client: string;
+  reviewClient: string;
+  imageWorker: string;
+  matrixWorker: string;
+  cryptoWasm: string;
 } {
   return (
     typeof value === "object" &&
@@ -79,7 +83,15 @@ function isAssets(value: unknown): value is {
     "prepaint" in value &&
     typeof value.prepaint === "string" &&
     "client" in value &&
-    typeof value.client === "string"
+    typeof value.client === "string" &&
+    "reviewClient" in value &&
+    typeof value.reviewClient === "string" &&
+    "imageWorker" in value &&
+    typeof value.imageWorker === "string" &&
+    "matrixWorker" in value &&
+    typeof value.matrixWorker === "string" &&
+    "cryptoWasm" in value &&
+    typeof value.cryptoWasm === "string"
   );
 }
 
@@ -92,6 +104,10 @@ const manifestNames = {
   guard: { prefix: "guard-", extension: ".js" },
   prepaint: { prefix: "prepaint-", extension: ".js" },
   client: { prefix: "client-", extension: ".js" },
+  reviewClient: { prefix: "review-client-", extension: ".js" },
+  imageWorker: { prefix: "image-worker-", extension: ".js" },
+  matrixWorker: { prefix: "matrix-worker-", extension: ".js" },
+  cryptoWasm: { prefix: "matrix-sdk-crypto-", extension: ".wasm" },
 } as const;
 for (const [key, value] of Object.entries(manifest)) {
   const expected = manifestNames[key as keyof typeof manifestNames];

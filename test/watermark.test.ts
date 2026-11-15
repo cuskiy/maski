@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   COVERAGE_COLS,
@@ -7,6 +8,7 @@ import {
   TILE_W,
   LAYERS,
   packWatermark,
+  renderWatermark,
   type PlacedMotif,
 } from "../scripts/watermark.ts";
 
@@ -58,4 +60,9 @@ void test("watermark layer sizes move from large to small", () => {
   };
   assert.ok(average("large") > average("medium"));
   assert.ok(average("medium") > average("small"));
+});
+
+void test("the committed watermark matches its generator", async () => {
+  const source = await readFile(new URL("../src/styles/watermark.svg", import.meta.url), "utf8");
+  assert.equal(source, renderWatermark());
 });

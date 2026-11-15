@@ -7,6 +7,7 @@
     min-block-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar) transparent;
   }
@@ -26,7 +27,7 @@
     min-block-size: 1.75rem;
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
-    color: var(--nav-muted);
+    color: var(--nav-ink);
     font-size: var(--text-xs);
     font-weight: var(--weight-strong);
     line-height: 1.2;
@@ -139,8 +140,8 @@
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--nav-avatar-bg);
-    color: var(--nav-avatar-ink);
+    background: var(--chrome-avatar-bg);
+    color: var(--chrome-avatar-ink);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
@@ -191,9 +192,9 @@
 
   .room-badge {
     display: inline-grid;
-    min-inline-size: 1rem;
-    block-size: 1rem;
-    padding: 0 0.25rem;
+    min-inline-size: 1.125rem;
+    block-size: 1.125rem;
+    padding: 0 0.3rem;
     place-items: center;
     border-radius: var(--radius-pill);
     background: var(--nav-badge-bg);
@@ -206,6 +207,7 @@
 
   .room-badge.is-mention {
     background: var(--danger);
+    color: var(--page);
   }
 
   .room-muted {
@@ -238,7 +240,7 @@
     border-radius: 50%;
     background: var(--surface-active);
     color: var(--ink);
-    opacity: 0;
+    opacity: 0%;
     pointer-events: none;
     transform: translateY(-50%);
     transition: opacity var(--duration) var(--ease);
@@ -254,7 +256,7 @@
 
   .room.is-swiping-right .room-swipe-hint.is-start,
   .room.is-swiping-left .room-swipe-hint.is-end {
-    opacity: 1;
+    opacity: 100%;
   }
 
   .room-swipe-hint .icon {
@@ -282,7 +284,7 @@
     inline-size: var(--avatar);
     block-size: var(--avatar);
     border-radius: 50%;
-    background: var(--nav-hover-bg);
+    background: var(--nav-skeleton-bg);
   }
 
   .skeleton-lines {
@@ -293,7 +295,7 @@
   .skeleton-lines span {
     block-size: 0.5rem;
     border-radius: var(--radius-xs);
-    background: var(--nav-hover-bg);
+    background: var(--nav-skeleton-bg);
   }
 
   .skeleton-lines span:first-child {
@@ -302,7 +304,7 @@
 
   .skeleton-lines span:last-child {
     inline-size: 82%;
-    background: var(--nav-active-bg);
+    background: var(--nav-skeleton-strong-bg);
   }
 
   .nav-account {
@@ -315,7 +317,7 @@
     margin-block-start: var(--space-2);
     padding: 5px var(--space-2);
     border-radius: var(--radius-md);
-    background: var(--account-hover-bg);
+    background: var(--account-bg);
     color: var(--account-ink);
     text-align: start;
     anchor-name: --nav-account;
@@ -323,7 +325,7 @@
   }
 
   .nav-account:hover {
-    background: var(--account-bg);
+    background: var(--account-hover-bg);
     color: var(--account-ink);
   }
 
@@ -334,7 +336,7 @@
 
   #surface-nav-menu:popover-open + .nav-account,
   body:has(#surface-language:popover-open) .nav-account {
-    background: var(--account-bg);
+    background: var(--account-open-bg);
     color: var(--account-ink);
   }
 
@@ -345,8 +347,8 @@
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--nav-avatar-bg);
-    color: var(--nav-avatar-ink);
+    background: var(--chrome-avatar-bg);
+    color: var(--chrome-avatar-ink);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
@@ -433,8 +435,8 @@
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--nav-avatar-bg);
-    color: var(--nav-avatar-ink);
+    background: var(--chrome-avatar-bg);
+    color: var(--chrome-avatar-ink);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
@@ -490,7 +492,7 @@
       font-size: var(--text-xs);
     }
 
-    .app[data-view="shell"] .room-back {
+    .app[data-view="list"] .room-back {
       display: none;
     }
   }

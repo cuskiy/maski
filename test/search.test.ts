@@ -3,6 +3,8 @@ import test from "node:test";
 import { messageMatches } from "../src/core/search.ts";
 import { toggledReactions } from "../src/core/reactions.ts";
 import { mockMessagesFor } from "../src/core/mock.ts";
+import { zhCN } from "../src/catalogs/zh-CN.ts";
+import { t } from "../src/lib/catalog.ts";
 
 void test("search matches body, sender, filename and media kind filters", () => {
   const image = mockMessagesFor("design").find((message) => message.media?.kind === "image");
@@ -11,8 +13,9 @@ void test("search matches body, sender, filename and media kind filters", () => 
   assert.equal(messageMatches(image, "layout.png"), true);
   assert.equal(messageMatches(image, "bob"), true);
   assert.equal(messageMatches(image, "no-such-token"), false);
-  assert.equal(messageMatches(image, "图片", new Set(["image"])), true);
-  assert.equal(messageMatches(image, "图片", new Set(["video"])), false);
+  const imageToken = t(zhCN, "chat.media.image");
+  assert.equal(messageMatches(image, imageToken, new Set(["image"])), true);
+  assert.equal(messageMatches(image, imageToken, new Set(["video"])), false);
 });
 
 void test("reaction toggling is symmetric and one per sender", () => {

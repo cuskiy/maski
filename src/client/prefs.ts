@@ -1,8 +1,10 @@
 import type { NotificationPrefs, SectionId } from "../core/types.ts";
 import * as storage from "./storage.ts";
 
-function isSectionId(value: string): value is SectionId {
-  return value === "favorites" || value === "rooms" || value === "direct" || value === "channels";
+function sectionId(value: string): SectionId | null {
+  if (value === "favorites" || value === "rooms" || value === "direct" || value === "spaces") return value;
+  if (value === "channels") return "spaces";
+  return null;
 }
 
 export function readSections(account: string): Partial<Record<SectionId, boolean>> | null {
@@ -11,10 +13,14 @@ export function readSections(account: string): Partial<Record<SectionId, boolean
   const stored = scoped ?? storage.readJson(storage.STORAGE.legacySections);
   if (typeof stored !== "object" || stored === null) return null;
   const sections: Partial<Record<SectionId, boolean>> = {};
-  for (const [id, value] of Object.entries(stored)) {
-    if (isSectionId(id) && typeof value === "boolean") sections[id] = value;
+  for (const [value, open] of Object.entries(stored)) {
+    const id = sectionId(value);
+    if (id !== null && typeof open === "boolean") sections[id] = open;
   }
-  if (scoped === null && stored !== null) storage.writeJson(key, stored);
+  if (scoped === null && stored !== null) {
+    storage.writeJson(key, stored);
+    storage.write(storage.STORAGE.legacySections, null);
+  }
   return sections;
 }
 
@@ -23,7 +29,7 @@ export function saveSections(account: string, sections: Readonly<Record<SectionI
     favorites: sections.favorites.open,
     rooms: sections.rooms.open,
     direct: sections.direct.open,
-    channels: sections.channels.open,
+    spaces: sections.spaces.open,
   });
 }
 
@@ -32,7 +38,10 @@ export function readSpaces(account: string): readonly string[] | null {
   const stored = storage.readJson(key) ?? storage.readJson(storage.STORAGE.legacySpaces);
   if (!Array.isArray(stored)) return null;
   const spaces = stored.filter((value): value is string => typeof value === "string");
-  if (storage.readJson(key) === null) storage.writeJson(key, spaces);
+  if (storage.readJson(key) === null) {
+    storage.writeJson(key, spaces);
+    storage.write(storage.STORAGE.legacySpaces, null);
+  }
   return spaces;
 }
 
@@ -45,7 +54,10 @@ export function readDraft(account: string, roomId: string): string {
   const scoped = storage.read(key);
   if (scoped !== null) return scoped;
   const legacy = storage.read(storage.STORAGE.legacyDraft(roomId)) ?? "";
-  if (legacy !== "") storage.write(key, legacy);
+  if (legacy !== "") {
+    storage.write(key, legacy);
+    storage.write(storage.STORAGE.legacyDraft(roomId), null);
+  }
   return legacy;
 }
 

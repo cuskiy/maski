@@ -3,197 +3,186 @@ import type {
   DeviceSession,
   Invite,
   Media,
+  Member,
   MessageEncryption,
   MessageKind,
   MessageRow,
   MessageStatus,
+  PowerLevels,
   Reaction,
   ReplyRef,
   RoomSummary,
   SessionSummary,
 } from "./types.ts";
 import { emptyChatState } from "./state.ts";
+import { createRoom } from "./rooms.ts";
+import { DEFAULT_POWER_LEVELS } from "./permissions.ts";
+
+const SELF = "@you:matrix.org";
 
 function at(day: number, hour: number, minute: number): number {
   return Date.UTC(2026, 10, day, hour, minute);
 }
 
-const roomSeeds: ReadonlyArray<
-  Omit<
-    RoomSummary,
-    | "notification"
-    | "encryption"
-    | "capabilities"
-    | "aliases"
-    | "joinRule"
-    | "guestAccess"
-    | "historyVisibility"
-    | "directoryPublished"
-    | "roomVersion"
-    | "federated"
-  >
-> = [
-  {
+function power(users: Readonly<Record<string, number>> = {}): PowerLevels {
+  return { ...DEFAULT_POWER_LEVELS, users };
+}
+
+function room(
+  input: Parameters<typeof createRoom>[0] & {
+    readonly preview: RoomSummary["preview"];
+    readonly lastTs: number;
+    readonly latestEventId: string | null;
+    readonly readReceipt: string | null;
+    readonly fullyRead?: string | null;
+    readonly unread: number;
+    readonly highlight: number;
+  },
+): RoomSummary {
+  return {
+    ...createRoom(input),
+    preview: input.preview,
+    lastTs: input.lastTs,
+    latestEventId: input.latestEventId,
+    readReceipt: input.readReceipt,
+    fullyRead: input.fullyRead ?? input.readReceipt,
+    unread: input.unread,
+    highlight: input.highlight,
+  };
+}
+
+const rooms: readonly RoomSummary[] = [
+  room({
     roomId: "design",
     name: "Design",
     topic: "Interface, motion and the quiet shell",
-    avatar: null,
     preview: { kind: "text", body: "The borderless pass is ready." },
     lastTs: at(13, 10, 2),
+    latestEventId: "d13",
     readReceipt: "d10",
-    unread: 3,
+    unread: 1,
     highlight: 1,
-    muted: false,
-    membership: "join",
-    isDirect: false,
-    isSpace: false,
-    favorite: false,
-    spaceId: null,
-  },
-  {
+    joinRule: "public",
+    historyVisibility: "shared",
+    directoryPublished: true,
+    aliases: ["#design:matrix.org"],
+    creatorIds: [SELF, "@alice:matrix.org"],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "nix",
     name: "Nix",
     topic: "Packaging and shell setups",
-    avatar: null,
     preview: { kind: "text", body: "The flake is smaller now." },
     lastTs: at(13, 9, 55),
+    latestEventId: "n1",
     readReceipt: "n1",
     unread: 0,
     highlight: 0,
-    muted: false,
-    membership: "join",
-    isDirect: false,
-    isSpace: false,
-    favorite: true,
-    spaceId: null,
-  },
-  {
+    tags: { "m.favourite": { order: "0.1" } },
+    joinRule: "invite",
+    historyVisibility: "shared",
+    creatorIds: ["@alice:matrix.org"],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "alice",
     name: "Alice",
     topic: "Direct messages",
-    avatar: null,
     preview: { kind: "text", body: "Can you look at the key screen?" },
     lastTs: at(13, 9, 48),
-    readReceipt: "a1",
-    unread: 1,
+    latestEventId: "a2",
+    readReceipt: "a2",
+    unread: 0,
     highlight: 0,
-    muted: false,
-    membership: "join",
-    isDirect: true,
-    isSpace: false,
-    favorite: false,
-    spaceId: null,
-  },
-  {
+    directUserId: "@alice:matrix.org",
+    joinRule: "invite",
+    historyVisibility: "shared",
+    creatorIds: [SELF],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "product",
     name: "Product",
     topic: "Spaces and plans",
-    avatar: null,
     preview: { kind: "text", body: "2 rooms" },
     lastTs: at(13, 9, 40),
+    latestEventId: null,
     readReceipt: null,
     unread: 0,
     highlight: 0,
-    muted: false,
-    membership: "join",
-    isDirect: false,
-    isSpace: true,
-    favorite: false,
-    spaceId: null,
-  },
-  {
+    roomType: "m.space",
+    joinRule: "invite",
+    historyVisibility: "invited",
+    encryption: "none",
+    creatorIds: [SELF],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "roadmap",
     name: "Roadmap",
     topic: "The next release",
-    avatar: null,
     preview: { kind: "text", body: "Q1 priorities are set." },
     lastTs: at(13, 9, 38),
+    latestEventId: "r2",
     readReceipt: "r2",
     unread: 0,
     highlight: 0,
-    muted: false,
-    membership: "join",
-    isDirect: false,
-    isSpace: false,
-    favorite: false,
-    lowPriority: true,
+    tags: { "m.lowpriority": {} },
     spaceId: "product",
-  },
-  {
+    joinRule: "invite",
+    historyVisibility: "shared",
+    creatorIds: [SELF],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "specs",
     name: "Specs",
     topic: "Protocol notes",
-    avatar: null,
     preview: { kind: "text", body: "The projection is two passes." },
     lastTs: at(13, 9, 36),
+    latestEventId: "s2",
     readReceipt: "s2",
     unread: 0,
     highlight: 0,
-    muted: false,
-    membership: "join",
-    isDirect: false,
-    isSpace: false,
-    favorite: false,
     spaceId: "product",
-  },
-  {
+    joinRule: "invite",
+    historyVisibility: "shared",
+    creatorIds: [SELF],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "lobby",
     name: "Lobby",
     topic: "General",
-    avatar: null,
     preview: { kind: "text", body: "Morning." },
     lastTs: at(13, 9, 30),
-    readReceipt: "l1",
-    unread: 0,
+    latestEventId: "l1",
+    readReceipt: null,
+    unread: 1,
     highlight: 0,
-    muted: false,
-    membership: "join",
-    isDirect: false,
-    isSpace: false,
-    favorite: false,
-    spaceId: null,
-  },
-  {
+    joinRule: "public",
+    historyVisibility: "shared",
+    creatorIds: ["@alice:matrix.org"],
+    powerLevels: power(),
+  }),
+  room({
     roomId: "ops",
     name: "Ops",
     topic: "Deployments",
-    avatar: null,
     preview: { kind: "text", body: "Build 412 is green." },
     lastTs: at(13, 9, 20),
+    latestEventId: "o1",
     readReceipt: "o1",
     unread: 0,
     highlight: 0,
-    muted: true,
-    membership: "join",
-    isDirect: false,
-    isSpace: false,
-    favorite: false,
-    spaceId: null,
-  },
-];
-
-const rooms: readonly RoomSummary[] = roomSeeds.map((room) =>
-  Object.assign({}, room, {
-    notification: room.muted ? ("mute" as const) : ("default" as const),
-    encryption: room.isSpace ? ("none" as const) : ("encrypted" as const),
-    aliases: room.roomId === "design" ? ["#design:matrix.org"] : [],
-    joinRule: room.isSpace ? ("invite" as const) : ("public" as const),
-    guestAccess: false,
-    historyVisibility: room.isSpace ? ("invited" as const) : ("shared" as const),
-    directoryPublished: room.roomId === "design",
-    roomVersion: "12",
-    federated: true,
-    capabilities: {
-      invite: !room.isSpace && room.membership === "join",
-      manage: room.roomId === "design" || room.roomId === "product",
-      notifications: room.membership === "join",
-      leave: room.membership === "join",
-      markRead: true,
-      favorite: !room.isSpace,
-      mute: !room.isSpace,
-    },
+    notification: "mute",
+    joinRule: "invite",
+    historyVisibility: "shared",
+    creatorIds: ["@carol:matrix.org"],
+    powerLevels: power(),
   }),
-);
+];
 
 interface RowInput {
   readonly id: string;
@@ -208,16 +197,23 @@ interface RowInput {
   readonly media?: Media;
   readonly reactions?: readonly Reaction[];
   readonly reply?: ReplyRef;
+  readonly mentions?: readonly string[];
   readonly edited?: boolean;
+  readonly redacted?: boolean;
   readonly status?: MessageStatus;
   readonly error?: string;
   readonly system?: boolean;
   readonly encryption?: MessageEncryption;
+  readonly eventId?: string | null;
+  readonly transactionId?: string | null;
 }
 
 function row(input: RowInput): MessageRow {
+  const sent = input.status === undefined || input.status === "sent";
   return {
     id: input.id,
+    eventId: input.eventId === undefined ? (sent ? input.id : null) : input.eventId,
+    transactionId: input.transactionId ?? null,
     roomId: input.roomId,
     sender: input.sender,
     senderName: input.senderName,
@@ -230,19 +226,13 @@ function row(input: RowInput): MessageRow {
     media: input.media ?? null,
     reactions: input.reactions ?? [],
     reply: input.reply ?? null,
+    mentions: input.mentions ?? [],
     edited: input.edited ?? false,
+    redacted: input.redacted ?? false,
     status: input.status ?? "sent",
     error: input.error ?? null,
     system: input.system ?? false,
     encryption: input.encryption ?? { state: "ok" },
-    capabilities: {
-      reply: input.encryption?.state !== "undecryptable",
-      react: input.encryption?.state !== "undecryptable",
-      edit: input.own && input.encryption?.state !== "undecryptable",
-      redact: input.own,
-      copy: input.encryption?.state !== "undecryptable" && input.body !== "",
-      copyLink: true,
-    },
   };
 }
 
@@ -306,7 +296,7 @@ const designMessages: readonly MessageRow[] = [
   row({
     id: "d3",
     roomId: "design",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 9, 31),
     own: true,
@@ -353,7 +343,7 @@ const designMessages: readonly MessageRow[] = [
   row({
     id: "d7",
     roomId: "design",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 9, 44),
     own: true,
@@ -377,7 +367,7 @@ const designMessages: readonly MessageRow[] = [
   row({
     id: "d9",
     roomId: "design",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 9, 52),
     own: true,
@@ -398,18 +388,20 @@ const designMessages: readonly MessageRow[] = [
   row({
     id: "d11",
     roomId: "design",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 10, 3),
     own: true,
     kind: "text",
     body: "Testing the queued state.",
     status: "sending",
+    eventId: null,
+    transactionId: "txn-d11",
   }),
   row({
     id: "d12",
     roomId: "design",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 10, 4),
     own: true,
@@ -417,6 +409,8 @@ const designMessages: readonly MessageRow[] = [
     body: "This one did not send.",
     status: "failed",
     error: "No connection.",
+    eventId: null,
+    transactionId: "txn-d12",
   }),
   row({
     id: "d13",
@@ -445,7 +439,7 @@ const aliceMessages: readonly MessageRow[] = [
   row({
     id: "a2",
     roomId: "alice",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 9, 46),
     own: true,
@@ -468,7 +462,7 @@ const roadmapMessages: readonly MessageRow[] = [
   row({
     id: "r2",
     roomId: "roadmap",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 9, 38),
     own: true,
@@ -491,7 +485,7 @@ const specMessages: readonly MessageRow[] = [
   row({
     id: "s2",
     roomId: "specs",
-    sender: "@you:matrix.org",
+    sender: SELF,
     senderName: "You",
     ts: at(13, 9, 36),
     own: true,
@@ -554,11 +548,10 @@ export function mockMessagesFor(roomId: string): readonly MessageRow[] {
 }
 
 export const mockSession: SessionSummary = {
-  userId: "@you:matrix.org",
+  userId: SELF,
   displayName: "You",
   avatar: null,
   capabilities: {
-    verify: true,
     recoveryKey: true,
     backup: true,
     signOut: true,
@@ -606,35 +599,68 @@ export const mockInvites: readonly Invite[] = [
     roomId: "garden",
     name: "Garden",
     topic: "Weekend plans",
+    avatar: null,
     inviter: "Alice",
     inviterId: "@alice:matrix.org",
+    directUserId: null,
+    roomType: null,
+    joinRule: "invite",
+    guestAccess: "forbidden",
+    historyVisibility: "shared",
+    encryption: "encrypted",
+    roomVersion: "12",
+    federated: true,
     capabilities: { accept: true, decline: true },
   },
 ];
 
-export const mockRecoveryKey = {
-  value: "maski-recovery-key-4f7c-9a2e-6b1d",
-  copy: true,
-  download: true,
-} as const;
+const member = (userId: string, displayName: string, membership: Member["membership"]): Member => ({
+  userId,
+  displayName,
+  avatar: null,
+  profile: true,
+  membership,
+});
 
-export const mockMembers = [
-  { userId: "@alice:matrix.org", displayName: "Alice", avatar: null, profile: true, membership: "join" as const },
-  { userId: "@bob:matrix.org", displayName: "Bob", avatar: null, profile: true, membership: "join" as const },
-  { userId: "@carol:matrix.org", displayName: "Carol", avatar: null, profile: true, membership: "join" as const },
-  { userId: "@dave:matrix.org", displayName: "Dave", avatar: null, profile: true, membership: "invite" as const },
-  { userId: "@mallory:matrix.org", displayName: "Mallory", avatar: null, profile: true, membership: "ban" as const },
-  { userId: "@you:matrix.org", displayName: "You", avatar: null, profile: true, membership: "join" as const },
-] as const;
+const membersByRoom: Readonly<Record<string, readonly Member[]>> = {
+  design: [
+    member("@alice:matrix.org", "Alice", "join"),
+    member("@bob:matrix.org", "Bob", "join"),
+    member("@carol:matrix.org", "Carol", "join"),
+    member("@dave:matrix.org", "Dave", "invite"),
+    member("@mallory:matrix.org", "Mallory", "ban"),
+    member(SELF, "You", "join"),
+  ],
+  alice: [member("@alice:matrix.org", "Alice", "join"), member(SELF, "You", "join")],
+  lobby: [
+    member("@alice:matrix.org", "Alice", "join"),
+    member("@dave:matrix.org", "Dave", "join"),
+    member(SELF, "You", "join"),
+  ],
+  nix: [member("@bob:matrix.org", "Bob", "join"), member(SELF, "You", "join")],
+  ops: [member("@carol:matrix.org", "Carol", "join"), member(SELF, "You", "join")],
+  roadmap: [member("@alice:matrix.org", "Alice", "join"), member(SELF, "You", "join")],
+  specs: [member("@carol:matrix.org", "Carol", "join"), member(SELF, "You", "join")],
+  product: [member(SELF, "You", "join")],
+};
+
+export function mockMembersFor(roomId: string): readonly Member[] {
+  return membersByRoom[roomId] ?? [];
+}
 
 export function mockChatState(): ChatState {
   const roomId = "design";
   const messages = mockMessagesFor(roomId);
-  const readReceipt = messages.at(-1)?.id;
-  const readRooms = rooms.map((room) =>
-    room.roomId === roomId && readReceipt !== undefined
-      ? Object.assign({}, room, { readReceipt, unread: 0, highlight: 0 })
-      : room,
+  const readReceipt = messages[messages.length - 1]?.eventId ?? null;
+  const readRooms = rooms.map((entry) =>
+    entry.roomId === roomId
+      ? Object.assign({}, entry, {
+          readReceipt,
+          fullyRead: readReceipt,
+          unread: 0,
+          highlight: 0,
+        })
+      : entry,
   );
   return {
     ...emptyChatState(),
@@ -650,6 +676,6 @@ export function mockChatState(): ChatState {
     recentStickers: ["👋", "🐱", "✨"],
     devices: mockDevices,
     invites: mockInvites,
-    members: mockMembers,
+    members: mockMembersFor(roomId),
   };
 }

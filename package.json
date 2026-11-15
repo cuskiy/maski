@@ -3,23 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.19.0",
   "description": "A fast, local-first Matrix client",
   "scripts": {
     "dev": "node scripts/dev.ts",
     "build": "npm run types && npm run format:check && npm run lint && npm run test && npm run bundle && npm run audit && npm run contracts",
     "check": "npm run build && node scripts/review.ts",
+    "review": "node scripts/review.ts",
     "bundle": "node scripts/build.ts",
     "types": "tsc --noEmit",
+    "types:watch": "tsc --noEmit --watch",
     "format": "prettier --write \"src/**/*.{ts,css}\" \"scripts/**/*.ts\" \"test/**/*.ts\" \"*.{json,yml}\"",
     "format:check": "prettier --check \"src/**/*.{ts,css}\" \"scripts/**/*.ts\" \"test/**/*.ts\" \"*.{json,yml}\"",
     "lint": "oxlint --type-aware --deny-warnings --import-plugin --promise-plugin src scripts test && stylelint \"src/**/*.css\" --max-warnings=0",
     "test": "node --test \"test/*.test.ts\"",
+    "test:watch": "node --test --watch \"test/*.test.ts\"",
     "audit": "node scripts/audit.ts",
     "contracts": "node scripts/contracts.ts",
     "features": "node scripts/features.ts",
     "watermark": "node scripts/watermark.ts",
     "serve": "node scripts/static.ts",
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('build',{recursive:true,force:true})\""
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('review-dist',{recursive:true,force:true});require('node:fs').rmSync('build',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@matrix-org/matrix-sdk-crypto-wasm": "18.9.2",
@@ -30,12 +34,11 @@
   "devDependencies": {
     "@mdn/browser-compat-data": "^8.1.9",
     "@types/html-minifier-terser": "^7.0.2",
-    "@types/node": "26.6.6",
+    "@types/node": "24.19.2",
     "esbuild": "0.28.2",
     "html-minifier-terser": "^7.2.0",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2006",
-    "playwright": "1.65.0",
     "prettier": "^3.9.10",
     "stylelint": "18.0.0",
     "stylelint-config-standard": "41.0.0",
@@ -43,6 +46,7 @@
     "web-features": "^3.46.0"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
   }
 }

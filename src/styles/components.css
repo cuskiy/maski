@@ -84,13 +84,17 @@
 
   .form {
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-4);
+  }
+
+  .form > .button-primary {
+    margin-block-start: var(--space-1);
   }
 
   .field {
     position: relative;
     display: grid;
-    gap: var(--space-1);
+    gap: var(--space-2);
   }
 
   .field-label {
@@ -106,6 +110,117 @@
     line-height: var(--leading-relaxed);
   }
 
+  .select-field {
+    position: relative;
+  }
+
+  .select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    text-align: start;
+  }
+
+  .select-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .select-trigger .icon {
+    flex: none;
+    inline-size: 0.75rem;
+    block-size: 0.75rem;
+    rotate: 0deg;
+    transition: rotate var(--duration) var(--ease);
+  }
+
+  .select-trigger[aria-expanded="true"] .icon {
+    rotate: 90deg;
+  }
+
+  .select-trigger:disabled {
+    opacity: 50%;
+    cursor: default;
+  }
+
+  .select-field.is-inline {
+    display: block;
+  }
+
+  .select-field.is-inline .field-label {
+    color: var(--dialog-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-normal);
+  }
+
+  .select-field.is-inline .select-trigger {
+    inline-size: 100%;
+    max-inline-size: none;
+    min-block-size: var(--field-height);
+    padding-inline: var(--space-3);
+    background: var(--dialog-field-bg);
+    color: var(--dialog-ink);
+    font-size: var(--text-md);
+  }
+
+  .select-field.is-inline .select-value {
+    margin-inline-start: auto;
+    color: var(--dialog-ink);
+    font-size: var(--text-md);
+  }
+
+  .select-popover {
+    position: fixed;
+    inset: auto;
+    margin: var(--space-1) 0 0;
+    inline-size: max-content;
+    min-inline-size: 0;
+    max-inline-size: min(100% - 2 * var(--space-4), 36rem);
+    max-block-size: 16rem;
+    overflow-y: auto;
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--menu-bg);
+    color: var(--menu-ink);
+    backdrop-filter: blur(var(--float-blur));
+    position-area: bottom span-right;
+    position-try-fallbacks: flip-block, flip-inline;
+  }
+
+  .select-field.is-inline .select-popover {
+    inline-size: max-content;
+    max-inline-size: min(100% - 2 * var(--space-4), 18rem);
+    position-area: bottom span-right;
+  }
+
+  :dir(rtl) .select-field.is-inline .select-popover {
+    position-area: bottom span-left;
+  }
+
+  .select-option {
+    display: flex;
+    align-items: center;
+    inline-size: 100%;
+    min-block-size: 2rem;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--menu-ink);
+    font-size: var(--text-sm);
+  }
+
+  .select-option:hover,
+  .select-option:focus-visible {
+    background: var(--menu-hover-bg);
+  }
+
+  .select-option[aria-selected="true"] {
+    background: var(--menu-active-bg);
+  }
+
   .input {
     inline-size: 100%;
     block-size: var(--field-height);
@@ -118,6 +233,11 @@
     line-height: var(--leading-normal);
   }
 
+  .input:focus-visible {
+    outline: var(--outline-width) solid var(--field-focus);
+    outline-offset: var(--outline-offset);
+  }
+
   .input::placeholder {
     color: var(--field-placeholder);
   }
@@ -125,32 +245,6 @@
   .input:user-invalid {
     outline: var(--outline-width) solid var(--danger);
     outline-offset: var(--outline-offset);
-  }
-
-  select.input {
-    appearance: none;
-    padding-inline-end: var(--space-7);
-  }
-
-  .field:has(> select.input)::after {
-    position: absolute;
-    inset-block-start: 50%;
-    inset-block-end: auto;
-    inset-inline-end: var(--space-3);
-    inline-size: 0.4rem;
-    block-size: 0.4rem;
-    border-block-end: 1.5px solid currentColor;
-    border-inline-end: 1.5px solid currentColor;
-    color: var(--ink-3);
-    content: "";
-    pointer-events: none;
-    rotate: -45deg;
-    translate: 0 -50%;
-    transition: rotate var(--duration) var(--ease);
-  }
-
-  .field:has(> select.input:focus)::after {
-    rotate: 45deg;
   }
 
   .button-primary {
@@ -174,7 +268,7 @@
   }
 
   .button-primary:disabled {
-    opacity: 0.4;
+    opacity: 40%;
     cursor: default;
   }
 
@@ -186,7 +280,7 @@
     padding: 0 var(--space-2);
     border-radius: var(--radius-sm);
     background: var(--surface-hover);
-    color: var(--ink-2);
+    color: var(--ink);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     line-height: 1.2;
@@ -214,7 +308,17 @@
   }
 
   .button-quiet:disabled {
-    opacity: 0.4;
+    opacity: 40%;
     cursor: default;
+  }
+
+  .button-icon {
+    flex: none;
+    inline-size: 2rem;
+    block-size: 2rem;
+    min-block-size: 2rem;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
   }
 }

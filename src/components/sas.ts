@@ -21,9 +21,9 @@ export function sasDialog(c: Catalog, id: string): Html {
         )}
       </ol>
       <div class="sas-actions">
-        <button class="button-primary" type="button" data-sas-match>${t(c, "auth.key.verifyMatch")}</button>
+        <p class="note">${t(c, "auth.key.verifyUnavailable")}</p>
         <button class="button-quiet" type="button" commandfor="${id}" command="close">
-          ${t(c, "auth.key.verifyMismatch")}
+          ${t(c, "surface.close")}
         </button>
       </div>
     </div>

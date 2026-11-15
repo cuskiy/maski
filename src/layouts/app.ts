@@ -7,13 +7,13 @@ import { CHAT_SURFACES } from "../core/surfaces.ts";
 import { composer } from "../components/composer.ts";
 import { nav } from "../components/nav.ts";
 import { surface } from "../components/surface.ts";
-import { surfaceBodyFor } from "../components/surfaces.ts";
+import { bootSurfaceBody } from "../components/surfaces.ts";
 import { timeline } from "../components/timeline.ts";
 import { topbar } from "../components/topbar.ts";
 
 export function appShell(c: Catalog, locale: string): Html {
   const state = emptyChatState();
-  return html`<div class="app" data-region="${REGION.shell}" data-view="shell">
+  return html`<div class="app" data-region="${REGION.shell}" data-view="list">
       ${nav(state, c)}
       <main class="content" id="${REGION.content}" data-region="${REGION.content}">
         <h1 class="visually-hidden">${t(c, "chat.title")}</h1>
@@ -27,7 +27,7 @@ export function appShell(c: Catalog, locale: string): Html {
         titleKey: entry.titleKey,
         kind: entry.kind,
         manual: entry.popover === "manual",
-        body: surfaceBodyFor(c, entry.id, state),
+        body: bootSurfaceBody(c, entry.id),
       }),
     )}`;
 }

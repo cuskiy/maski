@@ -21,6 +21,7 @@ export function composer(state: ChatState, c: Catalog): Html {
       role="group"
       hidden
     ></div>
+    <p class="form-error composer-error" data-composer-error role="alert" hidden></p>
     <div class="composer-bar">
       <button
         class="composer-action composer-attach"
@@ -39,16 +40,20 @@ export function composer(state: ChatState, c: Catalog): Html {
         ${icons.sticker}
       </button>
       <div class="composer-field">
-        <label class="visually-hidden" for="composer-input">${t(c, "composer.label")}</label>
-        <textarea
+        <label class="visually-hidden" id="composer-label">${t(c, "composer.label")}</label>
+        <div
           id="composer-input"
           class="composer-input"
-          rows="1"
+          role="textbox"
+          aria-multiline="true"
+          aria-labelledby="composer-label"
+          contenteditable="${room === null ? "false" : "true"}"
+          aria-disabled="${room === null ? "true" : "false"}"
+          data-empty="true"
+          data-placeholder="${placeholder}"
+          spellcheck="true"
           dir="auto"
-          placeholder="${placeholder}"
-          enterkeyhint="enter"
-          ${room === null ? html` disabled` : html``}
-        ></textarea>
+        ></div>
         <button
           class="composer-emoji"
           type="button"

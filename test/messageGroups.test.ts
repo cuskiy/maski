@@ -38,12 +38,18 @@ void test("a sender group keeps the name on the first row and the avatar positio
   assert.equal(messagePosition(messages, 2).showSender, true);
 });
 
-void test("a media-led group still receives the sender name on its first row", () => {
+void test("a media-led group puts the sender name on the first text row", () => {
   const messages = [row("alice", DAY, { media: image }), row("alice", DAY + 1)];
   assert.equal(messagePosition(messages, 0).groupStart, true);
   assert.equal(messagePosition(messages, 0).groupEnd, false);
-  assert.equal(messagePosition(messages, 0).showSender, true);
+  assert.equal(messagePosition(messages, 0).showSender, false);
   assert.equal(messagePosition(messages, 1).groupEnd, true);
+  assert.equal(messagePosition(messages, 1).showSender, true);
+});
+
+void test("a media-only group has no sender name", () => {
+  const messages = [row("alice", DAY, { media: image }), row("alice", DAY + 1, { media: image })];
+  assert.equal(messagePosition(messages, 0).showSender, false);
   assert.equal(messagePosition(messages, 1).showSender, false);
 });
 

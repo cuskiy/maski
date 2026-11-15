@@ -4,9 +4,22 @@
   }
 
   body:has(.app) {
+    display: flex;
+    flex-direction: column;
     block-size: 100dvh;
     overflow: hidden;
     overscroll-behavior: none;
+  }
+
+  body:has(.app) > .app {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    block-size: auto;
+  }
+
+  body > [data-storage-note]:not([hidden]) {
+    flex: 0 0 auto;
+    padding: var(--space-2) var(--space-3);
   }
 
   .auth,
@@ -65,16 +78,15 @@
   .content::before {
     position: absolute;
     z-index: 0;
-    inset-block-start: var(--topbar-height);
+    inset-block: var(--topbar-height) 0;
     inset-inline: 0;
-    inset-block-end: 0;
     content: "";
-    background-image: url("./watermark.svg");
-    background-size: 1600px auto;
-    background-position: center;
-    background-repeat: repeat;
-    opacity: 0.08;
-    filter: blur(0.25px);
+    background: var(--ink);
+    mask-image: url("./watermark.svg");
+    mask-size: 1600px auto;
+    mask-position: center;
+    mask-repeat: repeat;
+    opacity: 8%;
     pointer-events: none;
   }
 
@@ -85,14 +97,13 @@
 
   @media (prefers-color-scheme: dark) {
     .content::before {
-      opacity: 0.05;
-      filter: invert(1) blur(0.3px);
+      opacity: 5%;
     }
   }
 
   @container (inline-size < 44rem) {
     .content::before {
-      background-size: 1500px auto;
+      mask-size: 1500px auto;
     }
   }
 
@@ -108,8 +119,7 @@
     position: relative;
     block-size: 100%;
     min-block-size: 0;
-    overflow-x: clip;
-    overflow-y: auto;
+    overflow: clip auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     scrollbar-width: thin;
@@ -127,6 +137,10 @@
   @container (inline-size < 44rem) {
     .app {
       grid-template-columns: minmax(0, 1fr);
+      --topbar-height: 3.5rem;
+    }
+
+    body > .surface {
       --topbar-height: 3.5rem;
     }
 
@@ -151,24 +165,27 @@
       display: grid;
     }
 
-    .app[data-view="shell"] {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
-    }
+    @media (scripting: none) {
+      .app[data-view="list"] {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
+      }
 
-    .app[data-view="shell"] > .nav {
-      grid-column: 1;
-      grid-row: 1;
-      max-block-size: 45dvh;
-      block-size: auto;
-    }
+      .app[data-view="list"] > .nav {
+        grid-column: 1;
+        grid-row: 1;
+        display: grid;
+        max-block-size: 45dvh;
+        block-size: auto;
+      }
 
-    .app[data-view="shell"] > .content {
-      grid-column: 1;
-      grid-row: 2;
-      display: grid;
-      min-block-size: 0;
-      block-size: auto;
+      .app[data-view="list"] > .content {
+        grid-column: 1;
+        grid-row: 2;
+        display: grid;
+        min-block-size: 0;
+        block-size: auto;
+      }
     }
   }
 }

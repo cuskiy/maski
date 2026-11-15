@@ -22,7 +22,15 @@ function isAssets(value: unknown): value is Assets {
     "prepaint" in value &&
     typeof value.prepaint === "string" &&
     "client" in value &&
-    typeof value.client === "string"
+    typeof value.client === "string" &&
+    "reviewClient" in value &&
+    typeof value.reviewClient === "string" &&
+    "imageWorker" in value &&
+    typeof value.imageWorker === "string" &&
+    "matrixWorker" in value &&
+    typeof value.matrixWorker === "string" &&
+    "cryptoWasm" in value &&
+    typeof value.cryptoWasm === "string"
   );
 }
 
@@ -42,12 +50,52 @@ for (const page of renderPages(parsed)) {
   if (actual !== expected) failures.push(`${page.file} differs from its generator`);
 }
 
-for (const asset of [parsed.stylesheet, parsed.icon, parsed.guard, parsed.prepaint, parsed.client]) {
+for (const asset of [
+  parsed.stylesheet,
+  parsed.icon,
+  parsed.guard,
+  parsed.prepaint,
+  parsed.client,
+  parsed.reviewClient,
+  parsed.imageWorker,
+  parsed.matrixWorker,
+  parsed.cryptoWasm,
+]) {
   try {
     await stat(join(dist, asset));
   } catch {
     failures.push(`${asset} is missing`);
   }
+}
+
+for (const [asset, budget] of [
+  [parsed.stylesheet, 96 * 1024],
+  [parsed.client, 320 * 1024],
+  [parsed.matrixWorker, 1.5 * 1024 * 1024],
+  [parsed.cryptoWasm, 8.5 * 1024 * 1024],
+] as const) {
+  try {
+    const size = (await stat(join(dist, asset))).size;
+    if (size > budget) failures.push(`${asset} is ${String(size)} bytes, over ${String(budget)}`);
+  } catch {
+    // The missing-asset pass above reports this once.
+  }
+}
+
+for (const asset of [
+  parsed.guard,
+  parsed.prepaint,
+  parsed.client,
+  parsed.reviewClient,
+  parsed.imageWorker,
+  parsed.matrixWorker,
+]) {
+  const source = await readFile(join(dist, asset), "utf8");
+  if (/console\.(?:log|debug|info|warn|error)\s*\(/u.test(source)) {
+    failures.push(`${asset} contains a console call`);
+  }
+  if (/\bdebugger\b/u.test(source)) failures.push(`${asset} contains a debugger statement`);
+  if (/sourceMappingURL/u.test(source)) failures.push(`${asset} contains a source map reference`);
 }
 
 const stylesheetPath = join(dist, parsed.stylesheet);

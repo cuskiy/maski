@@ -46,7 +46,7 @@ export function messagePositions(messages: readonly MessageGroupRow[]): MessageP
     }
     for (let index = groupStart; index <= groupEnd; index += 1) {
       const message = messages[index];
-      if (message !== undefined && !message.own && !message.system) {
+      if (message !== undefined && !message.own && !message.system && message.media === null) {
         const position = positions[index];
         if (position !== undefined) positions[index] = { ...position, showSender: true };
         break;

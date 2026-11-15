@@ -1,59 +1,72 @@
-import type { Invite, RoomCapabilities, RoomEncryption, RoomSummary } from "./types.ts";
-
-const ALL_CAPABILITIES: RoomCapabilities = {
-  invite: true,
-  manage: true,
-  notifications: true,
-  leave: true,
-  markRead: true,
-  favorite: true,
-  mute: true,
-};
+import type {
+  GuestAccess,
+  Invite,
+  Membership,
+  NotificationLevel,
+  PowerLevels,
+  RoomEncryption,
+  RoomHistoryVisibility,
+  RoomJoinRule,
+  RoomSummary,
+  RoomTag,
+} from "./types.ts";
+import { DEFAULT_POWER_LEVELS } from "./permissions.ts";
 
 export interface RoomInput {
   readonly roomId: string;
   readonly name: string;
   readonly topic: string;
-  readonly direct?: boolean;
-  readonly isSpace?: boolean;
+  readonly avatar?: string | null;
+  readonly directUserId?: string | null;
+  readonly roomType?: string | null;
   readonly spaceId?: string | null;
-  readonly favorite?: boolean;
-  readonly lowPriority?: boolean;
-  readonly muted?: boolean;
+  readonly tags?: Readonly<Record<string, RoomTag>>;
+  readonly membership?: Membership;
+  readonly notification?: NotificationLevel | "default";
   readonly encryption?: RoomEncryption;
+  readonly joinRule?: RoomJoinRule;
+  readonly guestAccess?: GuestAccess;
+  readonly historyVisibility?: RoomHistoryVisibility;
+  readonly directoryPublished?: boolean;
+  readonly roomVersion?: string;
+  readonly federated?: boolean;
+  readonly aliases?: readonly string[];
+  readonly creatorIds?: readonly string[];
+  readonly powerLevels?: PowerLevels;
   readonly readReceipt?: string | null;
-  readonly capabilities?: Partial<RoomCapabilities>;
+  readonly fullyRead?: string | null;
+  readonly latestEventId?: string | null;
 }
 
 export function createRoom(input: RoomInput): RoomSummary {
-  const muted = input.muted ?? false;
   return {
     roomId: input.roomId,
     name: input.name,
     topic: input.topic,
-    avatar: null,
+    avatar: input.avatar ?? null,
     preview: null,
     lastTs: Date.now(),
+    latestEventId: input.latestEventId ?? null,
     readReceipt: input.readReceipt ?? null,
+    fullyRead: input.fullyRead ?? input.readReceipt ?? null,
     unread: 0,
     highlight: 0,
-    muted,
-    membership: "join",
-    isDirect: input.direct ?? false,
-    isSpace: input.isSpace ?? false,
-    favorite: input.favorite ?? false,
-    lowPriority: input.lowPriority ?? false,
+    membership: input.membership ?? "join",
+    roomType: input.roomType ?? null,
+    directUserId: input.directUserId ?? null,
     spaceId: input.spaceId ?? null,
-    notification: muted ? "mute" : "default",
+    tags: input.tags ?? {},
+    aliases: input.aliases ?? [],
+    joinRule: input.joinRule ?? "invite",
+    guestAccess: input.guestAccess ?? "forbidden",
+    historyVisibility: input.historyVisibility ?? "shared",
+    directoryPublished: input.directoryPublished ?? false,
+    roomVersion: input.roomVersion ?? "12",
+    federated: input.federated ?? true,
+    notification: input.notification ?? "default",
     encryption: input.encryption ?? "encrypted",
-    aliases: [],
-    joinRule: input.isSpace === true ? "invite" : "public",
-    guestAccess: false,
-    historyVisibility: input.isSpace === true ? "invited" : "shared",
-    directoryPublished: false,
-    roomVersion: "12",
-    federated: true,
-    capabilities: { ...ALL_CAPABILITIES, ...input.capabilities },
+    creatorIds: input.creatorIds ?? [],
+    powerLevels: input.powerLevels ?? DEFAULT_POWER_LEVELS,
   };
 }
 
@@ -62,6 +75,30 @@ export function roomFromInvite(invite: Invite): RoomSummary {
     roomId: invite.roomId,
     name: invite.name,
     topic: invite.topic,
-    capabilities: { manage: false },
+    avatar: invite.avatar,
+    directUserId: invite.directUserId,
+    roomType: invite.roomType,
+    joinRule: invite.joinRule,
+    guestAccess: invite.guestAccess,
+    historyVisibility: invite.historyVisibility,
+    encryption: invite.encryption,
+    roomVersion: invite.roomVersion,
+    federated: invite.federated,
   });
+}
+
+export function isSpaceRoom(room: RoomSummary): boolean {
+  return room.roomType === "m.space";
+}
+
+export function isDirectRoom(room: RoomSummary): boolean {
+  return room.directUserId !== null;
+}
+
+export function hasTag(room: RoomSummary, tag: "m.favourite" | "m.lowpriority"): boolean {
+  return Object.prototype.hasOwnProperty.call(room.tags, tag);
+}
+
+export function isMuted(room: RoomSummary): boolean {
+  return room.notification === "mute";
 }

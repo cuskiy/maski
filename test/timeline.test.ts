@@ -3,6 +3,7 @@ import test from "node:test";
 import { en } from "../src/catalogs/en.ts";
 import { mockChatState } from "../src/core/mock.ts";
 import { timeline } from "../src/components/timeline.ts";
+import { redactRow } from "../src/core/message.ts";
 
 const markup = timeline(mockChatState(), en, "en").value;
 
@@ -39,6 +40,17 @@ void test("remote image media is lazy and decoded off the main path", () => {
   const imageMarkup = timeline({ ...state, messages }, en, "en").value;
   assert.match(imageMarkup, /loading="lazy"/u);
   assert.match(imageMarkup, /decoding="async"/u);
+});
+
+void test("a redacted message remains as a tombstone without its media", () => {
+  const state = mockChatState();
+  const image = state.messages.find((row) => row.id === "d4");
+  assert.ok(image);
+  const redacted = redactRow(image);
+  const redactedMarkup = timeline({ ...state, messages: [redacted] }, en, "en").value;
+  assert.match(redactedMarkup, /Message deleted\./u);
+  assert.match(redactedMarkup, /is-redacted/u);
+  assert.doesNotMatch(redactedMarkup, /media-element/u);
 });
 
 void test("image and video messages carry no visible caption", () => {

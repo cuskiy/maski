@@ -1,173 +1,229 @@
 # AGENTS.md
 
-This file is the whole design of the project. It records the rules, the user's core requirements, the
-engineering design and the current working tree. The tree is an attempt at this design, not its
+This file is the contract for the project. It is the design, the security model, the visual language,
+the working method, and the current migration plan. The tree is an attempt at this contract, not its
 definition.
 
-Read in order: Part 1 is authority over Part 2; Part 2 is authority over Part 3; Part 4 is operational
-only. A change that needs a contradiction between Parts 1–3 is a discussion, not an edit. Do not
-change Part 2 without the user's decision; the latest user instruction is the only source that can.
+Read the file in order. Part 1 is authority over Part 2. Part 2 is authority over Part 3. Part 3 is
+authority over Parts 4 and 6. A change that needs a contradiction between Parts 1, 2 and 3 is a
+discussion, not an edit. Only the user can change Part 2. If code and this file disagree, the code is
+wrong; if the file and the user disagree, the user is right.
+
+The document is written in English. Product copy still lives in typed catalogs, including the Chinese
+catalog. English here is not permission to put English user-facing copy in code.
 
 ---
 
-# Part 1 — Rules
+# Part 1 - Rules
 
 ## 1.1 The first principle
 
-The reader's time and trust outrank every technical preference here.
+The reader's time and trust outrank every technical preference.
 
-- No white flash in a dark room. No layout shift while content arrives. No click lost because a node
-  was replaced under the pointer. No error hidden in a console.
-- Every wait is visible, and every visible wait can be cancelled. A control that appears must work.
-- An error says what happened and what to do; internal state is not the reader's business.
+- No white flash in a dark room. No layout shift while data arrives. No click lost because a node was
+  replaced under the pointer. No error hidden in a console.
+- Every wait is visible, and every visible wait can be cancelled.
+- A control that appears works. A control that cannot work is absent or says why.
+- An error names what happened and what the reader can do next. Internal state is not the reader's
+  business.
 - One extra step is a cost. One extra second is a cost. Slow is rude.
+- Security is part of trust. Unsafe HTML, leaked credentials, third-party requests, and silent storage
+  writes are product defects, not implementation details.
 
-Every rule below exists to make this principle enforceable. A rule without a check is a wish; 1.8
+Every rule below exists to make this principle enforceable. A rule without a check is a wish; 1.9
 names the owner of each promise.
 
 ## 1.2 Precedence
 
 1. These rules.
-2. Part 2, the user's core requirements. They are the user's words; only the user changes them.
-3. Part 3, the engineering design. It is the default answer.
-4. The specification and the reference implementation, read from disk.
-5. `past/` and earlier attempts. They are read, never shipped.
+2. Part 2, the product promises. These are the user's requirements; only the user changes them.
+3. Part 3, the architecture, security model and engineering design.
+4. The Matrix specification and the public SDK surface, read from disk for the pinned version.
+5. The current tree, including `advice.md` as evidence. The tree is never authority over the design.
 
-## 1.3 The working loop
+`past/` and `git/` are evidence only. They are never shipped and their code is never copied.
+`git/sable-next` is AGPL; behavior may be studied, code may not be copied.
 
-One step is short and complete:
+## 1.3 Security invariants
 
-1. **Read.** The module, the governing section of this file, and any protocol specification on disk.
-   Do not plan against code nobody read.
-2. **Plan.** Name the approach and the smaller alternative. A decision the user owns stops here and
-   becomes a question.
-3. **Implement.** Leave the tree coherent after every file. One job per module; one implementation per
-   boundary.
-4. **Run it.** The real page in a browser, the worker protocol from a browser, or a pure test for a
-   rule that can be pure.
-5. **Verify at the rung claimed.** A claim one rung above its evidence is a reporting defect.
-6. **Record.** A defect goes to the open-defect section with symptom, known facts, ruled out and next
-   step. A decision goes to Part 2 or Part 3.
-7. **Commit and push** one coherent change, the reason in the body.
+These are release blockers. A change that violates one is rejected even if it looks correct.
 
-Before a step is done, `npm run check` passes: types, Prettier, lint, tests, build, audit, contracts.
-A budget is never raised to hide a defect. The stylesheet budget is deferred during UI reconstruction by explicit user decision; it returns when the UI is complete.
+1. **Every Matrix event, profile, room name, topic, `formatted_body`, media name, URL, and sticker is
+   untrusted.** It must cross one sanitizer and one URL policy. No component may trust a field because
+   it came from the SDK.
+2. **No unsafe DOM sink.** `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`,
+   `javascript:` URLs, inline event handlers, and inline `<script>` are forbidden. Generated markup is
+   admitted only through one inert parser that rejects executable constructs. Data is inserted as
+   text, attributes, or typed `Html`, never concatenated into a sink.
+3. **No dynamic code execution.** No `eval`, `new Function`, string timers, or JavaScript protocol.
+   No third-party script, font, stylesheet, image, analytics, or telemetry.
+4. **CSP is a serving policy, not decoration.** Production uses a response-header CSP built from one
+   exact allowlist: the shell origin, the chosen homeserver origin, and the websocket origin. A
+   wildcard `https:`/`wss:` connection policy is a temporary migration defect, not the design.
+5. **The worker owns credentials and crypto.** Access tokens, refresh tokens, recovery keys, secret
+   storage, device keys, and decrypted media stay in the worker. The main thread receives a session
+   summary, a one-time recovery key when explicitly requested, and `blob:` URLs or typed rows.
+   IndexedDB is origin-wide: the worker is an ownership boundary, not a capability boundary against
+   XSS. The sanitizer, CSP, and minimal DOM surface are the real XSS defense.
+6. **Never persist secrets or message text in the wrong store.** No token, password, recovery key,
+   message body, draft, or attachment in `localStorage`, a URL, a log, a fixture, a screenshot, or a
+   commit. Drafts belong to the account-scoped UI database and are cleared on logout.
+7. **The main thread never talks to a homeserver.** No `fetch`, `XMLHttpRequest`, `EventSource`, or
+   `WebSocket` to the homeserver from a region, store, action, or composer. Network I/O belongs to the
+   worker; media is authenticated and resolved to a blob there.
+8. **No authenticated data in the HTTP cache or service worker cache.** Only the shell and hashed
+   assets are precached. `/sync`, media, avatars, API responses, and tokens are never cached by the
+   service worker.
+9. **No secrets in diagnostics.** Logger names and error codes are allowed; payloads, tokens, message
+   text, and user identifiers in logs are not. A release build has no console output.
+10. **A security check is not weakened to make the gate green.** If the check is wrong, change the
+    check and the rule together; if the code is wrong, fix the code.
+
+## 1.4 The working loop
+
+One step is short and complete.
+
+1. **Read.** Read the owning module, the owning paragraph of this file, and the relevant specification
+   section. Read the actual diff; never plan against a file nobody read.
+2. **Model the boundary.** Name the fact, its one writer, its readers, its failure modes, and the
+   verification rung. If two layers can write the fact, stop and redesign the boundary.
+3. **Plan.** Name the approach and the smaller alternative. A decision the user owns stops here and
+   becomes a question. A plan that adds a second path is not a plan.
+4. **Implement.** Leave the tree coherent after every file. One job per module; one implementation per
+   boundary. Delete the path the change replaces.
+5. **Run it.** The real page in a browser, the worker protocol from a browser, or a pure test for a
+   rule that can be pure. A static read is not a run.
+6. **Verify at the rung claimed.** A claim one rung above its evidence is a reporting defect.
+7. **Record.** A defect goes to the open-defect section with symptom, known facts, ruled out, and next
+   step. A decision rewrites its owning paragraph; it never creates a second description.
+8. **Commit and push** one coherent change, the reason in the body. History is never rewritten.
+
+Before a step is complete, `npm run check` passes. A budget is never raised to hide a defect. The
+stylesheet, client, worker, wasm and watermark budgets are decisions; raising one is a change to this
+file with the reason.
 
 ### A bug report is its own loop
 
-Reproduce it in the browser, find the root cause, fix the cause, re-run the same reproduction, commit
-with the cause named. Two failed fixes on one symptom mean the boundary is wrong (1.7).
-
-### Changing the design
-
-Part 2 changes only when the user decides. Engineering decisions live in Part 3 with their reason; a
-decision that replaces an older one rewrites that paragraph, never adds a second description. A new
-rule adds its contract row and, when possible, its check.
+Reproduce it in the browser. Find the root cause. Fix the cause. Re-run the same reproduction. Commit
+with the cause named. Two failed fixes on one symptom mean the boundary is wrong (1.8).
 
 ### What a step leaves behind
 
 | a change that | also leaves |
 |---|---|
 | fixes a defect | the reproduction that failed before and passes after, named in the commit |
-| adds behavior | a unit test for the rule, or a browser run whose assertion is the behavior |
+| adds behavior | a pure test for the rule, or a browser run whose assertion is the behavior |
 | adds or moves a rule | its contract row and the check |
 | changes a decision | the rewritten paragraph, never a second description |
 | adds a dependency | the reason, and the removal of one nothing imports |
 | touches the protocol | the specification path it was checked against, quoted in the commit |
+| touches storage, CSP or auth | a threat-model note and a negative test |
 
-## 1.4 The verification ladder
+## 1.5 The verification ladder
 
-A claim names its rung:
+A claim names its rung.
 
-1. **Pure** — a unit test; no DOM, no network.
-2. **Worker** — the protocol driven from a browser: login, sync, send, decrypt.
-3. **Surface** — the page driven in Chromium: the control does what it says.
-4. **Scriptless** — the same page with JavaScript disabled: the frame is complete and every visible
+1. **Pure** - a unit test; no DOM, no network.
+2. **Worker** - the protocol driven from a browser: start, login, sync, open, send, echo, receipt,
+   decrypt success and failure, malformed command.
+3. **Surface** - the page driven in Chromium: the control does what it says, focus and caret survive,
+   computed styles are checked where appearance is the claim.
+4. **Scriptless** - the same page with JavaScript disabled: the frame is complete and every visible
    control either works or says what it needs.
-5. **Real server** — the whole flow against a homeserver on a real device.
-6. **Other engines** — Firefox and Safari. Until this rung runs, a browser claim says Chromium.
+5. **Real server** - the whole flow against a homeserver on a real device.
+6. **Other engines** - Firefox and Safari. Until this rung runs, a browser claim says Chromium.
 
-The first paint has its own evidence: a screenshot at load, a screenshot after stored data arrives,
-and the absence of a shift between them. "It looked fine" is not evidence.
+The first paint has its own evidence: a screenshot at load, a screenshot after stored data arrives, and
+the absence of a shift between them. A screenshot taken after an arbitrary wait is not first-paint
+evidence. "It looked fine" is not evidence. A regex over CSS is not a browser run.
 
-## 1.5 Defects, open questions, and the record
+## 1.6 Defects, questions, and the record
 
-A defect found and not fixed is written down with four fields: the symptom a reader sees, what is
-known, what was ruled out, and the next concrete step. A defect whose cause is unknown after two
-attempts is a boundary problem: the third attempt starts by redesigning the boundary.
+A defect found and not fixed is written down with four fields: the symptom a reader sees, what is known,
+what was ruled out, and the next concrete step. A defect whose cause is unknown after two attempts is a
+boundary problem: the third attempt starts by redesigning the boundary.
 
 A question carries a recommendation and what it rules out. Work continues on the parts that do not
-depend on the answer. An answer the user gave replaces the design paragraph; it never lives in a
-second place.
+depend on the answer. An answer the user gave replaces the design paragraph; it never lives in a second
+place.
 
-## 1.6 Writing floor
+## 1.7 Writing floor
 
-- Correctness first, then human readability: domain names, straight lines, early returns, explicit
-  data, no abbreviation a newcomer must decode.
-- One module, one job; the file name says it. No abstraction before the third repetition.
-- One implementation per boundary. A second way to do the same thing is a defect: the choke point
-  grows, the workaround does not.
+- Correctness first, then human readability: domain names, straight lines, early returns, explicit data,
+  no abbreviation a newcomer must decode.
+- One module, one job; the file name says it. Soft budget is 400 lines per module. A larger file names
+  its reason in a header and has an owner; "it grew" is not a reason.
 - No dead code, unused export, TODO, stub, placeholder, fake control, or copy for a feature that does
   not exist. A missing feature is absent.
-- A comment states what the code cannot: a protocol quirk, a browser behavior, a security boundary,
-  an invariant. One line, English, no decoration. Code, identifiers, commits and docs are English;
-  Part 2 is Chinese because it is the user's voice.
-- No vendor prefix, no polyfill, no engine-specific branch, no compatibility shim. One spelling per
-  feature.
+- One implementation per boundary. A second way to do the same thing is a defect: the choke point grows,
+  the workaround does not.
+- A comment states what the code cannot: a protocol quirk, a browser behavior, a security boundary, an
+  invariant. One line, English, no decoration. Code, identifiers, commits and docs are English.
+- No vendor prefix, polyfill, engine-specific branch, or compatibility shim unless the platform check
+  declares the exception and the user accepts it. One spelling per feature.
 - A generated file is never hand-edited. The generator changes.
+- Prefer the platform to a dependency. Prefer a typed function to a framework. Prefer a native control
+  to a div with listeners.
+- Public behavior is typed. `any`, unchecked assertions, and `@ts-ignore` are forbidden except at a
+  validated parser boundary, where the assertion is adjacent to the guard and tested.
+- Use modern JavaScript and TypeScript deliberately: ESM, strict types, `const`, `for...of`,
+  optional chaining, nullish coalescing, `satisfies`, discriminated unions, `readonly`, `toSorted`,
+  `AbortSignal.timeout`, `structuredClone`, `navigator.locks`, `crypto.randomUUID`, and native
+  `dialog`/`popover` where the platform floor supports them. Every new web platform feature is checked
+  with `npm run features` before use. Do not use `var`, `arguments`, `for...in` over arrays, string
+  timers, `apply`, `document.write`, or `innerHTML`.
+- CSS uses modern platform features only after a feature check; tokens first, logical properties,
+  `light-dark`, `color-mix`, `:is`, `:where`, `:has`, container queries, `clamp`, `minmax`, `auto-fit`,
+  `@starting-style`, and anchor positioning where they reduce code. No width media query, no literal
+  color outside tokens, no shadow, no gradient, no vendor prefix, no numbered color token.
+- A token names the object and state at its use site, not a value that happened to work. A rest selector
+  uses a rest role; a hover selector uses a hover role; an open selector uses an open role. Reusing
+  `--account-hover-bg` as the default background of `.nav-account` is a semantic defect even if the
+  rendered color is acceptable. If a value is shared, keep distinct semantic roles rather than making
+  the name lie. A token rename updates every use and its regression test.
+- HTML is semantic first. A button is `<button type="button">`; a dialog is `<dialog>`; a popover is a
+  popover; a label is `<label>`; a list is a list. No clickable div, positive `tabindex`, redundant ARIA,
+  inline handler, inline style, or inline script.
 
-## 1.7 When to stop and redo
+## 1.8 When to stop and redo
 
-These are exit conditions, not warnings:
+These are exit conditions, not warnings.
 
 1. The same boundary needs a third workaround: the boundary is wrong.
 2. A defect returns after being fixed in two places: it has two owners; delete one.
 3. A phase cannot exit with the tool it planned with: change the tool and record why.
 4. A generated file must be edited by hand to work: the generator is wrong.
 5. A "temporary" second path outlives its step: delete or promote it in the same change.
+6. A test can pass while the UI is obviously wrong: the test is not testing the claim.
+7. An agent claim is above its rung: remove the claim, run the rung, or fix the evidence.
+8. A fix adds a token, state, writer, or markup producer to avoid understanding the existing one: discard
+   the fix and redesign the boundary.
 
-Rewriting one module on these is normal repair. Rewriting the tree is what happens when they are
-ignored.
+## 1.9 Checks and contracts
 
-## 1.8 Checks and contracts
-
-One command per intent. The check command is the whole contract; a failing check names its contract
-and the paragraph that owns it.
+One command per intent. `npm run check` is the whole gate; a failing check names its contract and the
+paragraph that owns it.
 
 | id | contract | enforced by |
 |---|---|---|
 | C1 | one catalog key set per language; every key is read outside the catalogs; nothing empty | catalog test and contracts |
-| C2 | every protocol command has a handler | contracts — waits for the worker |
-| C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | contracts — waits for the worker |
+| C2 | every protocol command has a handler and every `ChatSource` method has a command or is absent | protocol/worker/source tests |
+| C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | boundary tests |
 | C4 | every page has a language, one `h1`, a scriptless note, and the chat page carries its `data-region` regions | page tests and contracts |
-| C5 | every manifest name is hashed and present in the output | audit and contracts |
-| C6 | client and stylesheet budgets deferred until the UI is complete | contracts |
-| C7 | no TODO marker, no console output, no Chinese outside the Chinese catalog | contracts |
+| C5 | every manifest asset is hashed, present in the output, and found by the audit | audit and contracts |
+| C6 | client, stylesheet, worker and crypto wasm meet declared budgets; watermark is tracked as an open migration defect | build/audit |
+| C7 | no TODO marker, no console output, no non-catalog user copy, no unused export | contracts and lint |
 | C8 | every screen exists in every language; English at `/en/`, the root is the language entry | contracts |
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
-| C10 | the first paint is final; only an uncached room list may show skeleton rows, no fade or layout shift | browser first-paint run |
+| C10 | the first paint is final; only an uncached room list may show skeleton rows; no fade or layout shift | browser first-paint run |
 | C11 | no page contains inline CSS, inline script, inline style, inline handler, or a `javascript:` URL | page tests |
-| C12 | the static shell contains no room, message, unread, identity, draft or media state; booted mock state is already read | review test |
+| C12 | the static shell contains no room, message, unread, identity, draft or media state | review test |
 | C13 | a grouped message carries its avatar on the last row and chains its inner bubble corners | timeline and style tests |
+| C14 | no unsafe DOM sink, inline handler, `javascript:` URL, third-party request, or secret in local storage/logs | boundary/security tests and review |
+| C15 | the worker owns the outbox and every visible wait clears on success, failure, cancel or timeout | worker tests and browser harness |
 
-Current budgets: the client and stylesheet budgets are deferred until the UI is complete; C6 enforces neither in this phase. A budget is a decision, not a target.
-Raising one is a change to this file with the reason.
-
-## 1.9 Review, commits, sessions
-
-- Before a multi-file change is reported, it is read once against this file by a reader with no
-  memory of writing it. The answer is a list of blockers.
-- A layout refactor is compared with a before crop at the claimed width before it is reported. A moved
-  message avatar anchor, a closed avatar/bubble gutter, a lost glass layer or a lost watermark is a
-  blocker, not a style preference.
-- One commit is one coherent change, imperative, reason in the body, the contract or section named
-  when not obvious. History is never rewritten. A mistake is corrected by the next commit.
-- Every commit is a place a reader can stop: the tree builds, the gate passes, the documents agree.
-- A session starts by reading this file, the open defects and the status table. It ends green, the
-  documents in step, the commits pushed, and one paragraph on what moved, what is verified at which
-  rung, and what is next. An unfinished change is finished or removed before the session ends.
-- A snapshot is restored before work continues, and the tree is read again because the conversation
-  is ahead of it.
+Current budgets are declared in Part 3.10. C6 measures them; a change that exceeds a budget is a user
+decision, not a refactor. C10 and C15 need a committed browser harness before the product can claim P1.
 
 ## 1.10 Deciding and asking
 
@@ -177,760 +233,1022 @@ Raising one is a change to this file with the reason.
 | which existing pattern to follow | anything a reader would notice as a behavior change |
 | a cheaper implementation of the same promise | a rule in Part 2, a budget, a scope cut |
 | deleting code it has just made dead | deleting code it did not write and cannot attribute |
+| type shape inside a chosen boundary | storage format, CSP policy, read-receipt privacy, key-gate predicate |
+
+Do not ask for information the repository, the specification, or a tool can answer. A question must
+carry a recommendation and the consequence of the alternatives.
 
 ## 1.11 What the loop forbids
 
 - Committing a tree that fails a gate, or leaving an unfinished change at the end of a turn.
 - Silently weakening a check, a budget, or a test to get green.
-- Reporting a feature as working when it was only wired.
+- Reporting a feature as working when it was only wired, mocked, or visually plausible.
 - Carrying a second implementation beside an existing one because the first was awkward.
-- Adding a new feature because it is new, before the design question is answered.
+- Adding optimistic UI for a command that has no protocol, handler, projection and test.
+- Adding a new feature before its design question is answered.
+- Treating `innerHTML`, `outerHTML`, a string signature, or a full-region `replaceChildren` as a
+  convenient reconciliation mechanism.
+- Calling a CSS regex, a mock screenshot, or a component string proof of a working product.
+- Claiming "I fixed it" without reproducing the original symptom and checking the same path again.
 
 ---
 
-# Part 2 — 用户核心要求
+# Part 2 - Product
 
-这一部分是用户的话，是产品的承诺。只有用户能改；代理先讨论，再记录。
+This part is the product promise. It is written in English for the repository contract; user-facing copy
+still lives in typed catalogs.
 
-## 2.1 产品
+## 2.1 The product
 
-一个快、省、本地优先的 Matrix 客户端。页面加载后即可离线使用；看消息、翻历史、搜索、发送都不该被网络或动画卡住。绝大多数 Matrix 客户端卡顿，这个不能。
+A fast, frugal, local-first Matrix client. The page is usable offline after the first load. Reading
+messages, scrolling history, searching, and sending must not wait for the network or an animation. Most
+Matrix clients stutter; this one must not.
 
-输出是静态目录：没有后端，没有服务端渲染。协议、同步、加密都在 worker；主线程只画。技术栈是 TypeScript + esbuild，外加 `matrix-js-sdk` 与 rust crypto wasm，以及消毒器；没有 UI 框架、组件库、CSS 框架、状态库、路由库、i18n 库、日期库、图标字体、外部字体。
+The output is a static directory: no backend, no server-side rendering. Protocol, sync, encryption and
+media live in a dedicated worker; the main thread only draws and owns UI state. The stack is TypeScript
+and esbuild, plus `matrix-js-sdk`, rust crypto wasm, and a sanitizer. There is no UI framework, component
+library, CSS framework, state library, router library, i18n library, date library, icon font, or external
+font.
 
-## 2.2 速度与首帧
+The client is a product, not a demo. A mocked surface is never presented as a finished feature. A real
+account and the real worker are the acceptance surface.
 
-- 第一眼看到的就是最终画面。有缓存房间时首帧直接画，不闪；没有缓存且 `roomsLoading` 时，只在房间区画灰条，菜单卡片、顶栏和输入区保持最终位置，数据到达后原地替换。没有白闪，没有“先占位再替换”，没有抖动。
-- 本地数据先出。房间列表、分区状态、顶栏身份来自本地，不等待同步、不等待加密初始化。缓存的密钥门状态可以先画，后台的检查再纠正。
-- 顶栏、标题、描述在首帧就有最终位置和最终颜色。标题和描述过长时截断，绝不换行。没有选中房间时顶栏仍在，身份区留空或显示一个转圈，不做淡入淡出，不做流动灰带。
-- 加载是可见的、可取消的；没有空白等待。首帧不做入场动画；页面重绘可以有短动画，并遵守 reduced-motion。
-- 折叠分区按账户记忆。列表原地更新，不重建节点；首帧的状态在绘制前应用。
-- 刷新应该像无感刷新：该在的内容已经在，变化的内容只变一次。
-- 静态 HTML 只画 shell：HTML、`color-scheme`、导航框架、顶栏框架、时间线区域、输入区和无 JS 提示。房间行、未读数、成员、顶栏身份、消息、草稿、媒体和选择器内容都由 JS 一次性注入。
-- 注入前的状态必须已经是最终态（已读、最终滚动位置）；注入完成后不再 `markRead`，不再二次滚动。
+## 2.2 Speed and first paint
 
-## 2.3 界面
+- The first thing the reader sees is the final composition. With a cached room list, paint it before
+  crypto; without one, only the room area may show static skeleton rows while `roomsLoading`. The action
+  card, topbar and composer keep their final boxes and every row replaces in place when data arrives.
+- No white flash, no "placeholder then replacement", no layout shift.
+- Local data first: rooms, section state, identity and gate hint come from cache without waiting for
+  sync or crypto. A cached gate state may paint first; the worker corrects it in the background.
+- The topbar, title and description have their final position and color on the first frame. Long titles
+  and descriptions truncate, never wrap. With no room selected the topbar remains; the identity area is
+  empty or shows one spinner, never a fade or a shimmer.
+- Loading is visible and cancellable. There is no blank wait. No entrance animation on the first paint;
+  later repaint may animate briefly and respects reduced motion.
+- Section collapse is remembered per account. The list updates in place; nodes are not rebuilt under
+  the pointer.
+- A refresh is a quiet refresh: what belongs is already there; what changed changes once.
+- The static HTML paints the shell only: language, `color-scheme`, navigation frame, topbar frame,
+  timeline region, composer, and the scriptless note. Room rows, unread counts, members, identity,
+  messages, drafts, media and picker content are injected once by the client.
+- Injected state is already final: read position and scroll position are computed from the same snapshot;
+  no `markRead` and no second scroll after injection.
+- A room switch clears the old window and shows the real loading state for the new room. It never leaves
+  the previous room's rows as a ghost.
 
-- **骨架交给 HTML，外观交给 CSS，业务逻辑才交给 JS。** HTML 不含内联 CSS/JS；样式表与脚本外部引入。
-- 没有 JS 时页面是完整的：导航、顶栏、时间线区域、输入框都在，只是没有数据。窄屏无 JS 时导航与内容上下排列，导航仍可展开；需要 JS 的能力必须是 `<button>`，由面板说明缺少 JavaScript；不用 `<a>` 假装能点。路由器无 JS 时只显示说明与语言链接，不显示加载圈。
-- 两墨一纸：表面声明墨的比例并据此推出文字色；浅色与深色各一套，用 `light-dark()`。所有颜色、字体、字号、间距、圆角、时长都是 token；规则只用 token。选中文本的灰蓝色是唯一获准的非 ink/page 色令牌。
-- 流体布局：`clamp()`、`minmax()`、`auto-fit`、容器查询；不用宽度媒体查询。窄屏与宽屏是同一套布局的两种状态。
-- 不用阴影、渐变、卡片化仪表盘、大厂范式。顶栏、导航和所有弹窗可以共享一层克制的半透明 + 高斯模糊；这是唯一获准的“玻璃”用法，不做第二套。
-- 焦点永远可见；点击目标不小于 24px；动画短、可打断、只动 transform/opacity/color，reduced-motion 下关闭。
-- 文案只陈述读者需要知道的事实。不解释他看得见的东西，不写空话、营销腔或机器腔。文案只在带类型的 catalog 里，缺键是编译错误。
+## 2.3 Interface
 
-## 2.4 弹窗与悬浮
+- **HTML owns the skeleton, CSS owns the appearance, JavaScript owns behavior.** HTML contains no inline
+  CSS or script; CSS and scripts are external.
+- Without JavaScript the page is complete: navigation, topbar, timeline region and input are present,
+  with no data. On a narrow screen the navigation and content stack; navigation still expands. A
+  JavaScript-only capability is a `<button>` explained by the panel; never an `<a>` pretending to work.
+  The router shows the note and language links without a spinner when scripting is unavailable.
+- **Two inks, one paper.** A surface declares its paper and derives text color from it. Light and dark
+  have one set; `light-dark()` is the switch. Every color, font, size, space, radius and duration is a
+  token. Rules use tokens only. The selection blue-gray is the only approved non-ink/page color; danger
+  and verified are the semantic state exceptions.
+- Fluid layout with `clamp()`, `minmax()`, `auto-fit` and container queries. No width media query. Narrow
+  and wide are two states of one layout.
+- No shadow, gradient, dashboard card, or vendor-style chrome. Topbar, navigation and every dialog or
+  floating menu may share one restrained translucent paper plus Gaussian blur. This is the only glass;
+  no second glass language.
+- Focus is always visible. A target is at least 24px. Motion is short, interruptible, and limited to
+  transform, opacity, and color; reduced-motion turns it off.
+- Copy states only what the reader needs. It does not explain what is visible and is not marketing or
+  robot prose. Copy lives in a typed catalog; a missing key is a compile error.
+- Enabled control text uses normal ink. Muted color is for metadata, previews, placeholders, and disabled
+  controls. Never use muted text to make an enabled button look secondary.
+- No inverted controls. Background steps go from the current paper one small step darker (light) or
+  lighter (dark). A solid ink background with page-colored text is a dashboard button, not this system.
+- Grouped controls have a normal outer radius and smaller inner radii. An internal row never inherits the
+  outer card radius.
+- A control that is inherently selectable text does not get a copy button. Native text selection is the
+  affordance.
 
-这是两类，不是一类：
+## 2.4 Dialogs and floating surfaces
 
-- **弹窗**：设置、搜索、新消息、邀请、加入、创建。用 `<dialog>`，虚化背景，背景不可操作，焦点被限制在弹窗内，关闭后焦点回到触发它的控件。背景点击、Escape、关闭按钮都能关闭。`closedby` 直接用，不做 JS 兜底。
-- **悬浮**：房间菜单、语言菜单、表情/贴纸选择器、附件选择器。用 popover，不虚化背景，不限制焦点，点击外部关闭。
+Two classes, not one.
 
-触发弹窗用声明式命令（`commandfor`），关闭也声明式；不需要 JS 就能打开和关闭。悬浮继续用 `popovertarget`。顶栏房间菜单与顶栏底部、窗口右边各留一个小的相等间距。
+- **Dialog**: settings, search, new message, invite, join, create, room settings, message source, media
+  viewer, confirmation. Use `<dialog>` with `showModal`, a `--scrim` backdrop and a weak blur, inert
+  background, focus inside, and focus returning to the trigger. Backdrop, Escape, and the close control
+  close it. Open with `commandfor`; dismiss with `closedby` where the target engine supports it. If an
+  engine in the floor lacks it, one explicit fallback is allowed only after a platform decision; there
+  is never a second dialog implementation.
+- **Popover**: room menu, language menu, emoji/sticker picker, attachment picker, search scope, send menu,
+  profile, context menus. Use `popover` with `popovertarget`, no backdrop, no focus trap, outside click
+  closes. Use anchor positioning and implicit anchor. Menus and pickers use `auto`; room and message
+  context menus use `manual` because Firefox light-dismisses an auto popover on right-click release.
+  A trigger toggles its own popover; a second activation closes it. Opening a new floating trigger closes
+  an open context menu first. Content-sized popovers shrink to their items. The topbar room menu is
+  anchored at the topbar's bottom and right edges with equal small gaps.
 
-## 2.5 聊天
+Pointer context menus are measured with `visibility: hidden`, positioned at the pointer, then revealed
+without an entrance transition. A non-empty text selection keeps the native menu. A touch long-press
+suppresses `contextmenu` only when no text is selected. Keyboard context menus use the row/button
+position. Focus returns to the originating row after close.
 
-- **左导航**：菜单区是一张 raised surface 卡片（新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、空间四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。空间点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间菜单只有标记已读、静音/取消静音、收藏、离开房间；空间菜单只有空间设置和离开空间。低优先级房间不进入导航，只在设置的“低优先级”页列出并可进入。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。顶栏房间菜单只有房间设置、媒体与文件、搜索、邀请。
-- **搜索**：只从房间菜单进入，不搜索已退出或未知房间。左侧关键词，右侧范围，输入框和范围之间留出明确间距；范围按钮右侧带箭头，点击后箭头向下并在下方打开弹窗，再次点击按钮关闭。范围弹窗固定以全部房间开头，其余顺序一致，默认当前房间，并按内容收缩宽度。媒体与文件弹窗用两个选项：媒体只列图片和视频，文件列其余附件。
-- **离开与登出**：离开房间、离开空间和登出（含单台/其他会话）都走同一个确认弹窗。
-- **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
-- **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
-- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片和视频卡片在普通气泡纸面上略加深，贴纸没有气泡底色；时间作为 span 落在媒体内部的右下角，并使用比卡片更浓的主题 chip；文件/音频的时间落在卡片内部的右下角。图片进入视口附近才加载；视频显示为较小的预览卡片，点击后在居中弹窗播放；图片点击后居中显示，可缩放，点击背景或关闭按钮退出。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。向上翻自动加载旧消息后保留当前位置，可以继续向上。当前房间在下方出现新未读消息且视口不在底部时，显示带计数的跳转按钮；到达底部或点击后标记已读。其他房间用导航未读徽章，不额外弹 toast。回应按数量从高到低排列，最多显示 6 个，其余用末尾的 `+N` 折叠按钮展开或收起，折叠行不超出消息内容宽度。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
-- **输入框**：附件、贴纸、输入框、表情、发送。点击附件按钮打开文件管理器，选择完成后立即按文件发送，不进入缓冲区；粘贴的文件进入缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。缓冲区发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。贴纸选择器从客户端载入；回应选项打开与输入框相同尺寸和分类的完整表情面板，近期使用独立保存。
-- 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。取消发送排在菜单最底部。
+Dialogs and floating menus share one glass language. Dialog paper is opaque with `--dialog-blur`; topbar,
+navigation, and floating menus use the translucent `--float-blur`; right-click menus use the slightly
+stronger `--context-blur`. There is no second glass.
 
-## 2.6 登录、密钥门、设置
+## 2.5 Chat
 
-- 服务器地址、`.well-known`、`/versions`、`/login` flows；密码登录、SSO、注册（含交互式认证阶段）。忘记密码在重置流程存在之前不出现。
-- 密钥门强制。三条路径：恢复密钥/口令、另一台设备 SAS 验证、重新开始。注册后只有“重新开始”。恢复密钥只显示一次，等宽字体，可复制、可下载，不写日志。未完成前聊天页不可交互，也不渲染房间数据。
-- 设置一个对话框：账户、通知、安全、关于。账户有头像、显示名、MXID、退出登录；安全有设备验证、恢复密钥、备份、重置、会话列表（验证/登出单台/登出其他）；通知有应用内徽章、标题总数、桌面通知（默认关闭、手势请求、可关预览）；关于有版本、源码、许可、无统计。没有语言自定义。
-- 房间设置从房间卡片菜单打开：概况、成员、通知模式、加密状态（只读）、离开。没有权限时只读。
-- 个人资料从发送者、成员行或提及打开。
+### Left navigation
 
-## 2.7 平台与安全
+- One raised surface card contains the action menu: new message, invites, join, create, settings. Below it
+  are sections: favorites, rooms, direct messages, spaces. Default state: rooms open, others closed,
+  remembered per account. Empty sections keep their collapsed header. Section labels are bold.
+- A space expands its children in place without changing the right content. A room row has avatar, name,
+  preview, unread/mention badge, mute state, and active highlight. It does not show time or an ellipsis
+  button. The menu opens on right-click, long-press, or the keyboard context-menu key.
+- The room context menu contains mark read, mute/unmute, favorite, and leave. The space menu contains
+  space settings and leave. Low-priority rooms never enter navigation; they are listed in settings.
+- Room cards use `space-2` left padding. The bottom account card has its own paper. The topbar room menu
+  contains only room settings, media and files, search, and invite.
+- Clicking a room selects it and focuses the composer immediately. The reader can type without a second
+  click. The old room's rows are cleared before the new window paints.
 
-- Chrome、Firefox、Safari 三方在 2026-10 的版本内可用。Baseline 2026 是底线，不是上限；每个新特性都用检查命令核实，不靠记忆、不靠文章。只有三大浏览器都支持才用。
-- 不满足三家的特性不用；`features.md` 只记录确实能用到的特性。
-- 事件、资料、房间名、formatted_body 一律不可信；富文本过白名单消毒器。CSP 不允许内联脚本与内联样式；没有第三方请求，没有统计。
-- token 与密钥只在 worker；主线程只看到会话摘要与一次性显示的恢复密钥。不记录 token、密钥与消息正文。
-- 离线是正常状态：预缓存 shell，导航 cache-first 并后台更新；消息、房间、头像在 IndexedDB 里，由 worker 独占；homeserver 请求永不进 HTTP 缓存。
+### Search
 
-## 2.8 范围
+Search is entered only from the room menu. It never searches left or unknown rooms. The left side is the
+keyword field, the right side is the scope control, with a clear gap. The scope trigger has a chevron that
+points down while its content-sized popover is open; activating it again closes it. The scope list starts
+with all rooms, then the remaining order, defaults to the current room, and shrinks to content. Media and
+files use two modes: media is images and videos; files are every other attachment. Results search body,
+sender, filename, and image/video descriptions; media placeholders are `[image]` and `[video]`.
 
-- **先做**：登录与密钥门。
-- **范围内**：房间与时间线、发送与接收、回复/编辑/删除/回应、媒体、贴纸与表情包、本地搜索、设置、会话与设备验证、频道、通知、离线。
-- **不做**：通话与视频、线程、低优先级分区。邀请进菜单。
+### Leaving and signing out
 
-## 2.9 本轮用户视觉修正（摘要）
+Leaving a room, leaving a space, and signing out (one device or all others) share one confirmation
+surface.
 
-- 左导航的 active 与 hover 必须分得清；space 内被选中的房间与未选中不能看起来一样。
-- 底部账号信息卡要有自己的背景。点击账号出现的菜单，hover 必须能在菜单底色上分辨。
-- 房间卡片左 padding 从 `space-1` 改为 `space-2`；房间行不再显示时间，样式更统一。
-- 顶栏和左侧背景应是同一层，都可以有一点透明；左侧看不出来也没关系。顶栏最右侧菜单与顶栏底部、浏览器窗口右边都留一个一致的、比较小的间距。
-- 下方聊天区不限宽，应该和容器一样宽。
-- 文字气泡按内容收缩，不因为字少就撑满整列；气泡之间的间距稍大。reaction 的背景要更淡。
-- 点击有未读计数气泡的房间时，跳到最后一次已读的位置；不再给第一条新消息加整行背景高亮。
-- 所有图标换成一套新的、统一的图标；现在的图标不好看。
-- 所有弹窗和右侧顶栏都用背景高斯模糊；具体强度由实现规划。
-- 组件的背景与文字颜色独立：导航、账号卡、顶栏、气泡、菜单、对话框、输入框和卡片各自声明纸与文字角色；卡片不必共用同一个 ink，文字颜色根据它所在的背景推导。
-- 设置开关关闭时圆点在左，开启时圆点在右；开启轨道使用纸面墨色。弹窗卡片的模糊弱于悬浮菜单和顶栏。
-- 设置的左侧导航是一整块纸；账号行只保留自己一层背景，右侧内容不再套第二层 section 卡。
-- 左侧激活 tab 使用比纸面更深的 card step；右侧标题区和内容区使用同一层 dialog paper。
-- 设置侧栏只比 dialog 纸略亮或略深；激活项使用很淡的 tint，不加侧边竖线，也不做过亮的整块填充。
-- 房间设置复用同一套左侧纸、右侧 dialog 纸、激活 tab 和 flat section；不额外套 section 卡片。
-- 房间设置与设置使用同一固定尺寸；切换 tab 时顶部关闭按钮和导航位置不移动。
-- 贴纸面板固定尺寸：上方最近使用过的贴纸，中间是 emoji 与贴纸包的横向滚动 tab，下方是纵向滚动内容；切换贴纸包不改变外框。
-- 贴纸面板的 emoji tab 放全部 emoji，不再只放最近使用。
-- 图片和视频消息不显示文件名说明；时间使用灰色 chip；未加载前保留柔和的模糊环境底色。
-- 图片、视频、贴纸的时间气泡统一为右下角小 chip，不加模糊；图片附件的时间也落在右下角。
-- 输入框的房间 placeholder 保持一行，超长省略，不加书名号。
-- 亮色模式下附件预览卡的背景更浅，删除 X 使用正常卡片墨色，因此在亮色下是黑色；输入框聚焦后的边框在亮色和暗色模式都使用更浅的颜色。
-- 亮色模式下导航使用 245 纸面，顶栏保留更浅的 251 玻璃；账号菜单与账号信息 hover 同色，默认头像和回应背景更浅，回应默认淡、点击后提高一阶；图片和视频卡片在气泡纸面上略加深，Load older 更浅，媒体图标和右下角时间使用深色，页面水印恢复 8%。
-- 所有输入框聚焦边框和键盘 Tab 焦点边框使用同一淡色；reaction 的焦点环贴住 chip 并高于相邻行，不会被消息或下一行遮住；搜索输入与范围按钮间距加大，范围按钮带向下箭头并在再次点击时关闭；搜索范围、附件和发送弹窗按内容收缩；视频播放按钮 hover 更轻；缺失媒体和媒体库图标使用半透明水印墨。
-- 左侧房间右键菜单只有标记已读、静音/取消静音、收藏、离开房间；顶栏房间菜单只有房间设置、媒体与文件、搜索、邀请。
-- 回应按数量排序并限制为 6 个，余下用末尾 `+N` 折叠；回应行以消息内容宽度换行，不超出消息框。reaction 弹窗使用与输入框相同的完整表情面板，但最近使用独立保存。
-- emoji 与贴纸 tile 在亮色模式使用更浅的纸面。
-- 贴纸和 emoji 弹窗的 section 标题与 nav 增加上下间距。
-- 图片附件的删除 X 叠在右上角，不占一列；默认无背景，仅 hover 有背景。
-- 关闭控件默认无背景，只有 hover / focus 时显示 ink-based overlay 背景，不固定黑色。
-- 账号弹出的菜单使用与账号卡 hover 相同的纸面值，亮色和暗色各自成立，但用独立 token 书写。
-- 账号卡默认与 hover 的背景色对调。
-- 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
-- 多选勾选按钮出现在头像对侧的空隙、消息底部，绝对定位，不改变任何元素位置：对方消息在右，自己的消息在左；未选中时背景很淡，点击整行或复选框都切换选中。选中后消息框、图片、视频、贴纸和回应整体变暗，不再使用背景高亮。
-- 媒体与文件弹窗中的媒体按钮不显示文件名，像 emoji tile 一样带独立背景并缩小为六列小方块。
-- 图片预览窗口再缩到 30rem 高约 20rem；放大在窗口内部滚动，不再撑大窗口。
-- 账号弹出菜单使用与账号卡 hover 相同的独立纸面值，但两者不共享变量。
-- 消息右键菜单提供多选；多选后顶栏下方出现固定的独立按钮：左取消，中计数，右侧只有全选，与输入区左右对齐并留一个小间距。全选只把当前时间线视口内可见的消息加入现有选择，只会增加、不会取消已有选择，也不选屏幕外的历史。多个消息被选中时，右键或长按其中任一已选消息打开多选菜单：复制、转发、删除；删除先弹确认。按钮不再共用一条有颜色的栏，每个控件都是自己的胶囊形气泡背景，使用浮层高斯模糊，文字使用正常文本色并加粗；顶栏房间菜单仍在最上层。
-- 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。滑动手势只接受触摸和手写笔，鼠标拖动保留原生文本选择与复制。
-- 粘贴图片作为图片类型进入缓冲区；点击附件按钮选择的文件立即发送，不进入缓冲区。
-- 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
-- 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
-- 亮色模式气泡背景更浅。
-- 聊天区域的头像要完整圆形，并与昵称中心对齐；其他区域的圆形头像保持现状。
-- 图片、视频、贴纸等媒体消息的时间显示在媒体内部右下角，像一个 span；文本消息的时间保持在文本内。
-- 消息、房间名、主题、搜索、输入和文件名使用 `dir="auto"`；布局使用逻辑属性，无法用逻辑值的锚点用 `:dir(rtl)` 覆盖，方向性图标在 RTL 镜像。
-- `Load older` 与 `Copy link` 保留为 mock 评审演示，不当作真实功能。
-- 浏览器存储不可用时显式说明并停止重定向，不进入循环。
+### Right topbar
 
-## 2.10 本轮追加（2026-11-15）
+Back on narrow screens, room avatar, title over topic, room menu. Title and topic truncate, never wrap.
+The bar remains when no room is selected. With no room, no room content is rendered. Signed-out and
+gate-incomplete states are drawn by JavaScript after the session is known; the static shell does not
+preload them.
 
-- 操作按钮都要有浅色背景，fit-content 与整宽一致；switch 是唯一例外。此项覆盖 2.9 的“关闭控件默认无背景”：
-  关闭控件也属于按钮，hover/focus 只把背景再加深一层。
-- 输入框和下拉菜单在所有弹窗都有可见背景；下拉箭头默认向右，展开时向下。
-- 搜索窗口更大且高度固定；输入即搜索；文件名、图片/视频描述可搜；图片和视频用 `[图片]` / `[视频]` 占位。
-- 邀请窗口更大；左侧是头像、姓名和 MXID 的个人资料行，文字截断，点击打开资料；右侧接受/拒绝不变。
-- 只读设置行留出垂直间距；成员列表有自己的浅色背景。
-- 消息右键菜单增加“查看源码”；贴纸面板默认激活第一个 tab。
-- 富文本标题留出上下间距；代码块左右与气泡内边距一致。
-- 消息输入与富文本必须防 XSS；Markdown 的原始 HTML 不执行，`formatted_body` 使用白名单消毒。
+### Timeline
+
+- Own messages align right; others align left. In a sender group, the nickname is on the first row, the
+  avatar is a complete circle on the last row, aligned to the group bottom. Inner bubble corners chain:
+  first bottom-inline-start, middle both inline-start corners, last top-inline-start use
+  `--bubble-inner`; mirror for own messages. Reactions sit below the message body so the avatar aligns
+  with the message, not the reaction row.
+- Text bubbles shrink to content up to `--bubble-max`, break at any character, and leave normal spacing
+  between messages. Media cards sit slightly deeper than bubble paper. Images and videos do not show a
+  filename. Their timestamp is a dense chip inside the media at the bottom right. A sticker has no bubble
+  paper; its timestamp sits below the sticker art at the bottom right in a translucent watermark chip,
+  never over the emoji. File/audio timestamps sit inside the card at the bottom right.
+- Images load near the viewport with native lazy loading and async decoding. Videos are compact preview
+  cards that open a centered player. Images open in a compact window, zoom inside the window, and close
+  on backdrop or close control. The loading stage is darker than dialog paper, and the media does not
+  flash.
+- Undecryptable messages state the reason. Loading older and jump-to-newest never block scrolling.
+  Backfill preserves the anchor; opening another room resets the anchor and pinned state. A new unread in
+  the active room while away from the bottom shows a jump control with the count. Reaching the bottom or
+  using the control marks read. Other rooms use navigation badges, not a toast.
+- Reactions sort by count with stable ties, show at most six, wrap within the measured message content
+  width, and fold the tail behind a final `+N` toggle.
+- Clicking a room with unread positions at the read boundary without a permanent row highlight. The
+  unread count clears once the position is actually read.
+- The message menu contains reply, react, edit, delete, copy text, source, select, and cancel send at the
+  bottom. Open it by right-click, long-press, or keyboard context menu, never an ellipsis.
+- Multi-select starts from the message menu or a left swipe. The check appears opposite the avatar at the
+  row bottom, absolutely positioned so no element moves. The whole row toggles it; selected message
+  bodies, media and reactions dim together; the check stays outside the dimmed content. The selection
+  toolbar is fixed below the topbar, aligned with the composer: cancel at inline start, count in the
+  middle, select all at inline end, each its own pill-shaped glass bubble with normal bold text. Select
+  all adds only rows intersecting the current timeline viewport to the existing selection; it never
+  removes a selected row and never takes offscreen history. A selected-row menu offers copy, forward,
+  delete; delete confirms. Escape, room switch, or cancel leaves selection.
+- Room rows swipe right to mark read and left to mute; message rows swipe right to reply and left to
+  select. Swipe binds only touch and pen; mouse keeps native text selection and copy. The action icon is
+  revealed past a threshold and the row moves with the gesture.
+- A grouped message has no sender name on later rows. Date separators are inline small elements.
+
+### Composer
+
+- Actions: attach, stickers, input, emoji, send. The attachment button opens the file manager and sends
+  selected files immediately as file messages, not into the tray. Pasted files enter the tray as images
+  and remain removable, progress-tracked, cancellable, and retryable. Enter inserts a newline; Ctrl/Cmd+Enter
+  sends; IME composing never sends. The field grows to a limit, then scrolls internally. Drafts are per
+  room. The send button's long-press or context menu offers normal text and Markdown and sends immediately.
+  Only rich-text bubbles render Markdown; normal text stays plain. Tray order: files first, one message
+  each, then text. The composer and timeline fill the content column; no `--content-max`.
+- The sticker picker has one fixed frame: recent stickers, a horizontal row of emoji and sticker packs,
+  and a vertically scrolling panel. The emoji panel carries every emoji. The reaction picker uses the
+  same full emoji panel with its own recent list.
+- Typing `@` at the start of a word opens a height-limited member list filtered by display name and MXID.
+  Arrow keys move, Tab/Enter/click inserts one inline mention, Escape closes. The caret remains before
+  the placeholder when the field is empty; the placeholder is decorative and never consumes the caret.
+- The send flow is optimistic only through the worker-owned outbox. A queued row is written before the
+  request, keeps its transaction id, shows progress below the time, and is replaced by the remote echo.
+  A failure shows a small danger badge with actionable copy; retry resets it; discard deletes it.
+
+## 2.6 Login, key gate, settings
+
+- Server address, `.well-known`, `/versions`, `/login` flows; password login, SSO, registration including
+  interactive auth. Password reset appears only when the reset flow exists.
+- The key gate is enforced. Three paths: recovery key/passphrase, SAS from another device, and restart.
+  After registration only restart. A new recovery key is shown once, monospaced, copyable, downloadable,
+  never logged. Until the gate is complete the chat is not interactive and room data is not rendered.
+- Settings is one dialog: account, notifications, security, about. Account has avatar, display name, MXID,
+  sign out. Security has device verification, recovery key, backup, reset, session list with verify/sign
+  out one/sign out others. Notifications has in-app badge, title total, desktop notifications (off by
+  default, gesture request, closeable preview). About has version, source, licenses, no analytics. No
+  language customization.
+- Room settings from the room card menu: overview, members, notification mode, encryption state
+  (read-only), leave. Read-only when the reader lacks permission. The avatar aligns with the top of the
+  first field; access controls are full-row buttons; grouped device rows have a larger outer radius and
+  smaller inner radii. Verified is a green mark after the device name; unverified has a Verify button.
+- Profile opens from a sender, member row, or mention.
+
+## 2.7 Platform and security
+
+- Chrome, Firefox and Safari versions available in October 2026. Baseline 2026 is the floor, not a
+  ceiling. Every new feature is checked with the command, never memory or an article. Only features
+  supported by all three engines are used.
+- Events, profiles, room names, topics and `formatted_body` are untrusted. Rich text goes through one
+  allowlist sanitizer. CSP forbids inline script and style. No third-party request, no analytics.
+- Tokens and keys live in the worker; the main thread sees a session summary and a one-time recovery key.
+  Never log tokens, keys, or message bodies. State the threat model honestly: origin-wide storage means
+  XSS is the real boundary; the sanitizer and CSP are load-bearing.
+- Offline is normal: precache the shell; navigation cache-first with background revalidation; messages,
+  rooms and avatars live in IndexedDB owned exclusively by the worker; homeserver requests never enter
+  the HTTP cache.
+
+## 2.8 Scope
+
+- **Build first:** login and the key gate.
+- **In scope:** rooms and timeline, send/receive, reply/edit/delete/reaction, media, stickers and emoji
+  packs, local search, settings, sessions and device verification, channels, notifications, offline.
+- **Out of scope:** calls and video rooms, threads, low-priority sections. Invites enter the menu.
+
+## 2.9 Visual decisions that are not optional
+
+- Active and hover in navigation are distinguishable; a selected room inside a space must not look like
+  an unselected one.
+- The bottom account card has its own paper. Its menu uses the account hover paper; light and dark each
+  have independent role tokens.
+- The topbar and left navigation share one translucent layer; both may be slightly transparent. The
+  topbar's right menu keeps equal small gaps from the topbar bottom and the window edge.
+- The chat area is full content width, not constrained by `--content-max`.
+- Text bubbles shrink to content; gaps between messages are larger than inside a group; reaction
+  backgrounds are faint by default and one step stronger after choice.
+- Clicking an unread room goes to the last read position; no permanent first-unread row highlight.
+- All icons are one 24px, rounded, 1.75-stroke system.
+- Every dialog and the right topbar use Gaussian blur; strength is tiered. Settings close control and
+  navigation positions do not move when tabs change.
+- Component papers and text roles are independent: navigation, account, topbar, bubble, menu, dialog,
+  field, composer and card each declare paper and ink.
+- Settings switches: off knob at start, on knob at end; on track uses paper ink. Dialog blur is weaker
+  than floating menu and topbar blur.
+- Settings left navigation is one paper; the account row has exactly one background; right content does
+  not add a second section card. Active tab uses a deeper card step; title and content share dialog paper.
+  The settings sidebar is only slightly lighter/darker than dialog paper; active uses a very faint tint,
+  no side bar, no bright fill.
+- Room settings reuses the same left paper, right dialog paper, active tab and flat sections, with the same
+  fixed size as settings. Switching tabs never moves the close control or navigation.
+- Sticker panel has a fixed frame: recent row, horizontally scrolling emoji/pack tabs, vertically
+  scrolling content. Switching packs never changes the frame. Default active tab is the first.
+- Images and videos do not show filenames. Their time chip is inside the media at lower right, denser than
+  the card. Before load, the media area is a soft, darker placeholder. Sticker time is in the same small
+  translucent watermark chip below the art.
+- Input placeholder stays one line, ellipsizes, and has no book-title punctuation. Focus outline uses the
+  same soft focus color for every input, both schemes.
+- Enabled button text is normal ink. Muted is only for metadata, preview, placeholder, or disabled.
+  Backgrounds for actions are light and content-sized; switch is the only control without a button paper.
+- Popovers and floating menus are visibly distinct from the chat page; do not reuse the page paper. The
+  account active state and its menu are one small step darker in dark mode. Light menu hover is clearly
+  distinguishable from the default.
+- Grouped rows: outer radius normal, inner row radius smaller. Device rows are one group.
+- Version is a stacked label/value, not a two-column setting line.
+- Source text is selectable as one block; no copy button.
+- Count bubbles are a small paper step from the navigation, never an ink/page inversion. Mention badges
+  may use danger, with page-colored text.
+- Mention chips have adequate inline padding, a complete circular avatar, and a truncated MXID.
+- Empty composer shows the caret at the inline start, before the decorative placeholder.
+- No control explains itself with a second visual language: same focus color, same disabled opacity, same
+  hover step family.
+
+## 2.10 User-owned decisions
+
+These are the user's, not the agent's. Until answered, the conservative option is used and recorded in the
+owning paragraph.
+
+- Read receipt privacy: public `m.read`, private `m.read.private`, or both; what "last read" means.
+- Unread badge: server notification count, local unread after decrypt, or both.
+- Key-gate predicate: device keys, cross-signing, secret storage, backup, or all; what "recovery key" names.
+- Device identity: reuse `device_id` or create one device per login.
+- Room order when a room is both a DM and a favorite; where invites live.
+- Old room behavior after upgrade: replaced, hidden, or merged.
+- CSP for arbitrary homeserver origins: per-homeserver response header, service-worker navigation policy,
+  or a documented narrower product promise.
+- OAuth-only homeservers: unsupported state, OAuth implementation, or out of scope.
+- Scope cut for the first usable release.
 
 ---
 
-# Part 3 — Design
+# Part 3 - Architecture, security and design
 
-## 3.1 The model
+## 3.1 Threat model and security architecture
 
-1. **One writer per fact.** The worker owns the account database, the SDK and crypto. The main thread
-   owns the UI database and the interface. A module asks another layer for a fact; it never reads that
-   layer's storage directly.
-2. **Local first.** The database is the source of the interface. A sync, a reload or an offline start
-   reads the same projection. The network is an update, not a prerequisite.
-3. **Deterministic restore.** On load, the cached session state decides the first frame; the worker
-   verifies in the background and corrects the gate. The reader never watches a blank shell while
-   crypto initializes.
-4. **One protocol.** Client and worker never import each other; they speak commands and events. A
-   command has an id and a reply; an event has no id.
-5. **Every promise has a check.** A rule that no check enforces is a wish; 1.8 names the owner.
+1. **The XSS boundary is the real capability boundary.** The app runs one origin. A script that executes
+   in the main thread can read IndexedDB, including the worker's token database. "The token is only in the
+   worker" is an ownership rule that keeps the main thread from using it accidentally; it does not stop
+   XSS. The defense is: no unsafe DOM sink, one sanitizer, exact CSP, no third-party code, no inline
+   script/style, and a minimal DOM surface.
+2. **Worker ownership is one writer per fact, not a sandbox.** The account database, SDK, crypto, media
+   cache, outbox and projection are opened only by the worker. The main thread owns UI preferences and
+   the render store. Each fact has exactly one writer; the other side reads a typed projection.
+3. **CSP.** Production must deliver a response-header CSP from one policy builder. The allowlist is the
+   shell origin, the chosen homeserver origin and its websocket origin. `connect-src https:` and
+   `wss:` wildcards are a migration defect. `img-src`/`media-src` allow only `'self'`, `blob:` and
+   allowlisted raster `data:`; no remote `https:`. `frame-ancestors 'none'`, `base-uri 'none'`,
+   `object-src 'none'`, `form-action 'self'`, `worker-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'`,
+   `style-src 'self'`. The static server and the service worker consume the same policy builder.
+4. **Sanitizer.** One allowlist sanitizer for rich message HTML, one URL policy for avatars and media, one
+   inert runtime markup admission path. A component may emit typed `Html`; it may not build HTML from
+   raw data. `DOMParser` output is inert and is filtered for executable tags, event attributes, style
+   attributes and JavaScript URLs before adoption. Data is escaped by `html` at construction time.
+5. **Storage.** Account data (session, cursor, rooms, events, members, receipts, media, outbox,
+   projection) is worker-only IndexedDB. UI data (locale, section state, drafts, recent emoji) is the
+   account-scoped UI database. No message text or secret in `localStorage`. Clear UI data on logout;
+   delete the worker account database only after a successful logout or an explicit destructive reset.
+6. **Media.** Upload and download happen in the worker. Validate MIME and size; strip EXIF for images;
+   cache by content address; return a `blob:` URL. The main thread never receives `mxc://` or an access
+   token. `safeMediaUrl` accepts only local/blob/raster data URLs; `mxc` is not a DOM URL.
+7. **Networking.** The main thread has no homeserver connection. The worker uses `fetch` with an
+   `AbortSignal`, maps `M_*` error codes to typed failures, refreshes access tokens, and never puts API
+   responses in HTTP cache.
+8. **Logging.** Production logs carry codes and route names only. Never tokens, keys, message text,
+   filenames, raw event JSON, or full URLs with query credentials.
+9. **Third parties.** None. No analytics, remote fonts, CDN, preview service, or embedded widget.
+10. **Service worker.** Precache the shell and hashed assets only. Never cache `/sync`, `/media`, account
+    API responses, authenticated avatars or token/IDB data. Navigation is cache-first with background
+    revalidation; one version is live.
 
-## 3.2 Architecture
+## 3.2 Modern language and platform rules
 
-Build time only: catalogs (pure data, one typed object per language), a tiny HTML builder (escaping by
-default), asset records, layouts, components (markup in, string out), pages (one function per page,
-region ids shared with the client), and scripts (build, pages, audit, features, contracts).
+### TypeScript and JavaScript
 
-Runtime: `protocol/` (command and event unions), `client/` (store, worker client, router, one module
-per region), `worker/` (api, session, db, projection, media, keys), and `src/styles/` (one entry importing
-layer modules, tokens first). The current tree has only the build-time shell and a mock client; the static
-shell carries no room or message data, and the client injects one final snapshot.
+- ESM, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`,
+  `noFallthroughCasesInSwitch`, `useUnknownInCatchVariables`. No `any`; use `unknown` plus a guard.
+- `skipLibCheck` is true only because the pinned `matrix-js-sdk` 45.1.0 declaration references a missing
+  internal `.d.ts`; every project file is still checked under the full strict set. Remove the exception
+  when the public SDK fixes the declaration.
+- `typescript/no-unsafe-type-assertion` is temporarily disabled while parser and DOM boundary casts remain.
+  It is not permission to add casts: replace them with guards, and enable the rule before P1 exits.
+- Discriminated unions for commands, events, failures and rows. `readonly` on DTOs. `satisfies` for
+  tables. Type-only imports. No runtime `enum`; use `as const` maps.
+- `const` by default, `for...of`, early returns, one obvious happy path. Prefer pure functions at the
+  projection and parser boundaries.
+- Native modern APIs: `structuredClone`, `crypto.randomUUID`, `AbortSignal.timeout`, `Array#toSorted`,
+  `Object.hasOwn`, `Promise.withResolvers`, `navigator.locks`, `URL`, `URLSearchParams`, `Intl.*`.
+  Confirm each web platform API with `npm run features`; unsupported is not used.
+- No `var`, `arguments`, `for...in` over arrays, `apply`, `new Function`, `eval`, `document.write`,
+  string timers, implicit globals, promise polling, or floating promises. Every promise is awaited,
+  returned, or explicitly handled with a typed outcome.
+- A class is used only when it owns lifecycle or identity. Data shapes are plain readonly objects.
+- Do not import private SDK paths such as `matrix-js-sdk/lib/...`. Use the pinned public API or define a
+  local adapter shape. If the public API cannot express the need, record the gap and pin deliberately.
 
-Dependency direction is one way: catalogs → lib → layouts/components → pages, build time only; client
-and worker depend on protocol and core types, never on each other.
+### HTML
 
-Each page is one document. `<html data-page>` tells the client what to boot. Region ids live in one
-module imported by both the generator and the client, so the two cannot disagree. The build-time
-`appShell` takes no state and always renders `emptyChatState`; a page cannot accidentally ship mock data.
-The client mounts the same components with the final store.
+- Semantic elements first. Native `<dialog>`, `popover`, `commandfor`, `<details>`, `<button>`,
+  `<label>`, `<nav>`, `<main>`, `<ol>`, `<time>`, `<figure>`, `<img>`.
+- No inline style, script, event handler, `javascript:`, positive `tabindex`, redundant ARIA, or clickable
+  div. A native control carries its own semantics.
+- Images have `width`/`height` (or aspect ratio), `alt` or empty decorative `alt`, `loading="lazy"` and
+  `decoding="async"` unless they are above the fold and first-paint critical.
+- Every page has one `h1`, a language, a scriptless note, and stable region IDs shared by generator and
+  client.
+- Scriptless behavior is part of markup, not a JS rescue. A control that needs JS is a button with a
+  note; a link is a link only when it navigates.
 
-## 3.3 Data
+### CSS
 
-The account database is opened by the worker and nobody else. Its stores: session and per-room cursor,
-rooms, events (indexed by room and by room+time), members, and media keyed by a content address. The
-UI database holds locale, last account, collapse state, drafts, and recent emoji. The current mock
-client stores sections, spaces and drafts under the account id.
+- Tokens first. A token names a paper and a role; numbered color tokens and component aliases are
+  forbidden. Literal colors live only in the palette block. Rules use `var(--role)`.
+- One entry, one layer order: tokens, reset, base, layout, components, surfaces, motion.
+- Use `light-dark()`, `color-mix()`, `:is()`, `:where()`, `:has()`, `clamp()`, `minmax()`, `auto-fit`,
+  container queries, logical properties, `@starting-style`, anchor positioning, and native nesting only
+  when they reduce code and pass the feature check. No viewport width media query, vendor prefix, shadow,
+  gradient, or third glass language.
+- Focus is one shared `--focus` for keyboard targets and one softer `--field-focus` for fields. An input
+  border is not a second focus system.
+- Enabled text uses the paper's normal ink. Muted is only for metadata, preview, placeholder, disabled,
+  or a genuinely secondary icon. A disabled control keeps its accessible name and uses opacity; it does
+  not rely on color alone.
+- Disabled, loading, hover, open and active are distinct states with tokens; hover/active stay in the same
+  paper family. No inverted surface.
+- A token name is an API. It must name the object and state where it is used. Rest, hover, open and active
+  roles are separate even when their computed values coincide. A rest rule using a `*-hover-bg`, a nav
+  role used on a dialog, or a generic role used for a specific paper is a defect. Audit with:
+  `grep -R "background: var(--.*hover-bg)" src/styles` and verify every hit is inside a hover/open rule
+  or a dedicated semantic rest role.
+- Avatar roles follow their paper: `--chrome-avatar-*` for navigation/topbar chrome, `--avatar-bg` for
+  content/dialog avatars, never a nav token on a generic profile row.
+- Skeleton, quote, holding, tray thumbnail, dialog control, and dialog row each have a named role. If one
+  is missing, add the role; do not borrow a hover role.
+- Outer grouped card radius is larger than inner row radius. An inner row never inherits its parent's
+  radius.
+- A pseudo-element placeholder is decorative and absolutely positioned; it must not affect the caret or
+  line box.
+- Any new CSS feature is checked with `npm run features` before use and recorded in `features.md`.
 
-A message row carries identity, room, sender, name, avatar, time, kind, body, HTML, media, reply, edited,
-reactions, mentions, status, error, encrypted flag, membership, and search tokens. The HTML is stored
-raw and sanitized at render.
+## 3.3 The model
 
-**The projection has two directions.** Forward: every event after the room cursor, plus the last thirty
-rows, because an edit, reaction or redaction changes an older row without adding one. Backward: after a
-scrollback, walk from the start of the live timeline and stop at the first stored id, because the cursor
-marks the newest row and cannot see that direction. Neither pass clears a store; a room disappears only
-on an explicit leave.
+1. **One writer per fact.** The worker owns the account database, SDK, crypto, media cache, outbox and
+   projection. The main thread owns the UI database and render state. A module asks another layer for a
+   fact; it never reads that layer's storage directly.
+2. **Local first.** The projection is the source of the interface. A sync, reload, or offline start reads
+   the same rows. The network is an update, not a prerequisite.
+3. **Deterministic restore.** On load, cached session, gate state and rooms paint; the worker verifies in
+   the background and corrects. The reader never watches a blank shell while crypto initializes.
+4. **One protocol.** Client and worker never import each other; they speak typed commands and events. A
+   command has an id and a reply; an event has no id. Every payload crosses a parser.
+5. **One markup producer.** Build-time components emit typed `Html`; the client mounts and patches those
+   shapes. The client does not own a second copy of a surface. Runtime generated markup is admitted only
+   through the one inert admission path.
+6. **Every promise has a check.** A rule no check enforces is a wish; 1.9 names the owner.
 
-The queued message is an ordinary row, written under its transaction id before the request. The remote
-echo carries the same id and replaces it. A failed send leaves a failed row with an error; retry resets
-it, discard deletes it.
+## 3.4 Worker
 
-Relations come from the SDK aggregate at projection time, so there is no second store to replay. An
-annotation counts once per sender per key, and `me` is the viewer.
+One dedicated module worker per tab, created when the page needs data.
 
-Read state is one call that moves the receipt and the fully-read marker together; the room row keeps the
-receipt id so the timeline can draw where reading stopped.
+- `start` first opens the account projection and UI/session summary, emits cached rooms and gate state,
+  then initializes crypto and sync in the background. The main thread never waits for crypto to paint.
+- `login`, `logout`, `start` are serialized by one queue. `navigator.locks` holds the account lock across
+  startup and crypto; a second tab gets `locked`, not a second client. Tear down the previous client
+  before a retry.
+- The worker owns the outbox: write the queued row before the request, keep it until echo or explicit
+  discard, emit status, error code and retry availability.
+- The worker owns the projection DB. Stores: session, room cursor, rooms, events indexed by room and
+  time, members, receipts/read markers, segment tokens, media cache, outbox. Project only the changed
+  event and the room fields it touches; read a page by a stable event-id cursor.
+- Backfill names the oldest stored event id and returns one page. Preserve segments across `limited`
+  sync gaps. Handle `TimelineReset` explicitly; never clear a readable segment because a sync was gappy.
+- Read state reads `m.fully_read` account data and the chosen receipt type; mark read once when the
+  position advances, never on every render.
+- Unread is a product policy stored explicitly, not `getUnreadNotificationCount` used as an array index.
+- Members are loaded (`loadMembersIfNeeded`) before a full member projection; a partial list is labeled
+  partial.
+- Threads stay off until the product renders threads and their notifications.
+- Media upload/download/thumbnail and search live here. Search reads the account projection, not the
+  current window.
+- A worker error marks connection degraded, restarts once, and leaves disk untouched. There is no
+  main-thread SDK fallback. Every command has a timeout and clears its visible wait on failure.
 
-## 3.4 Worker protocol
+## 3.5 Data
 
-One dedicated worker per tab, created when the page needs data.
+Account database stores: session record, per-room cursor, rooms, events (by room, by room+time), members,
+media by content address, segment tokens, read markers, outbox.
+
+A message row carries identity, room, sender, name, avatar, time, kind, body, sanitized HTML reference,
+media, reply, edited, reactions, mentions, status, failure code, encrypted flag, membership, and search
+tokens. HTML is stored raw but is sanitized at render or at ingress; the DOM never receives it unsanitized.
+
+The projection has two directions. Forward: every event after the room cursor plus the last bounded
+window, because an edit, reaction, or redaction can change an older row without adding one. Backward:
+from the oldest stored id through the segment/token chain. A store is never cleared for a room except an
+explicit leave.
+
+The outbox is an ordinary row keyed by transaction id, written before the request. The echo carries the
+same transaction id and replaces it. A failed send keeps the row with a typed code; retry resets; discard
+deletes.
+
+Reactions/replies/edits come from the SDK aggregate at projection time, stored in the same row, never a
+second replay store. An annotation counts once per sender per key; `me` is the viewer.
+
+Read state is one advancing call that moves the fully-read marker and the chosen receipt together. The
+room row stores the receipt id so the timeline can draw where reading stopped.
+
+UI database stores: locale, last account identifier (not token), section open state, drafts, recent emoji
+and recent stickers. It is account-scoped and cleared on logout. It never stores message history.
+
+## 3.6 Protocol
 
 | command | reply | notes |
 |---|---|---|
-| `start` | session + keys | opens the database, posts stored rooms **before** crypto, restores the session, starts sync after the reply |
+| `start` | cached session + gate + rooms | returns before crypto; sync follows |
 | `login` | session | credentials arrive once and never stay on the main thread |
-| `logout` | empty | clears SDK, crypto and account database |
-| `keyStatus` | ready or not | the gate's answer |
-| `open` | one window | waits for `start`; a caller never races it |
-| `older` | one window | backfill in the backward direction |
-| `send` | empty | the row is written first; outbox events follow |
-| `media` | a blob | decrypted with the row's file object, cached |
-| `packs`, `sticker`, `react`, `edit`, `redact`, `markRead`, `typing` | the documented shape | one handler each |
+| `logout` | empty | clears SDK/crypto/account DB after stop |
+| `keyStatus` | typed gate | the gate answer, not a boolean guess |
+| `open` | window | cursor-aware; waits for start |
+| `older` | one page | before oldest stored id, segment-aware |
+| `send` | queued row | body, html, reply relation, transaction id |
+| `media` | blob URL | authenticated download/thumbnail/upload |
+| `packs`, `sticker`, `react`, `edit`, `redact`, `markRead`, `typing`, `members`, `search`, `notifications`, `sessions`, `reset` | documented shape | one handler each |
 
-Events: ready, rooms, window, outbox, connection, keys, typing, fatal. The payload is bounded; a lost
-event costs one window, not a rebuild.
+Events: ready, rooms, window, outbox, connection, keys, typing, fatal, media. Payloads are bounded; a
+lost event costs one window, not a rebuild. Every inbound command and event crosses a parser; a malformed
+command keeps its valid id and returns `invalid`. A reply that matches no pending id is ignored and does
+not leak.
 
-**Start order.** `start` is sent once, before any room is opened. The stored rooms paint from the cached
-gate state; the start reply corrects the gate if the keys are gone. The room window is opened only after
-the start reply, and the timeline waits for it instead of racing it.
+`ChatSource` cannot have a method without a protocol command, handler, projection and test. A mock source
+is a development fixture, never the production implementation. Hiding a control is better than a no-op.
 
-**Failure.** A worker error marks the connection degraded and restarts it once; the projection on disk is
-untouched. There is no main-thread SDK fallback.
+## 3.7 UI
 
-## 3.5 UI
+The store is a key table, not a render pass: phase, session, rooms, room id, messages, cursors, has-older,
+connection, keys, typing, selection, overlays. `set` compares each key by reference and notifies only
+changed keys. A region subscribes to keys it reads.
 
-The store is a key table, not a render pass: phase, session, rooms, room id, messages, has-older,
-connection, keys, typing. `set` compares each key by reference and notifies only changed keys. A region
-subscribes to the keys it reads. Regions: navigation, header, timeline, composer, surfaces.
+Regions are navigation, header, timeline, composer, surfaces. Each owns its DOM lifecycle. Keyed rows are
+patched by field; no full-list `replaceChildren`, no `innerHTML`, no `outerHTML` comparison, no serialized
+signature string. Focus, caret, selection, scroll anchor, lazy media and IME state survive a repaint.
 
-The composer and any open surface own their state and are never re-rendered by a store change; that is
-what keeps the caret and the selection.
+The composer owns its draft, tray, height, selection, mention state and focus. A store change never
+rebuilds it. Navigating to a room focuses the composer immediately when it is enabled.
 
-**Navigation** is built once. Its header is one account button: the avatar on the left, the display name
-over the MXID beside it. The whole header opens a floating menu of the labeled actions below it, and
-each action opens its own dialog. The room sections follow. Section labels are bold. Rows are keyed by
-room id and moved only when order changes, so a sync, a repaint or a reload never rebuilds the list under
-the pointer. Section state is per account, with the old global map as the migration base; the default is
-rooms open, the rest closed. A room row has no visible menu button and no time; right-click, long-press or
-the keyboard context-menu key opens the room menu. The account card at the bottom has its own surface.
-Room cards use `space-2` left padding. Active is a deeper step than hover; a room nested in a space must
-still read as selected. Low priority rooms are absent from the list and appear in Settings instead. The
-navigation room context menu carries mark read, mute, favorite and leave; the topbar room menu carries
-settings, media and files, search and invite. A space menu carries only space settings and leave. Search is room-scoped from the topbar menu, with the scope chooser listing all
-rooms first and the current room selected; its trigger carries a chevron that turns down while the
-content-sized list is open, and a second activation closes it. Leave, space leave and every sign-out share the confirm surface.
+The navigation is built once and keyed by room id; order changes move nodes, not rebuild them. The topbar
+title/topic update in place. The timeline has a stable row map and per-row field updates. A surface body
+may be generated by components, but the admission path is inert and it never owns data from a second
+producer.
 
-**Topbar** has four cells: back (narrow only), room avatar, title over topic, room menu. The title and
-topic truncate, never wrap. The bar stays when no room is selected. It shares the navigation's translucent
-surface and blur. The identity area is JS-only until real data exists; there is no static placeholder and
-no fade. The room menu is anchored below the bar with a small equal gap from the bar and the window edge.
+## 3.8 First paint
 
-**Timeline** fills the content column; it is not constrained to `--content-max`. Rows are keyed by
-message id and updated in place; day separators and the older control are display items with their own
-keys. A message has no visible menu button; its row is focusable and right-click, long-press or the
-keyboard context-menu key opens the message menu when no text is selected. New rows append; backfill
-prepends and restores the scroll position from an anchor, whether the list grew or the server had nothing
-older. Opening another room resets the anchor and the pinned state. A bubble tints to the hover step while
-a long press is held and while its menu is open; a click or a plain mouse hover does not change it. All
-rows share one message body column between the two avatar gutters; other bubbles fill that column, so
-every bubble's right edge lines up, and own bubbles align to the same right edge. Text bubbles fit their
-content up to `--bubble-max` and break at any character rather than leaving a ragged right edge; message
-spacing is `space-3`; media timestamps sit inside the media at the bottom right as a span. Image and video
-messages carry no visible filename; their card uses a slightly deepened bubble paper with no ambient wash,
-and their time chip is denser than that card. A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
-media, with no blur. An opened image or video is a compact
-30rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
-button floats on the window, image previews shrink to the image and zoom inside the fixed box, and video uses its native controls. Selection starts
-from the message menu or a left swipe; the toolbar is fixed below the topbar with a small gap and aligned edge to edge with the composer: cancel at the
-inline start, count in the middle, and select all at the inline end. A context menu on any selected row offers copy, forward and delete, and delete asks
-for confirmation. Select all adds only the message rows that intersect the timeline viewport to the existing selection; it never removes a selected row, and it does not take the loaded offscreen history. The topbar room menu
-stays above it, delete opens the confirm dialog, and forward writes the selected rows into the chosen room; escape,
-a room switch, or cancel leaves selection. A selection check appears in the gutter opposite the avatar at the row bottom,
-absolutely positioned so no element moves: incoming messages on the right, own messages on the left. The unselected check sits on a faint control bubble. The full row toggles it; the selected message body, its media and its reactions dim together, and the check stays outside the dimmed content. Each toolbar control is its own pill-shaped glass bubble with the float blur and bold normal text color. Media tiles in the media dialog
-hide names, use the emoji tile paper, and sit in six small columns.
-Room rows swipe right to mark read and
-left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
-threshold while the row moves. The first unread message is scrolled into view
-without a row background. The message avatar is a complete circle on the last message of a sender group, aligned to the
-group's bottom while the sender name is on the first, never clipped by `content-visibility` paint
-containment. Reactions occupy their own row below the message body, so the avatar aligns with the message,
-not with the reaction row. A group chains its inner bubble corners: the first bubble's bottom-left, the middle bubbles'
-top-left and bottom-left, and the last bubble's top-left use `--bubble-inner`; every other corner is the
-normal radius, mirrored on the right for own messages. Every timestamp uses the `--text-xs` tier. Reactions sort by count with stable ties, show six chips at most,
-wrap within the measured message content width, and put the remaining count behind a final toggle that
-expands or collapses the tail. A queued or sending row
-places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge
-there, whose title carries the error. The timestamp, edited mark and status are not selectable; copying a
-message reads its body, not the meta. Images use native lazy loading and async decoding; the video row is a
-compact preview that opens a centered player. The image viewer centers the image, toggles a zoomed reading
-state on click, and closes on backdrop or the close control. A new message in the active room does not raise
-a toast: when the viewport is away from the bottom, the jump control names the unread count; reaching the
-bottom or using it marks the room read. Other rooms use the navigation badge. Backfill prepends a page and
-restores the recorded row, so the reader stays in place and can continue upward.
-
-**Composer** owns its draft, its tray, its height and its selection. A pasted image enters the tray as an image;
-the attachment button opens the file manager and sends the chosen files immediately as file messages, without
-filling the tray. The tray paper is lighter than the card paper in light mode, and its remove control takes the
-tray ink; the focused composer field draws a soft outline derived from ink and the field paper. The tray keeps a little more distance from
-the bar when it is visible. The send button's long-press or
-context menu offers normal text and Markdown; choosing an option sends immediately, with no visible
-format switch. Only rich-text bubbles render Markdown; normal text stays plain. The dialogs never cover
-it; the overlays never steal its caret. The bar fills the content column. The sticker picker has one fixed
-frame: recently used stickers, a horizontally scrollable row of emoji and sticker packs, and a vertically
-scrolling panel; the Emoji panel carries every emoji.
-
-**Overlays are two kinds.**
-
-- *Dialog*: a `<dialog>` with `showModal`, opened by `commandfor`, closed by `command`, `closedby` and
-  Escape. The backdrop is `--scrim` plus a small `backdrop-filter` blur. The background is inert, the page
-  scroll is locked with `:has`, focus starts inside and returns to the trigger. No JS is needed to open,
-  close, or dismiss it. Safari 27.0 still lacks `closedby`; its backdrop click does not close, and there is
-  no JS fallback.
-- *Popover*: a `popover` section with `popovertarget`, no backdrop, no focus trap. Menus and pickers are
-  popovers; the room and message menus use `popover="manual"` and close on an outside pointerdown or
-  Escape, because Firefox light-dismisses an auto popover on the right-click release. The other pickers
-  use `auto` and anchor positioning (`position-area`, `position-try-fallbacks`, and the popover's implicit
-  anchor), as does the topbar room menu. Opening a new floating trigger closes an open context menu first,
-  so one menu at a time keeps its coordinates. A trigger toggles its own popover: a second activation
-  closes it, including the manual room and send menus. Content-sized popovers shrink to their items; the
-  search scope, attachment picker and send menu do not keep an empty right column. The topbar room menu is anchored to its button at the
-  topbar's bottom and right edges, never positioned from a context point. Pointer context menus are
-  measured with visibility hidden, positioned at the pointer (a touch long-press opens after release,
-  centered on the touch point), and then revealed without an entrance transition; a non-empty selection
-  keeps the native menu, and a touch long-press suppresses the contextmenu only when no text is selected.
-
-The reaction picker is a manual popover with the same full emoji panel, dimensions, categories and recent
-section as the composer picker, but its own independent recent list. It opens at the original point that
-opened the message menu, not at the message row's far corner. It follows the context-menu positioning and
-cleanup rules: outside pointer or Escape closes it, chosen emojis update only the reaction recents, and
-keyboard focus returns to the message.
-
-The dialogs and floating menus share one glass language; the dialog paper is opaque with the weaker
-`--dialog-blur`, while the topbar, navigation and menus use the translucent `--float-blur` paper; right-click
-room and message menus use the slightly stronger `--context-blur`. There is
-no second glass style. The entrance of either uses `@starting-style` and `transition-behavior:
-allow-discrete`, never a skeleton and never a fade on the initial page load.
-
-## 3.6 First paint
-
-The static document is the shell: markup, stylesheet, script tag, regions, scriptless note. It never
-contains room data, a "not signed in" sentence, or a loading placeholder.
+The static document is the shell: markup, stylesheet, script tag, regions, scriptless note. It contains no
+room data, no "not signed in" sentence, no loading placeholder and no identity.
 
 On the chat page:
 
-0. If a cached room window exists, it paints before any skeleton. Without one, only the room list shows
-   skeleton rows while `roomsLoading`; the action card, topbar and composer keep their final boxes, and
-   the rows replace in place when the data arrives.
-1. The account's last gate state selects the interface phase; the stored rooms and per-account section
-   state paint immediately.
-2. The topbar is part of the static shell, at its final height and background. The avatar, title and
-   topic appear when the room is known; the bar does not move when they do.
-3. `start` is posted; the stored rooms event renders; the start reply corrects the gate; `open` follows
-   and the timeline fills.
-4. Nothing animates on this first pass. A sync that changes the list updates rows in place.
-5. A page reload is the same path. A background sync is the quiet one: same rows, same positions.
+0. The account's last gate state selects the interface phase. If a cached room window exists, it paints
+   before any skeleton. Without one, only the room area shows static skeleton rows while `roomsLoading`;
+   the action card, topbar and composer keep their final boxes.
+1. The topbar is part of the static shell at its final height. Avatar/title/topic appear when known; the
+   bar does not move.
+2. `start` is posted; the cached session/rooms event renders. The worker verifies the gate; `open` follows.
+3. Nothing animates on this first pass. A sync changes rows in place.
+4. A reload is the same path. A background sync is the quiet one.
 
-The measured evidence is a screenshot at load, a screenshot after the data, and a comparison of the
-topbar and list boxes between them.
+The static shell carries no user state. The client receives one final snapshot, renders every region once,
+computes the first scroll from the same snapshot, then becomes interactive. The initial injection never
+calls `markRead` and never scrolls a second time. `prepaint` sets only the interactive view and saved
+section state; it writes no data, badge, draft or scroll position. With scripting disabled, the router
+shows its note and language links without a spinner, and the navigation note sits inside scrollable
+sections so labels keep their top position.
 
-The static shell is data-free. The client receives one final snapshot, renders every region once in one
-task, computes the first scroll from the same snapshot, and only then becomes interactive. The initial
-injection never calls `markRead` and never scrolls a second time. The review's active room is already
-read, so its receipt is the last message and the first render is final. `prepaint` sets the interactive
-view and the saved section open state; it never writes data, a badge, a draft or a scroll position.
-With scripting disabled, the router shows its note and locale links without the spinner, and the
-navigation note sits inside the scrollable sections so the section labels keep their top position.
+## 3.9 Visual system
 
-A static page never contains a visible state that boot would change. C12 tests the data-free shell and the
-read snapshot; C10 remains the browser first-paint check.
+The palette is the frozen sRGB set: page, ink scale, surface steps, bubble/menu/chrome/nav/float glass,
+focus, danger, verified, mark, selection, media, scrim. Each paper declares its own text and state roles:
+`--nav-*`, `--account-*`, `--topbar-*`, `--bubble-*`, `--menu-*`, `--dialog-*`, `--field-*`,
+`--composer-*`, `--card-*`. A component never takes the page ink when its paper is a card, bubble or glass.
+`color-mix` may derive a role from its own paper and ink; a literal color lives only in the palette.
 
-A narrow first load opens on the navigation; selecting a room opens its detail. The generated review page
-starts with `data-view="shell"` so a script-free reader sees the complete navigation and content frame;
-`prepaint` switches an interactive page to `data-view="list"` before the client renders.
+Surfaces: page, chrome, navigation, account card, raised card, bubble, menu, dialog, field, composer.
+Topbar/navigation/menu share one glass; right-click menus use a slightly stronger blur; dialogs use a
+weaker blur so the card stays readable. No shadow, no gradient, no visible border.
 
-## 3.7 Build, assets, and caching
+Hierarchy is typography and paper step, not elevation: normal ink for controls and content; muted for
+metadata, preview, placeholder and disabled; one title size per surface; labels are smaller and muted,
+values are normal ink. A full-width select is one button row. A grouped list is one outer card with smaller
+inner rows. An enabled button never uses disabled color.
 
-Four entries — guard, prepaint, client, stylesheet — bundled by esbuild, minified, content-hashed, with a
-metafile the page generator reads. The worker and wasm entry wait for Matrix. HTML is minified with the same
-options in build and audit. Output is a generated static directory, audited byte-for-byte; `dist/` and
-`build/manifest.json` are ignored and owned by the build.
+Fluid geometry: navigation `clamp(15rem, 22vw, 19rem)`, chat full content width, bubbles/media `36rem`,
+fixed space 1-7, radii, control sizes and ease. Container queries, not width media. Every control has
+`appearance: none` before styling and a visible focus outline. A focused reaction hugs its card and sits
+above adjacent rows. Reduced motion stops only functional loops.
 
-Assets are one of five things: a module import (hashed by the bundler), a stylesheet `url()` (hashed by
-the bundler), a page asset named in the generator's list and resolved through the manifest, a file the
-client needs by fixed name declared in a `<meta>` tag, or a platform file copied verbatim.
-Icons that follow `currentColor` are functions returning SVG, not files. The current icon set is one
-coherent 24px, rounded, 1.75-stroke system. The worker never imports an asset. The generator never imports
-a browser module.
+## 3.10 Build, assets, CSP and offline
 
-The crypto wasm is copied by the build with a hash of its bytes and served as `application/wasm`; the
-worker initializes it explicitly before rust crypto.
+Four entries: guard, prepaint, client, stylesheet; bundled by esbuild, minified, content-hashed, with a
+metafile the page generator reads. Worker and wasm entries are separate. Every JS bundle targets the same
+three-engine floor, uses UTF-8 output, tree-shakes, emits no sourcemap, and drops `console`/`debugger`
+calls in production. HTML uses the same minifier options in build and audit. Output is generated and
+audited byte-for-byte; `dist/` and `build/` are owned by the build.
 
-The service worker is generated with the manifest inlined, so its bytes change exactly when the shell
-does. Install precaches the locale's pages and hashed assets; navigation is cache-first with a background
-revalidate; `skipWaiting` and `clients.claim` keep one version live; registration is production-only with
+Assets are one of: a module import, a stylesheet `url()`, a page asset named in the generator and resolved
+through the manifest, a fixed-name file declared in a `<meta>`, or a platform file copied verbatim. A
+generated asset is never hand-edited. The worker never imports an asset. The generator never imports a
+browser module.
+
+The crypto wasm is copied by the build, hashed by bytes, served as `application/wasm`, and initialized
+explicitly before rust crypto. The service worker is generated with the manifest inlined; install
+precaches the locale pages and hashed assets; navigation is cache-first with a background revalidate;
+`skipWaiting` and `clients.claim` keep one version live; registration is production-only with
 `updateViaCache: "none"`.
 
-## 3.8 CSS
+CSP is generated from one policy builder, consumed by the static server and the service worker as a
+response header. A meta CSP is a fallback only when no serving layer exists, and the limitation is
+recorded in the open defects. No wildcard connect source when an exact origin can be known. The static
+server also sends `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, and a restrictive
+`Permissions-Policy`.
 
-The palette in `:root` is the frozen sRGB set: `--page`; the ink scale; the surface steps; bubble, menu,
-chrome, navigation and float glass; and the focus, danger, mark, selection, media and scrim roles. On top of
-that, each paper declares its own text and state roles: `--nav-*`, `--account-*`, `--topbar-*`,
-`--bubble-*`, `--menu-*`, `--dialog-*`, `--field-*`, `--composer-*` and `--card-*`. These are semantic
-pairs, not numbered shades: a component never has to take the page ink when its paper is a card, a bubble
-or a glass menu. A value may be derived with `color-mix` from ink and its paper; the role name records the
-paper. `--danger` remains the only semantic state color, reserved for the failed-send mark, the mention
-badge and destructive actions.
+Budgets are measured by the build and enforced by C6. Values in this contract are ceilings, not targets:
+client JS 320 KB, stylesheet 96 KB, matrix worker 1.5 MB, crypto wasm 8.5 MB, generated watermark 96 KB,
+no unbudgeted asset above 8 KB. The build prints every size. A budget increase is a user decision, never a
+silent output of a refactor. Audit currently enforces client, stylesheet, worker and wasm. The watermark is
+still over budget and is an explicit open defect; C6 is not complete until it passes.
 
-Surfaces: the page uses `--page`; the topbar uses `--chrome`; the navigation uses `--nav`; the account card
-uses `--account-bg`; raised cards use `--card-bg`; bubbles use `--bubble-bg`; floating menus use
-`--menu-bg`; dialogs use the opaque `--dialog-bg`; page fields use `--field-bg`, fields on dialog paper use
-`--dialog-field-bg`. Text, muted text and hover/active states come from that paper's own roles. The topbar,
-navigation and floating menus share the 8px glass blur;
-right-click room and message menus use the slightly stronger `--context-blur` of 10px; dialogs use a weaker
-`--dialog-blur` of 4px so the card stays readable. The dialog backdrop uses the scrim
-plus a 6px blur. No shadow, no gradient, no visible border.
+## 3.11 Testing
 
-In light mode the page stays white, the navigation uses the 245 paper, and the topbar keeps the lighter
-251 glass. Floating menus sit at 248, the account menu takes the account hover paper, default avatars use
-the surface paper, reactions use a lighter chip, page fields use the surface step, dialog fields mix
-surface-hover toward the dialog paper, image and video cards use the bubble paper lifted slightly toward
-ink, and dialogs stay at 253. The light watermark is 8%, and a missing-media placeholder takes the
-card ink instead of the fixed media white. Load older uses the lighter surface-hover paper in light mode and
-the card paper in dark mode; the media timestamp is darker than its card in light mode.
+Pure tests: catalog parity and placeholder substitution, HTML escaping, one message grouping pass, store
+notification granularity/batching, generated page structure and locale addresses, surface registry,
+data-free shell, per-paper color roles, grouped avatars and bubble corners, CSS token/selector invariants,
+watermark determinism, protocol parser, projection at 1/30/1,000/10,000 events, permissions, URL policy,
+sanitizer allowlist, outbox state machine, cursor/gap rules, auth error mapping.
 
-Dialogs have a title and a close control; floating surfaces have no header. The dialog is 24rem wide,
-settings 46rem, the SAS 22rem, the floating surface 14rem, the send menu 11rem, and the accessible name is
-the surface title. Context menus fit their content within that cap and use SVG icons for their actions.
+Browser surface tests: live chat at 390/856/1280, light/dark, scriptless, RTL, keyboard, reduced motion;
+dialogs and popovers; selection and focus; computed style where appearance is the claim; first-paint
+screenshot pairs and box comparisons. Worker browser tests: start, login against a fake homeserver, initial
+sync, open, older, send, echo, receipt, decrypt success/failure, malformed command, two-tab lock.
 
-Rules for future CSS:
+Real-server tests: the whole flow on a device whose state is real, including first paint and the timing of
+rooms versus crypto. A mock cannot prove a worker command. A CSS regex cannot prove focus, caret, or
+scroll. A screenshot after an arbitrary wait cannot prove first paint.
 
-1. A token names a paper and a role. Numbered color tokens are forbidden; paper text aliases are required
-   because they prove contrast against the paper the component actually paints.
-2. Palette values are fixed. Component role values may derive from the palette with `color-mix`; changing a
-   palette value is a user decision, never a side effect of a refactor.
-3. Literal colors live only in the token layer. Component rules use roles; `color-mix` may combine roles,
-   never a literal.
-4. Hover and active reuse the paper's state roles. A new state color needs a new named role and a check.
-5. One stylesheet entry, one layer order: tokens, reset, base, layout, components, surfaces, motion. The
-   entry imports modules by layer; navigation, timeline and composer are separate files inside the
-   components layer. Local custom properties are for geometry or motion, never for a color. Text direction
-   follows the content: user-generated text carries `dir="auto"`, layout uses logical properties, and a
-   physical anchor side gets a `:dir(rtl)` override; direction-bearing icons mirror in RTL.
-6. No width media query. Layout is fluid with `clamp()`, `minmax()`, `auto-fit` and container queries;
-   every control gets `appearance: none` before styling and a visible focus outline.
-7. Every new rule must pass `test/style.test.ts`: all declared properties used, no numbered color tokens,
-   no literal `color` or `background` outside tokens, no vendor prefixes or viewport width queries, and the
-   navigation, bubble, menu, dialog, field and card text roles still resolve to their own token.
-8. Ink depth follows the theme: in dark mode more ink means brighter, in light mode more ink means darker.
-   Raised overlay controls derive their background and text from ink and paper, never a fixed black.
+The feature check: every new web feature is looked up before it is written and recorded in `features.md`;
+the check passes for the platform floor. No feature that only one engine supports.
 
-Fluid layout: navigation `clamp(15rem, 22vw, 19rem)`, chat full content width, bubbles and media `36rem`,
-fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell and `data-view` on the
-app switches list/room; no width media query. `appearance: none` on every control before styling. Focus is
-a visible outline at a small offset, using one soft focus color for inputs and keyboard Tab targets in both
-schemes; never removed except the composer textarea, whose field draws the focus ring with the same color.
-A focused reaction hugs its chip and sits above adjacent rows, so the message or the next row cannot cover
-the outline. The danger token is the only semantic state color; every other paper and text token is a fixed
-sRGB value.
+## 3.12 Platform
 
-Decorative motion is absent or at most a 120ms opacity/color/rotate change. A section
-collapses natively and immediately. Overlays fade without sliding, the skeleton is static, and the
-functional loaders — the router spinner and the pending message dots — are the only looping animations;
-reduced motion stops them.
+The authority is the `web-features` dataset, with compatible MDN data for gaps, and `features.md` records
+what the project uses. The floor is Chromium 156, Firefox 157 and Safari 27.0, reviewed for October 2026.
 
-## 3.9 Testing
+Before a feature: does the design need the behavior; does what exists already do it; is the feature larger
+than the need; does it replace code or add a second spelling. Confirm with `npm run features`. Rejected
+for the floor: scroll-driven animations, `interpolate-size`, `text-box`, cross-document view transitions,
+Temporal, and any feature missing from one engine. Use native `dialog`/`popover`/`commandfor`/anchor
+positioning/container queries/`light-dark`/`color-mix` only while the floor supports them. `closedby`
+and other edge features need a recorded fallback or removal.
 
-Pure tests: catalog parity and placeholder substitution, HTML escaping, message grouping in one pass,
-store notification granularity and batching, generated page structure and locale addresses, the surface
-registry, the data-free static shell, per-paper color roles, grouped avatars and bubble corners, CSS
-token/selector invariants and the deterministic watermark pack. Browser surface tests cover the live chat,
-dialogs and popovers; worker and real-server tests wait for P1.
-
-Real-server tests: the whole flow on a device whose state is real, including the first paint and the
-timing of rooms versus crypto.
-
-The feature check: every new feature is looked up before it is written and recorded in `features.md`; the
-check passes for the platform floor.
-
-## 3.10 Platform
-
-The authority is the `web-features` dataset, with MDN compatibility data for entries it does not name or
-where its compatibility record lags the engines (anchor positioning), and `features.md` is the project's
-recording of what it can use. The floor is Chromium 156, Firefox 157 and Safari 27.0.
-
-Four questions before a feature is used: does the design need the behavior; does what we have already do
-the job; is the feature larger than the need; does it replace code or add a second spelling.
-
-Current decisions: `<dialog>` and popovers split the overlays; `commandfor` opens the dialogs; `closedby`
-dismisses them, with no fallback; anchor positioning (`position-area`, `position-try-fallbacks`, implicit
-anchor, `anchor-size`) places and sizes popovers without JS; `backdrop-filter` blurs the backdrop, the
-topbar, the navigation and dialogs; `@starting-style` and `transition-behavior` handle entrances;
-`field-sizing`, `scrollbar-gutter` and container queries serve the layout; `:user-invalid` serves forms;
-`crypto.randomUUID` and async clipboard serve local actions. `dir` and `bdi` carry content direction, and
-`:dir()` selects the physical anchor or icon override needed under RTL; `scripting` hides the router
-spinner when JavaScript is unavailable. `content-visibility`, `::details-content`,
-`@scope` and nesting are not used and are not claimed.
-
-Rejected for this floor: scroll-driven animations, `interpolate-size`, `text-box`, cross-document view
-transitions, and Temporal, because at least one of the three engines does not ship them.
-
-## 3.11 Lessons the design closes
-
-| lesson | mechanism |
-|---|---|
-| one fact with two writers drifts | worker owns account data; main thread owns UI data |
-| a forward-only projection cannot grow history | two passes, decided together |
-| prepending moves the viewport | a recorded anchor restored in a frame |
-| a reader scrolled up has not read below | receipts move only at the bottom |
-| the user agent paints its own button face | `appearance: none` before styling |
-| a wrong wasm MIME breaks crypto | the build copies it and serves it as `application/wasm` |
-| a new device cannot read old history | the gate says so; the timeline says why |
-| storage can be evicted | persistence is requested; a refusal is stated |
-| an immediately activating service worker mixes versions | one version live, precache stamped by the build |
-| a scrollbar moves the layout | stable gutter |
-| an IndexedDB transaction dies across an await | reads open their own transaction or cursor |
-| long unbroken strings overflow a flex child | `min-inline-size: 0` and `overflow-wrap` |
-| a click is lost when a node is replaced mid-gesture | keyed rows, updated in place |
-| a surface text color copied globally fails on another paper | each paper declares its own text pair; hover keeps the same family |
-| a chat surface defined in several lists drifts | one `core/surfaces.ts` registry feeds markup and overlay behavior |
-| one file under two names is two facts | one hashed icon, no speculative probe |
-| a page paints the agent's canvas before CSS | `color-scheme` in the head of every page |
-| copy that explains the visible is noise | one sentence per note, only what is missing |
-| a string for an unbuilt feature rots | the catalog test fails on a key nothing reads |
-| the local list waited for crypto | cached gate state paints first; start corrects |
-| the static bar painted before its title | the bar is static and final; the identity is JS-only |
-| the title was rebuilt on every draw | the title and topic update in place |
-| a static "not signed in" appeared before the session was known | the boot phase draws nothing |
-| an initial row animation read as flicker | no animation on the first paint; sync updates in place |
-| the dialog backdrop needs the modal top layer | `<dialog>` and `::backdrop`, not a popover |
-| a floating menu must not dim the page | popovers keep no backdrop |
-| the backdrop click is not native on `<dialog>` | `closedby`, not a JS fallback |
-| a negative margin under `content-visibility` paint containment is clipped | keep the avatar inside the row; pad the message body |
-| a media timestamp outside the image floats in the page | put the time span inside the media frame |
-| a topbar menu at an anchor edge overlaps the chrome | fixed inset below the bar with equal gaps |
-| active and hover at adjacent ink steps are indistinguishable | active is a deeper step; nested space rows use a middle step |
-| a static review frame showed unread badges and media chrome boot removes | data-free shell, one final injection and C12 |
-| a grouped message avatar moved to the first row and lost its corner chain | avatar on the group end; inner corners use `--bubble-inner`; C13 |
-| a switch knob positioned from the inline end ran outside its track | start at the track's leading inset and translate one knob width; the style test locks it |
-
-## 3.12 Phases
+## 3.13 Phases
 
 | phase | work | exit |
 |---|---|---|
-| P0 | pipeline: build, pages, audit, features, layouts, components, router, chat pages, stylesheet | generated locale pages, audit green, chat complete scriptless at both widths and both schemes |
-| P1 | worker: entry, hashed wasm, init, login, sync, decrypt | protocol test signs in, syncs, sends, reads the echo |
+| P0 | pipeline: build, pages, audit, features, layouts, components, router, chat pages, stylesheet | generated locale pages, audit green, chat complete scriptless at both widths and schemes |
+| P1 | worker skeleton: entry, hashed wasm, init, login, sync, projection DB, protocol parser, account lock, outbox | browser harness signs in, syncs, sends, reads the echo, reopens offline |
 | P2 | every page and the stylesheet in full | no dead control, every page complete scriptless |
-| P3 | data: database, both projections, store, sections, timeline, composer | a real account lists, reads, sends, keeps its place through backfill and reload |
-| P4 | discovery, login, the gate, the router | login lands on the gate, the key opens it, the chat opens behind it, verified on the real server |
-| P5a | message actions, room menu, room settings, join/create | a reader acts on a message and manages a room from the navigation |
-| P5b | local search, settings, sessions and verification | search finds and jumps; a session is listed, verified, signed out |
+| P3 | data: database, both projections, cursors, gaps, store, sections, timeline, composer | a real account lists, reads, sends, keeps its place through backfill and reload |
+| P4 | discovery, login, key gate, router, refresh/soft logout | login lands on the gate, the key opens it, the chat opens behind it, real server |
+| P5a | message actions, room menu, room settings, join/create, media | a reader acts, a media row loads in the worker, a room is managed |
+| P5b | local search, settings, sessions, verification | search finds and jumps; a session is listed, verified, signed out |
 | P5c | spaces, packs, invites, profile | a space expands; a pack is kept; an invite is answered |
-| P6 | service worker, offline, notifications, language, accessibility | offline reload works; the measurements are reported |
+| P6 | service worker, offline, notifications, language, accessibility, budgets | offline reload works; every budget passes; measurements reported |
 
-The project is done when every line of Part 2 is present and verified at rung 5, the open defects are
-empty, the gate is green with no budget raised, and a reader can start from this file alone.
-
-## 3.13 Open decisions
-
-These are the user's to make, not the agent's:
-
-- The exact copy and tone for each language.
-- Whether the first paint of a room should show the cached message window before the start reply.
-- Whether the dialog entrance should animate at all, and how long.
-- The scope cut for the first usable release.
-
-Until answered, the design defaults to the conservative option and records the choice in the commit.
+The project is done when every line of Part 2 is present and verified at rung 5, open defects are empty,
+the gate is green with no budget raised, and a reader can start from this file alone.
 
 ---
 
-# Part 4 — Working tree
+# Part 4 - Visual language and aesthetic DNA
 
-## Commands
+This part is the design critique, not optional taste. It explains why the interface looks the way it does
+and what would be a regression.
+
+## 4.1 What the interface is
+
+This client is a **quiet reading and writing surface**, not a dashboard, a marketing page, or a chat toy.
+Its visual model is paper and ink:
+
+- A page is one paper. Chrome, navigation, bubble, menu and dialog are different papers laid on it.
+- Hierarchy comes from paper steps, type size/weight, and one normal ink. It does not come from elevation,
+  shadows, gradients, borders, accent colors, or many card shapes.
+- Density is intentional. Rows are compact; the reader sees more conversation and control with less
+  scrolling. Empty marketing space is a cost.
+- The interface is calm but not low-contrast. Quiet means no decorative noise, not faint controls.
+- The reader's content is the accent. The shell is neutral; media, names and messages carry color.
+
+## 4.2 How this differs from mainstream clients
+
+Mainstream SaaS and chat clients tend to use:
+
+- a bright blue or violet primary action, a white card on a gray page, 16-24px shadows and gradients;
+- large rounded cards inside larger cards, a dashboard header, oversized empty states, and a marketing
+  hero;
+- shimmer skeletons, entrance animations, toasts, and a settings surface that reinvents a form;
+- an accent color for every icon, active tab, badge and count;
+- a black/white inverted button pair.
+
+This project rejects all of that. It prefers:
+
+- one neutral paper family, near-black/near-white ink, and semantic color only for danger and verified;
+- flat surfaces, no shadow, no gradient, no visible border; separation by a small paper step;
+- compact density and truncation instead of wrapping or expanding the chrome;
+- native affordances: text is selectable, links navigate, buttons are buttons, context menus are menus;
+- quiet state changes: hover/active change the paper one step, not the hue;
+- a single glass language for chrome and floating surfaces, with dialogs more opaque and less blurred;
+- one accent-less hierarchy where the conversation is the visual subject.
+
+A blue primary button, a shadow, a gradient, a `box-shadow` card, a dashed border, a bright filled tab,
+or an ink-on-page inverted badge is a style regression.
+
+## 4.3 The paper ladder
+
+Use a small, ordered ladder. In light mode darkening is the direction; in dark mode lightening is the
+direction; the span is deliberately narrow.
+
+1. Page: the room behind content.
+2. Navigation/chrome: a glass layer close to the page.
+3. Account card: one step above or below navigation.
+4. Raised card, bubble, field: a step that belongs to its content.
+5. Menu/float: a visible floating paper, distinct from the page but not a second theme.
+6. Dialog: opaque paper, weaker blur; readable for long forms.
+7. Active/pressed: one further step in the same paper family.
+
+A count badge is step 4, not a black/white inversion. A menu item hover is step 4, not the page color. An
+active account row is step 4-5, not a bright accent block. A disabled control is opacity, not a different
+hue. A verified mark is the only green; danger is the only red.
+
+## 4.4 Typography and controls
+
+- Titles are the same family, larger and heavier. Labels are smaller and muted. Values are normal ink.
+- An enabled control never uses metadata color. A full-row select is one button with a label, value and
+  chevron; the whole row is the target.
+- Buttons have a light paper, fit content or fill the row when the design says so. A button is not a
+  colored block unless it is destructive or a primary confirmation.
+- Icons are one 24px, rounded, 1.75-stroke family and inherit the paper ink. An icon-only button has an
+  accessible name and a visible hover/focus state.
+- Text that can be selected does not get a copy button. Selection is the affordance.
+- Placeholders are decorative, single-line and truncated; they never move the caret.
+
+## 4.5 Grouping and geometry
+
+- A group of rows is one card. Outer corners use the normal radius; inner rows use a smaller radius.
+  There is no stack of four independent cards.
+- A sender group is one visual block: name on first row, avatar on last, inner bubble corners chained.
+- A bubble fits its content. A full-width bubble for two words is a regression. Media has its own card
+  paper, slightly deeper than a bubble.
+- A sticker is art without bubble paper. Its timestamp is a watermark chip below the art, never over it.
+- A menu item hover is visible without becoming a selected tab. Active is deeper than hover; active and
+  hover must be distinguishable.
+
+## 4.6 Motion and feedback
+
+- Motion is feedback, not decoration: a button press, a popover entrance, a loading spinner, a message
+  status. It is short, interruptible, transform/opacity/color only.
+- No entrance animation on first paint. No shimmer. No fade on a page load. A skeleton is static.
+- A wait has a visible state and a cancel path. A spinner that can never clear is a defect.
+- Reduced motion stops looping loaders and non-essential transitions.
+
+## 4.7 Media and overlays
+
+- Image/video cards are slightly deeper than the bubble; their time chip is inside at bottom right.
+- The viewer is a compact window with a dark stage while loading, not a white full-screen page and not a
+  generic attachment card.
+- Emoji and sticker pickers are floating papers distinct from the chat page; their frame is fixed while
+  content scrolls.
+- Dialogs are opaque and weakly blurred; menus are translucent and more blurred. There is no second glass.
+- A context menu is not a dialog: no backdrop, no focus trap, outside click closes.
+- A dialog returns focus to the trigger; a context menu returns focus to the row.
+
+## 4.8 The anti-pattern list
+
+These are never a valid "improvement":
+
+- `innerHTML`/`outerHTML` reconciliation, string signatures, or replacing a whole region to update one
+  badge.
+- Full-screen "loading" pages, skeleton shimmer, and content that shifts when data arrives.
+- A second session model, a second gate flag, a second database writer, or a second markup producer.
+- Optimistic state for a command that does not exist.
+- A button whose text is muted, a badge that inverts ink and paper, a menu hover that matches its default.
+- A design token used for the wrong object: `--ink` for a navigation badge, `--page` for an inverted
+  button, `--account-hover-bg` as the default account paper, `--nav-avatar-*` on a dialog profile, or a
+  component alias for a paper.
+- A seven-color accent system, a gradient, a shadow, a glass layer on every surface, or a card inside a
+  card inside a card.
+- An icon button without an accessible name, a clickable div, a positive tabindex, or an inline handler.
+- A "fixed" check that only searches source text while the rendered state is broken.
+
+---
+
+# Part 5 - Agent discipline and known failure modes
+
+This project has repeatedly failed at boundaries, not at effort. The following patterns are known. An agent
+that repeats them is not making progress.
+
+## 5.1 The recurring failures
+
+1. **The mock became the product.** `/review/` demonstrates every feature; the real worker supports a
+   narrow slice. The UI is ahead of the runtime, and a screenshot of the mock is treated as acceptance.
+2. **Two owners of one fact.** The main thread has session hints and optimistic rows beside the worker's
+   session, projection and outbox. Two writers drift; one eventually wins unpredictably.
+3. **Whole-region replacement.** `innerHTML`, `outerHTML`, string signatures and `replaceChildren` hide
+   lost focus, caret, selection, lazy media and scroll positions. The tree is rewritten while the reader
+   is using it.
+4. **Pagination shaped by the UI.** A `want`/`keep` count instead of a stored cursor; a live-timeline dump
+   instead of a segment chain. History stops at a gap and no one notices.
+5. **A mock or a regex as evidence.** A green style regex, a generated HTML string, or a `/review/` click
+   is reported as a product claim.
+6. **A claim above its rung.** Part 4 says green while `tsc` fails; a screenshot after a wait is called
+   first paint; a fake `SessionPort` is called a worker test.
+7. **Append-only design.** New round sections contradict the owning paragraph; two descriptions of the
+   same rule survive. The record grows instead of the data shape settling.
+8. **A deep module owns the composition root.** A 1,600-line surface, a 1,000-line component module, a
+   844-line composer. The 400-line rule is a wish.
+9. **Security by convention.** "Token only in the worker" is stated as if it were a capability boundary;
+   CSP allows every HTTPS origin; drafts sit in local storage; internal SDK paths are used.
+10. **A fix that adds a token/state/writer instead of understanding the existing one.** The new variable
+    is coupled to the wrong paper and the old path remains.
+11. **Misreading the user's visual sentence.** "Buttons look faint" is fixed by a new color token instead
+    of normal enabled ink; "placeholder caret" is fixed by hiding the placeholder instead of removing it
+    from the caret's line box; "badge color" is fixed by inverting ink/page.
+12. **Not deleting.** A replaced path, an unused export, a dead handler, a copy key, a second adapter and a
+    temporary fallback survive the change.
+13. **Unbounded async.** A request without timeout/cancel, a promise caught into `undefined`, a spinner
+    that never clears, a worker error with no restart.
+14. **Using the wrong SD layer.** A main-thread SDK import, an internal `matrix-js-sdk/lib/...` path, or
+    a second `MatrixClient` on the same crypto prefix.
+
+## 5.2 The required correction
+
+For every non-trivial change:
+
+1. Reproduce the current symptom in the real surface.
+2. Name the owner of the fact and the boundary that is wrong.
+3. Delete the second path before adding the first.
+4. Implement one path end to end: type, parser, worker, projection, action, UI, test.
+5. Verify at the claimed rung, not a lower one.
+6. Record the evidence and the exact remaining gap.
+7. If the user says it is still broken, do not patch the visible pixel blindly. Instrument the DOM,
+   computed style, focus, selection, network and worker state, then find the cause.
+
+A user report is ground truth about the symptom. A test that contradicts the report is not evidence that
+the report is wrong; it is evidence that the test does not cover the symptom.
+
+## 5.3 The anti-patterns table
+
+| temptation | why it is wrong | replacement |
+|---|---|---|
+| "The component is in `components/`, so it is safe" | safety is about the sink and the data, not the file location | one typed `Html` builder and one inert admission path |
+| "The token is in the worker, so XSS cannot read it" | IndexedDB is origin-wide | strong CSP, sanitizer, no unsafe sinks; honest threat model |
+| "I added an optimistic state so it feels fast" | a second writer with no command | worker-owned outbox; hide the control until the command exists |
+| "I rebuilt the region and restored focus" | caret, selection, IME and scroll are already lost | keyed rows patched by field |
+| "A regex test proves the style" | it proves source text, not computed layout | browser run with computed values and a screenshot pair |
+| "A mock screenshot proves the product" | it proves the fixture | worker rung and real-server rung |
+| "The check is green, so the feature works" | the check may not cover the feature | name the check and its rung |
+| "A little shadow/border makes it clearer" | it violates the paper system | use a paper step or type hierarchy |
+| "A blue accent makes it look modern" | the product is ink-first and accent-less | use normal ink and one semantic color |
+| "The CSS variable is reused, so the object is right" | coupling can be semantically wrong | name the role from its paper, e.g. `--nav-badge-bg` from `--nav`; `--account-bg` is the rest state, never `--account-hover-bg` |
+| "The button is disabled-looking because it is quiet" | enabled controls must read as enabled | normal ink; disabled only when disabled |
+| "A second fallback is harmless" | it becomes a permanent second path | one implementation, one platform decision |
+
+---
+
+# Part 6 - Working tree, current truth, migration
+
+## 6.1 Commands
 
 ```text
-npm run check       # the single gate: types, Prettier, Oxlint/Stylelint, tests, build, audit, contracts; then refreshes the dev review pages
-npm run dev         # build, serve dist/ on 127.0.0.1:5172, watch src/scripts and live reload
+npm run check       # types, Prettier, lint, tests, build, audit, contracts; then review pages
+npm run dev         # build, serve dist/ on 127.0.0.1:5172, watch and live reload
 npm run serve       # serve an existing dist/ on 127.0.0.1:5172 (PORT/HOST override)
-npm run format      # write Prettier across src, scripts, test and the root JSON/YAML
+npm run types:watch # incremental type checking
+npm run test:watch  # incremental pure tests
+npm run format      # write Prettier across src, scripts, test and root JSON/YAML
 npm run format:check
-node --test test/catalog.test.ts   # one pure test file
+node --test test/catalog.test.ts
 npm run features -- <web-features id> --require 2026
 npm run features -- <web-features id> --floor chrome=156,firefox=157,safari=27
 ```
 
-Prettier checks the tracked source and root configs. It does not reformat embedded HTML inside the
-`html` tagged templates; that whitespace is significant. `AGENTS.md`, `features.md`, `past/`, `dist/`,
-`build/` and the lockfiles are not formatted by the gate.
+The toolchain is pinned: Node >= 24, npm >= 11, `packageManager` npm 11.19.0, and `@types/node` follows the
+Node major. A dependency upgrade that changes the toolchain is a user decision, not a background update.
 
-## Map and current boundary
+## 6.2 Map
 
-- `src/pages/` — one build-time view per page (the chat at the locale root); `src/layouts/` — document,
-  chat and auth shells; `src/components/` — pure markup returned as `Html`, shared with the client, with
-  `surfaces.ts` holding the dialog/floating bodies; `src/catalogs/` — typed copy; `src/styles/style.css` — the
-  entry that imports `tokens`, `reset`, `base`, `layout`, `components`, `navigation`, `timeline`, `composer`,
-  `surfaces` and `motion`; `src/lib/` — HTML escaping, catalog, assets and byte formatting; `src/core/types.ts`,
-  `state.ts`, `regions.ts`, `surfaces.ts`, `locales.ts`, `rooms.ts`, `messageGroups.ts`, `search.ts`,
-  `reactions.ts`, `licenses.ts` and `mock.ts` — page state, ids, locale paths, room factories, grouping,
-  search matching, reaction folding, runtime license data and deterministic mock data; `src/client/` —
-  main/app, guard, prepaint, auth, chat, storage, session, prefs, store, actions, the surface controller,
-  the mock source, regions (navigation, header, timeline, composer) and position. `src/components/sas.ts`
-  owns the shared verification dialog.
-- `/` is the one-time language entry. `/en/` and `/zh-CN/` are the locale roots; the chat is the locale
-  root, and the other pages sit under the prefix. `/` and `/en/` are English.
-- `scripts/pages.ts` — root router plus locale pages; `scripts/build.ts` — esbuild stylesheet, guard,
-  prepaint, client, hashed icon, pages and manifest; `scripts/dev.ts` — live-reload server that runs each
-  build in a fresh child; `scripts/static.ts` — the 5172 server; `scripts/audit.ts` — minified-page and
-  asset comparison; `scripts/contracts.ts` — C1, C4–C8; `scripts/features.ts` — platform check;
-  `scripts/review.ts` — dev-only review artifact; `scripts/watermark.ts` — watermark generator.
-- The tree is a build-time static shell plus a client mock UI. There is no `src/worker` or `src/protocol`,
-  and no Matrix import; the client reads `src/core/mock.ts` and the guard validates the mock session. C2
-  and C3 wait for the real runtime. The SDK dependencies are not imported.
-- The generated chat page is the empty shell. The dev-only `/review/` artifact uses the same empty shell
-  and injects the deterministic mock rooms, account and messages from the client; it is not part of
-  `renderPages()` or the production audit. The stylesheet has no visible borders or dividers; the navigation
-  action block is a menu surface and section labels are bold. The frontend-design skill owns the visual
-  review; do not add a second convention.
-- The client is a mock: `Load older` loads one local page of older rows; `Copy link` points at addresses the
-  build does not serve. They are kept as review artifacts, not shipped behavior.
-- `MockSource` keeps one in-memory row log per room. `open`, `search`, `send`, edit, reaction, redaction and
-  forward read and write that log, so optimistic changes survive a room switch and appear in media/search.
-  A page reload still resets it; the IndexedDB worker owns persistence.
+- `src/protocol/` - command/reply/event types, failure codes, runtime parsers.
+- `src/worker/` - entry, api, ports, failure, matrix, project, session DB. Only this layer imports the SDK
+  and crypto wasm.
+- `src/client/` - boot, guard, prepaint, real WorkerSource/MatrixTransport, auth, actions, store, regions,
+  surfaces, inert DOM admission. Production chat uses the worker. `review.ts`/`reviewChat.ts` are a
+  separate review bundle; only that bundle imports `MockSource` and `core/mock.ts`.
+- `src/components/`, `src/layouts/`, `src/pages/`, `src/catalogs/`, `src/lib/`, `src/core/` - build-time
+  shell and shared DTOs.
+- `scripts/` - build, pages, audit, contracts, dev, static, review, features, watermark.
+- `spec/` - Matrix specification; `git/` - reference repositories, read-only; `past/` - evidence only.
 
-## UI consolidation
+## 6.3 Current measured truth
 
-The accumulated UI problems had five roots, closed together rather than by more page-specific branches:
+Measured on 2026-11-15 in the current working tree, after the latest uncommitted changes:
 
-- **Surface truth was split.** Ids, metadata, markup, body and behavior each carried their own list. Menus now
-  share role/menuitem semantics and one focus/arrow behavior; nested settings dialogs close generically;
-  reset and SAS dialogs use the same `surfaceHead` and `sasDialog` primitives.
-- **The data projection was split.** Fixtures and optimistic store rows had different owners. `MockSource`
-  now owns a per-room row log; search/reopen no longer see a different world from the rendered room.
-- **Small rules had several spellings.** Search matching (`core/search.ts`), reaction folding
-  (`core/reactions.ts`) and bytes (`lib/bytes.ts`) are single functions used by markup, source and client.
-- **Tabs and menu navigation were reimplemented per surface.** Media/member tabs share selection and
-  keyboard traversal; menus share focus entry, Home/End and arrow traversal; search scope is a real listbox.
-- **Attachments, invites and destructive actions were too implicit.** Attachment selection sends immediately
-  as the design requires; room-menu invite opens a room-invite form with inline validation and does not open
-  the incoming inbox; member moderation confirms; swipe no longer swallows the next click; failed and empty
-  timeline states are explicit.
+- `npm run check` is green: **124 tests**, 11 generated pages, 314 catalog keys, 2 languages.
+- Build sizes: stylesheet 85.7 KB, client 285 KB, matrix worker 1.23 MB, crypto wasm 7.79 MB.
+- `git` still reports a large dirty tree. `src/worker/`, `src/protocol/`, `src/client/dom.ts`,
+  `src/client/matrixTransport.ts`, `src/client/workerSource.ts` and the protocol tests are untracked.
+  Do not reset or clean the tree. Read the diff first.
+- `/review/` is a mock surface and is not the product. The production path at 5184 loads the server page
+  with no errors, but no current real login/sync/send has been re-run after the latest UI changes.
+- Advice.md's snapshot describes an earlier red gate and an earlier tree; its architectural findings remain
+  valid, but its exact line numbers and counts are stale.
 
-## Generated and reference-only
+## 6.4 Current blockers
 
-- `dist/` and `build/manifest.json` are generated; the build and audit own them. Never hand-edit.
-- `past/` is reference only. It is never shipped and its implementation is not brought back.
-- `.omp/` holds the project context, skills, config and ignored worktrees.
+The UI is ahead of the runtime. These remain open:
 
-## Verification
+1. **Key gate has two owners.** The main thread still has `maski.key` and `setKeyReady`; the worker returns
+   `key: "unknown"`; the gate is not a real predicate. Fix one authority before any gate UI.
+2. **Production ChatSource is incomplete.** Many methods are mock-only. Every visible action without a
+   protocol command must be hidden or implemented end to end. No optimistic branch for a missing command.
+3. **No projection DB/cursor.** The worker scans the live timeline; there is no bounded store, segment
+   token or gap table. Add it before claiming first paint or history.
+4. **Outbox is main-thread owned.** The worker must store the queued row and status. A row cannot vanish
+   before echo.
+5. **Pagination is a window dump.** Add a before-id cursor and segment chain; preserve scroll.
+6. **No lock/serialized auth.** Add `navigator.locks` and one start/login/logout queue; a second tab must
+   say `locked`.
+7. **Auth lifecycle incomplete.** Refresh token, soft logout, error mapping, `/login` flow discovery and
+   `/versions` shape are not done; do not present one generic auth error.
+8. **Media missing.** No worker upload/download/cache; `mxc` is not in the DOM; `safeMediaUrl` rejects it.
+9. **Search is mock-only.** The worker returns `[]`; implement account projection search before claiming.
+10. **Read receipts wrong.** `fully_read` is account data, not a receipt; choose privacy and advance once.
+11. **Unread is push-count.** Do not index `messages` with notification count. Store the product policy.
+12. **Drafts in local storage.** Move to the account-scoped UI DB; clear on logout.
+13. **CSP broad.** Current `connect-src https: wss:` is a migration defect; generate an exact header.
+14. **Offline absent.** No service worker/persistence yet; precache shell/hashed assets only.
+15. **Budgets are partly enforced.** Audit now fails on client, stylesheet, worker or wasm growth; the
+    generated watermark is still 257 KB against a 96 KB budget and is not yet gated. Pack it before
+    claiming C6 complete.
+16. **DOM replacement remains.** The surfaces admit generated markup through `replaceHtml`; it is safer
+   than `innerHTML`, but it still reparses whole bodies. Move to field-level patches.
+17. **Tests can be tautological.** Source regex, string markup and `/review/` cannot prove focus, caret,
+   scroll, worker behavior or first paint.
+18. **Agent claims above rung.** The rule in 1.5 exists because this has happened.
 
-The gate is the whole operational contract: a claim names the rung it was verified at, and a stylesheet
-read is not a browser run. C9 is the feature check plus `features.md`; C10 is the browser first-paint run
-and is not part of `npm run check`; C12 is the pure review-state contract and C13 is the grouped-message
-contract, both part of it. The mock UI has
-a Chromium surface pass at 390, 856 and 1280, light and dark, plus the generated scriptless structure and
-the pure tests. Worker and real-server claims wait for Matrix. The client and stylesheet budgets are
-deferred until the UI is complete, not raised.
+## 6.5 Migration order
 
-## Open defects
+This order minimizes wasted UI work. Do not start at item 7.
 
-1. **The tree has no worker.** C2/C3, the protocol, account data, crypto and the real gate wait for P1. The
-   current client is a mock, not a product claim.
-2. **The review artifact is outside the production gate.** `scripts/review.ts` writes `/review/` and
-   `/review/zh-CN/`, and `src/styles/watermark.svg` is generated by `scripts/watermark.ts`; neither is
-   compared by `npm run check`. The review page is intentionally dev-only and must not be read as a
-   production page.
-3. **Budgets are deferred.** C6 enforces neither the client nor the stylesheet budget until the UI is
-   complete; the current sizes are reported by the build rather than failing the gate.
-4. **Settings reset is mock-only.** The reset dialog and one-time key display exist, but no worker identity
-   reset backs them; the control mutates mock state and must not be read as a real identity change.
-5. **Notification delivery is absent.** The desktop switch requests permission and persists the preference,
-   but nothing creates a `Notification`; delivery waits for the worker and service worker.
-6. **Public room addresses are checked locally.** The form validates the shape, the local-homeserver suffix,
-   and the loaded alias list; a directory lookup for server-side existence waits for the worker.
-7. **Message source is a client projection.** The source dialog shows the row the client holds, not the
-   original event JSON; storing the raw event waits for the worker.
-8. **The mock row log is in memory.** Optimistic sends, edits, reactions, redactions and forwards survive
-   room switches within a tab; a reload resets the row log. Backup readiness is a separate local preference
-   and does survive reload. IndexedDB is owned by the worker.
-9. **Notification level is stored but inert.** Badge and preview now drive the navigation, but the global
-   level only changes the persisted preference; alert delivery waits for the worker and service worker.
-10. **Connection state has no surface.** `connection` is received and stored; offline/degraded has no visible
-    status yet, and the older-load wait has no cancel action.
-11. **Backup readiness is a local preference.** Setup persists and renders as ready, but no key backup is
-    created until the worker owns it.
+1. **Make the gate green and commit a baseline.** Fix the current unused parameter/sticker rule, run the
+   whole gate, correct Part 6 counts, and commit one coherent change. Do not clean user files.
+2. **One session authority.** Worker returns session summary, gate, cached rooms and connection in one
+   start reply; delete `maski.key`, `maski.registered`, `setKeyReady`, fake unlock/reset/register. The main
+   thread stores only UI preferences.
+3. **Projection DB and cursors.** Persist rooms/events/members/receipts/segments in the worker, bounded
+   windows, before-id pages, gap handling, pure tests at 1/30/1,000/10,000 events. Paint cached rooms before
+   crypto.
+4. **Worker-owned outbox.** Queued row, status, retry/cancel, echo replacement, typed failures. Wire
+   reactions/edits/redactions/replies through the same projection.
+5. **Media in the worker.** Upload with EXIF strip, authenticated download/thumbnail, content-addressed
+   cache, MIME/size limits, blob URLs. Enable composer attachments and media surfaces only then.
+6. **Search in the worker.** Account projection query, media/file filters, stable results across timeline
+   changes. No search of the current window only.
+7. **Real key gate.** Secret storage, recovery key, SAS, backup, reset, device list, typed failures. The
+   predicate is a user decision; until it is made, do not show a gate that cannot decide.
+8. **Auth lifecycle.** Refresh tokens, soft logout, `/login` flows, error mapping, account lock, worker
+   restart once.
+9. **Settings/invites/spaces/notifications.** Only after each has a record in `types.ts`, a command, a
+   projection and a test. Delete mock-only surfaces until then.
+10. **Offline and budgets.** Service worker for shell/hashed assets only; persistence request; enforce C6;
+    watermark in the manifest and under budget.
+11. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,
+    receipt, decrypt success/failure, malformed command, two-tab lock. This is the P1 exit.
 
-## Visual regression log
+## 6.6 Definition of done
 
-Every layout refactor re-checks these against the before crop. They have regressed before:
+Every line of Part 2 is present and verified at rung 5. Open defects are empty. `npm run check` is green
+with no budget raised. The browser harness is committed. A reader can start from this file alone. A real
+account can sign in, pass the gate, read, search, send, receive, react, edit, delete, load media, go
+offline, reload, and keep its place without a white flash or a layout shift.
+
+## 6.7 Visual regression references
+
+Every layout refactor re-checks these against the before crop.
 
 | area | reference that must survive |
 |---|---|
 | grouped message | avatar on the last row; sender name on the first; inner bubble corners chain |
 | bubble | content fit to `--bubble-max`, message spacing, faint reaction chip |
-| page | watermark tile under the chat, unchanged opacity and placement |
+| page | watermark tile under chat, mask-rendered, unchanged opacity and placement |
 | chrome | topbar/navigation glass, account card, popover and context-menu glass |
 | selection | check opposite the avatar at the row bottom; fixed toolbar below the topbar, aligned with the composer |
-| composer | action alignment, tray height, send button and input growth |
+| composer | action alignment, tray height, send button, input growth, caret before placeholder |
+| sticker | art without bubble paper; time chip below at the bottom right |
+| menus | enabled text normal ink; hover clearly different from default; menu paper distinct from page |
+| device group | outer large radius, inner small radii; green verified mark after name; Verify only when unverified |
+| viewer | compact window, dark loading stage, image zoom inside the window |
 
-- **2026-11-14, `/review/` message row.** The chat refactor moved Alice's grouped avatar from the last
-  group row to the first line and dropped the inner corner chain. Resolved: the avatar is on the group end,
-  the bubble chain uses `--bubble-inner`, and C13 guards both. The before crop stays the reference.
-- **2026-11-15, `/review/` selection.** The check sat in one gutter for both alignments, the toolbar scrolled
-  with the timeline and clipped under the chrome, and attachment-picker images lost their preview. Resolved:
-  the check sits opposite the avatar (incoming right, own left), the toolbar is fixed below the topbar and
-  aligned with the composer, the selected message body, media and reactions dim without a background wash, and picker files send immediately while the tray stays paste-only. Each toolbar control is its own pill-shaped glass bubble with the float blur and bold normal text color; the unselected check uses a faint bubble. Verified at 390 and 1280, and under a simulated `dir="rtl"`.
-- **2026-11-15, `/review/` composer focus.** The light tray read as a gray card and its remove control was
-  faded, while the focus border was too dark in both schemes. Resolved: the light tray uses its own lighter
-  paper, the remove control uses the tray ink, and the composer focus derives from `ink-4` over the field paper.
-  Verified in light and dark at 1120 and 390.
-- **2026-11-15, light-mode surfaces.** The light chrome and float layers were nearly white on white, the
-  account menu did not match its trigger, image/video cards used a different paper, and media controls were
-  tuned for dark. Resolved: nav stays at 245, the topbar keeps the lighter 251 glass, float menus sit at
-  248, the account menu takes the account hover paper, default avatars use a lighter paper, reactions use a
-  lighter chip, image/video cards use the bubble paper, Load older uses the lighter surface-hover paper,
-  the watermark is 8%, and media icons and chips use theme ink.
-  Verified at 1280 in light and dark; media cards now match bubbles in both schemes.
-- **2026-11-15, focus and popover roots.** Input focus and Tab outlines used different weights, the search
-  scope and attachment menus kept empty right columns, and the pointerdown cleanup reopened the topbar room
-  menu before the click could close it. Resolved: one soft focus color drives inputs and Tab targets, the
-  search field is spaced from a chevron scope trigger, the scope, attachment and send popovers size to
-  content, every trigger closes its own open popover on a second activation, and media symbols use the
-  watermark ink. Verified in Chromium at 1280, light and dark.
-- **2026-11-15, mouse swipe and media states.** Mouse drags started the touch swipe gesture, so text could
-  not be selected or copied; the media cards were too close to the bubble paper, reactions were strong by
-  default, and Cancel send sat in the middle of its menu. Resolved: swipe binds only touch and pen, mouse
-  keeps native selection; media cards lift slightly toward ink with a denser time chip; reactions start
-  faint and gain one step when chosen; Cancel send is the last menu item. Verified by dragging across a
-  message in Chromium and checking the pending-message menu order.
-- **2026-11-15, reaction flow.** Reaction chips could run past the message content and the picker used a
-  fixed twelve-emoji strip. Resolved: chips sort by count with stable ties, show six at most, measure the
-  message line and wrap within it, fold the tail behind a final `+N` toggle, and open the full composer
-  emoji panel with an independent recent-reaction store. Verified with seven reactions added in Chromium:
-  six chips plus `+1`, list narrower than the text line, and the toggle expands/collapses the tail.
-- **2026-11-15, room menus.** One shared menu exposed every room action in both the navigation and the
-  topbar. Resolved: the navigation context menu shows only mark read, mute, favorite and leave; the topbar
-  menu shows only room settings, media and files, search and invite. Space menus still expose only settings
-  and leave. Verified both invocations in Chromium.
-- **2026-11-15, reaction picker and focus.** Selecting React opened the picker at the viewport origin
-  because closing the message menu cleared the shared context position after the picker opened; the
-  reaction focus ring could also be covered by the message above it. Resolved: the message menu stores its
-  opening point, dependent pickers reuse it, a closing menu keeps the position while another context is
-  open, and a focused reaction uses zero offset with its own stacking layer. The picker now uses the full
-  composer emoji panel with an independent recent-reaction list. Verified by right-clicking a message,
-  choosing React, selecting a reaction, reopening the picker, and checking the composer recents separately.
+- **2026-11-15, surface contrast and caret pass.** Enabled `.button-quiet` and surface buttons use normal
+  ink; section heads use nav ink; settings tabs are readable. The empty composer prompt is an absolute
+  decorative pseudo-element, so the caret starts at the inline start. Input focus uses `--field-focus`;
+  the unread badge derives from `--nav` and `--ink` at 12%; the watermark is painted through a mask, not
+  a filter. Verified in Chromium `/review/` with computed colors and no console errors.
+
+- **2026-11-15, token semantics pass.** `--account-bg` is the account rest paper, `--account-hover-bg`
+  is hover, `--account-open-bg` is menu-open, and `--account-active-bg` is pressed. `--nav-avatar-*` was
+  renamed to `--chrome-avatar-*`; profile rows use generic `--avatar-bg`. Skeleton, quote, holding,
+  tray-thumbnail and dialog control/row roles replaced rest uses of `*-hover-bg` tokens. The style test
+  now asserts the semantic account roles.
+
+A layout refactor compares the before crop at the claimed width. A moved avatar anchor, closed gutter,
+lost glass layer, lost watermark, muted enabled button, inverted badge or changed focus color is a
+blocker, not a style preference.
+
+---
+
+# Closing rule
+
+The tree is not the product. The mock is not the worker. The CSS regex is not the browser. The screenshot
+after a wait is not first paint. The claim is not the rung.
+
+Read the code and the specification. Keep one writer per fact. Delete the second path. Verify the same
+symptom you claimed to fix. Then write the evidence down.

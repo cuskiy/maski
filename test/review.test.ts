@@ -6,7 +6,7 @@ import { mockChatState } from "../src/core/mock.ts";
 
 void test("the static shell contains no room or message data", () => {
   const markup = appShell(en, "en").value;
-  assert.match(markup, /data-view="shell"/);
+  assert.match(markup, /data-view="list"/);
   assert.match(markup, /data-region="nav"/);
   assert.match(markup, /data-region="room-header"/);
   assert.match(markup, /data-region="timeline"/);
@@ -18,9 +18,15 @@ void test("the static shell contains no room or message data", () => {
   assert.doesNotMatch(markup, /pack-item/u);
   assert.doesNotMatch(markup, /data-sticker/u);
   assert.doesNotMatch(markup, /member-row/u);
-  assert.doesNotMatch(markup, /session-row/u);
   assert.doesNotMatch(markup, /profile-line/u);
   assert.doesNotMatch(markup, /<button class="search-result"/u);
+  assert.doesNotMatch(markup, /data-setting=/u);
+  assert.doesNotMatch(markup, /data-setting-value=/u);
+  assert.equal(markup.includes(en["settings.signedOut"]), false);
+  assert.doesNotMatch(markup, /invite-row/u);
+  assert.doesNotMatch(markup, /device-row/u);
+  assert.doesNotMatch(markup, /class="media-file/u);
+  assert.doesNotMatch(markup, /\schecked(?=[\s>])/u);
 });
 
 void test("the booted review starts from the read state", () => {

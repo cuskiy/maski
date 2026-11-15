@@ -1,3 +1,4 @@
+// Timeline mount keeps scroll anchoring, selection and keyed rows in one lifecycle.
 import { timeline } from "../../components/timeline.ts";
 import { t } from "../../lib/catalog.ts";
 import type { Catalog } from "../../lib/catalog.ts";
@@ -8,6 +9,7 @@ import type { LocaleId } from "../../core/locales.ts";
 import type { Store } from "../store.ts";
 import { markMultilineBubbles } from "../bubbleLayout.ts";
 import { bindSwipe } from "../swipe.ts";
+import { messagePermissions } from "../../core/permissions.ts";
 
 interface TimelineInput {
   readonly store: Store;
@@ -41,19 +43,6 @@ function isNearBottom(wrap: HTMLElement): boolean {
 
 function stateRoom(state: ChatState): RoomSummary | null {
   return state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
-}
-
-const RUNTIME_CLASSES = ["is-multiline", "is-active", "is-holding"] as const;
-
-function stableMarkup(element: HTMLElement): string {
-  const clone = element.cloneNode(true) as HTMLElement;
-  for (const target of [
-    clone,
-    ...Array.from(clone.querySelectorAll<HTMLElement>(".is-multiline, .is-active, .is-holding")),
-  ]) {
-    for (const name of RUNTIME_CLASSES) target.classList.remove(name);
-  }
-  return clone.outerHTML;
 }
 
 export function mountTimeline({ store, actions, c, locale }: TimelineInput): () => void {
@@ -138,8 +127,12 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       return;
     }
     if (action === "delete") {
-      const rows = store.snapshot().messages;
-      const ids = selectedIds().filter((id) => rows.find((message) => message.id === id)?.capabilities.redact === true);
+      const snapshot = store.snapshot();
+      const currentRoom = snapshot.rooms.find((room) => room.roomId === snapshot.roomId) ?? null;
+      const ids = selectedIds().filter((id) => {
+        const row = snapshot.messages.find((message) => message.id === id);
+        return row !== undefined && messagePermissions(row, currentRoom, snapshot.session?.userId ?? null).redact;
+      });
       if (ids.length === 0) return;
       document.dispatchEvent(
         new CustomEvent("maski:confirm", {
@@ -210,6 +203,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         }
       }
       const nextRendered = new Map<string, MessageRow>();
+      const byId = new Map(store.read("messages").map((message) => [message.id, message]));
       const fragment = document.createDocumentFragment();
       for (const desired of nextList.children) {
         if (!(desired instanceof HTMLElement)) continue;
@@ -221,17 +215,14 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         if (!desired.matches("li.message")) continue;
         const id = desired.dataset["id"];
         if (id === undefined) continue;
-        const message = store.read("messages").find((entry) => entry.id === id);
+        const message = byId.get(id);
         if (message !== undefined) nextRendered.set(id, message);
         const old = currentMessages.get(id);
-        const same =
-          old !== undefined &&
-          message !== undefined &&
-          rendered.get(id) === message &&
-          stableMarkup(old) === stableMarkup(desired);
+        const same = old !== undefined && message !== undefined && rendered.get(id) === message;
         fragment.append(old !== undefined && same ? old : desired.cloneNode(true));
       }
       list.replaceChildren(fragment);
+      paintSelection();
       rendered = nextRendered;
       if (focusState !== null) {
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(focusState.id)}"]`);
@@ -243,13 +234,19 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     }
 
     const nextNote = next.querySelector<HTMLElement>('[data-field="state"]');
-    if (note !== null && nextNote !== null) note.innerHTML = nextNote.innerHTML;
+    if (note !== null && nextNote !== null) note.replaceChildren(...nextNote.cloneNode(true).childNodes);
 
     const nextOlder = next.querySelector<HTMLButtonElement>(".load-older");
     const currentOlder = wrap.querySelector<HTMLButtonElement>(".load-older");
     if (nextOlder === null) currentOlder?.remove();
     else if (currentOlder === null) wrap.insertBefore(nextOlder.cloneNode(true), list);
-    else currentOlder.hidden = nextOlder.hidden;
+    else {
+      currentOlder.hidden = nextOlder.hidden;
+      currentOlder.disabled = nextOlder.disabled;
+      currentOlder.setAttribute("aria-busy", nextOlder.getAttribute("aria-busy") ?? "false");
+      currentOlder.classList.toggle("is-loading", nextOlder.classList.contains("is-loading"));
+      currentOlder.replaceChildren(...nextOlder.cloneNode(true).childNodes);
+    }
 
     const nextJump = next.querySelector<HTMLButtonElement>(".jump-newest");
     const currentJump = region.querySelector<HTMLButtonElement>(".jump-newest");
@@ -258,15 +255,29 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   };
 
   const fitReactionWidths = (): void => {
-    for (const reactions of list.querySelectorAll<HTMLElement>(".reactions")) {
-      const line = reactions.closest<HTMLElement>(".message-inner")?.querySelector<HTMLElement>(".message-line");
-      if (line === null || line === undefined) continue;
-      const width = line.getBoundingClientRect().width;
-      reactions.style.maxInlineSize = width > 0 ? `${String(width)}px` : "";
+    const reactions = Array.from(list.querySelectorAll<HTMLElement>(".reactions"));
+    const widths = reactions.map((element) => {
+      const line = element.closest<HTMLElement>(".message-inner")?.querySelector<HTMLElement>(".message-line");
+      return line?.getBoundingClientRect().width ?? 0;
+    });
+    for (const [index, element] of reactions.entries()) {
+      element.style.maxInlineSize =
+        widths[index] === undefined || widths[index] <= 0 ? "" : `${String(widths[index])}px`;
     }
   };
 
-  const lineObserver = new ResizeObserver(() => fitReactionWidths());
+  let layoutFrame = 0;
+  const layout = (): void => {
+    markMultilineBubbles(list);
+    fitReactionWidths();
+  };
+  const scheduleLayout = (): void => {
+    if (layoutFrame !== 0) return;
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = 0;
+      layout();
+    });
+  };
 
   const render = (): void => {
     const state = store.snapshot();
@@ -276,7 +287,11 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       activeRoomId = state.roomId;
       pendingRoomId = state.roomId;
       pinned = true;
-      readOnLoad = state.roomId !== null;
+      readOnLoad =
+        state.roomId !== null &&
+        room !== null &&
+        room.readReceipt !== room.latestEventId &&
+        room.unread + room.highlight > 0;
       stopSelection();
     }
     if (state.messages.length === 0 && state.roomId !== null) pendingRoomId = state.roomId;
@@ -285,27 +300,21 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       .parseFromString(timeline(state, c, locale).value, "text/html")
       .querySelector<HTMLElement>(`[data-region="${REGION.timeline}"]`);
     if (next !== null) reconcile(next);
-    markMultilineBubbles(list);
-    lineObserver.disconnect();
-    for (const reactions of list.querySelectorAll<HTMLElement>(".reactions")) {
-      const line = reactions.closest<HTMLElement>(".message-inner")?.querySelector<HTMLElement>(".message-line");
-      if (line !== null && line !== undefined) lineObserver.observe(line);
-    }
-    fitReactionWidths();
+    layout();
 
     if (pendingRoomId !== null && state.messages.length > 0 && state.messages[0]?.roomId === pendingRoomId) {
       const roomId = pendingRoomId;
       pendingRoomId = null;
       const receipt = room?.readReceipt ?? null;
-      const receiptIndex = receipt === null ? -1 : state.messages.findIndex((message) => message.id === receipt);
-      const first =
-        receiptIndex >= 0 && receiptIndex + 1 < state.messages.length
-          ? state.messages[receiptIndex + 1]
+      const receiptIndex = receipt === null ? -1 : state.messages.findIndex((message) => message.eventId === receipt);
+      const target =
+        receiptIndex >= 0
+          ? state.messages[receiptIndex]
           : (room?.unread ?? 0) > 0
-            ? state.messages.at(-(room?.unread ?? 0))
+            ? state.messages[state.messages.length - (room?.unread ?? 0)]
             : undefined;
-      if (first !== undefined) {
-        const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(first.id)}"]`);
+      if (target !== undefined) {
+        const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(target.id)}"]`);
         if (row !== null) {
           wrap.scrollTop = Math.max(0, row.offsetTop - wrap.clientHeight / 2 + row.offsetHeight / 2);
         }
@@ -424,16 +433,14 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       }
     },
   });
-  const resizeObserver = new ResizeObserver(() => {
-    markMultilineBubbles(list);
-  });
+  const resizeObserver = new ResizeObserver(scheduleLayout);
   resizeObserver.observe(wrap);
   const unsubscribe = store.watch(["phase", "roomId", "rooms", "messages", "hasOlder", "olderLoading"], render);
   render();
   return () => {
     unsubscribe();
     resizeObserver.disconnect();
-    lineObserver.disconnect();
+    if (layoutFrame !== 0) cancelAnimationFrame(layoutFrame);
     wrap.removeEventListener("scroll", onScroll);
     region.removeEventListener("click", onClick);
     region.removeEventListener("click", onSelectionClick, true);

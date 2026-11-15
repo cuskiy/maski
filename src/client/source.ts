@@ -1,6 +1,7 @@
 import type {
   Connection,
   DeviceSession,
+  GuestAccess,
   Invite,
   Member,
   MessageRow,
@@ -8,9 +9,21 @@ import type {
   NotificationPrefs,
   Phase,
   RecoveryKey,
+  RoomHistoryVisibility,
+  RoomJoinRule,
   RoomSummary,
   SessionSummary,
 } from "../core/types.ts";
+
+export interface RoomStatePatch {
+  readonly name?: string;
+  readonly topic?: string;
+  readonly aliases?: readonly string[];
+  readonly joinRule?: RoomJoinRule;
+  readonly guestAccess?: GuestAccess;
+  readonly historyVisibility?: RoomHistoryVisibility;
+  readonly directoryPublished?: boolean;
+}
 
 export interface SourceEvents {
   readonly session: SessionSummary | null;
@@ -21,15 +34,16 @@ export interface SourceEvents {
     readonly hasOlder: boolean;
     readonly older: boolean;
   };
+  readonly members: { readonly roomId: string; readonly members: readonly Member[] };
   readonly phase: Phase;
   readonly devices: readonly DeviceSession[];
   readonly invites: readonly Invite[];
-  readonly members: readonly Member[];
   readonly connection: Connection;
   readonly recoveryKey: RecoveryKey | null;
   readonly outbox: {
     readonly roomId: string;
     readonly messageId: string;
+    readonly eventId: string | null;
     readonly status: MessageStatus;
     readonly error: string | null;
   };
@@ -42,23 +56,28 @@ export interface ChatSource {
   open(roomId: string): void;
   older(roomId: string): void;
   send(roomId: string, row: MessageRow): void;
-  markRead(roomId: string): void;
-  react(roomId: string, messageId: string, key: string): void;
-  edit(roomId: string, messageId: string, body: string, html: string | null): void;
-  redact(roomId: string, messageId: string): void;
+  markRead(roomId: string, eventId: string | null): void;
+  react(roomId: string, eventId: string, key: string): void;
+  edit(roomId: string, eventId: string, body: string, html: string | null): void;
+  redact(roomId: string, eventId: string): void;
   search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[];
   forward(roomId: string, rows: readonly MessageRow[]): void;
   typing(roomId: string): void;
+  members(roomId: string): void;
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
+  inviteUser(roomId: string, userId: string): void;
+  addRoom(room: RoomSummary): void;
+  leaveRoom(roomId: string): void;
+  setRoomState(roomId: string, patch: RoomStatePatch): void;
+  setRoomTag(roomId: string, tag: "m.favourite" | "m.lowpriority", enabled: boolean): void;
   setNotification(roomId: string, mode: RoomSummary["notification"]): void;
-  revealRecoveryKey(): void;
+  resetRecoveryKey(): void;
   resetIdentity(): void;
-  verifyDevice(deviceId: string): void;
   signOutDevice(deviceId: string): void;
   signOutOthers(): void;
-  signOutAll(): void;
   answerInvite(roomId: string, accept: boolean): void;
   saveNotifications(prefs: NotificationPrefs): void;
-  logout(): void;
+  logout(): Promise<void>;
   on<K extends SourceEvent>(event: K, listener: (payload: SourceEvents[K]) => void): () => void;
   dispose(): void;
 }

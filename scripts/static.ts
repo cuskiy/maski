@@ -2,8 +2,18 @@ import { createServer, type ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { contentSecurityPolicy } from "../src/lib/csp.ts";
 
 const root = fileURLToPath(new URL("../dist", import.meta.url));
+const reviewRoot = fileURLToPath(new URL("../review-dist", import.meta.url));
+const securityHeaders = {
+  "content-security-policy": contentSecurityPolicy,
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "cross-origin-opener-policy": "same-origin",
+  "cross-origin-resource-policy": "same-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+} as const;
 const types: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -60,7 +70,8 @@ export function serve(options: ServeOptions = {}): Served {
       return;
     }
 
-    let file = join(root, normalize(pathname).replace(/^(\.\.(\/|\\|$))+/u, ""));
+    const base = pathname.startsWith("/review/") ? reviewRoot : root;
+    let file = join(base, normalize(pathname).replace(/^(\.\.(\/|\\|$))+/u, ""));
     try {
       if ((await stat(file)).isDirectory()) file = join(file, "index.html");
       let body = await readFile(file);
@@ -69,6 +80,7 @@ export function serve(options: ServeOptions = {}): Served {
       }
       const asset = file.startsWith(join(root, "assets") + sep);
       response.writeHead(200, {
+        ...securityHeaders,
         "content-type": types[extname(file)] ?? "application/octet-stream",
         "cache-control": asset ? "public, max-age=31536000, immutable" : "no-store",
       });

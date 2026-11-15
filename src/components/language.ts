@@ -6,7 +6,7 @@ import { LOCALE_DEFS, localeRoot } from "../core/locales.ts";
 import { SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
 
-const LOCALE_KEYS: Readonly<Record<LocaleId, CatalogKey>> = {
+export const LOCALE_KEYS: Readonly<Record<LocaleId, CatalogKey>> = {
   en: "language.en",
   "zh-CN": "language.zh",
 };

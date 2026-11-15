@@ -41,7 +41,7 @@ const CONFIG = {
   ALLOWED_TAGS,
   ALLOWED_ATTR,
   ALLOW_DATA_ATTR: false,
-  FORBID_ATTR: ["id", "style", "class"],
+  FORBID_ATTR: ["id", "style", "class", "src", "srcset", "poster"],
   FORBID_TAGS: [
     "style",
     "script",
@@ -56,6 +56,11 @@ const CONFIG = {
     "base",
     "svg",
     "math",
+    "img",
+    "video",
+    "audio",
+    "source",
+    "track",
   ],
   KEEP_CONTENT: true,
 };
@@ -63,3 +68,10 @@ const CONFIG = {
 export function sanitizeMessageHtml(value: string): string {
   return DOMPurify.sanitize(value, CONFIG);
 }
+
+DOMPurify.addHook?.("afterSanitizeAttributes", (node) => {
+  if (node.nodeName !== "A") return;
+  if (!("setAttribute" in node)) return;
+  node.setAttribute("rel", "noopener noreferrer");
+  node.setAttribute("referrerpolicy", "no-referrer");
+});

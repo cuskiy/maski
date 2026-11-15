@@ -3,6 +3,7 @@ import type { Catalog } from "../../lib/catalog.ts";
 import { REGION } from "../../core/regions.ts";
 import type { RoomSummary } from "../../core/types.ts";
 import type { Actions } from "../actions.ts";
+import { safeAvatarUrl } from "../../lib/safeUrl.ts";
 import type { Store } from "../store.ts";
 
 interface HeaderInput {
@@ -15,12 +16,13 @@ function setAvatar(target: HTMLElement, room: RoomSummary | null): void {
   target.replaceChildren();
   target.hidden = room === null;
   if (room === null) return;
-  if (room.avatar === null) {
+  const source = safeAvatarUrl(room.avatar);
+  if (source === null) {
     target.textContent = room.name.slice(0, 1);
     return;
   }
   const image = document.createElement("img");
-  image.src = room.avatar;
+  image.src = source;
   image.alt = "";
   target.append(image);
 }

@@ -18,7 +18,18 @@
     "unicorn/prefer-add-event-listener": "off",
     "promise/no-callback-in-promise": "off",
     "eslint/no-new": "off",
-    "typescript/no-unnecessary-type-assertion": "off"
+    "typescript/no-unnecessary-type-assertion": "error",
+    "eslint/no-console": "error",
+    "eslint/no-debugger": "error",
+    "eslint/eqeqeq": "error",
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "error",
+    "eslint/no-param-reassign": "error",
+    "eslint/no-else-return": "error",
+    "eslint/no-lonely-if": "error",
+    "eslint/object-shorthand": "error",
+    "eslint/prefer-template": "error",
+    "eslint/no-useless-rename": "error"
   },
   "ignorePatterns": ["dist", "backup", "blog", "git", "node_modules"]
 }

@@ -32,3 +32,13 @@ export const LICENSES: readonly LicenseEntry[] = [
     url: "https://github.com/markedjs/marked",
   },
 ];
+
+/** Generated assets derived from third-party artwork. */
+export const ATTRIBUTIONS: readonly LicenseEntry[] = [
+  {
+    name: "Lucide (chat watermark)",
+    version: "1.73.0",
+    license: "ISC",
+    url: "https://lucide.dev",
+  },
+];

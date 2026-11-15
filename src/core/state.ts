@@ -10,6 +10,7 @@ export function emptyChatState(): ChatState {
     rooms: [],
     roomId: null,
     messages: [],
+    windowLoading: false,
     hasOlder: false,
     olderLoading: false,
     typing: [],
@@ -21,7 +22,7 @@ export function emptyChatState(): ChatState {
       favorites: { open: false },
       rooms: { open: true },
       direct: { open: false },
-      channels: { open: false },
+      spaces: { open: false },
     },
     notifications: {
       badge: true,
@@ -33,6 +34,7 @@ export function emptyChatState(): ChatState {
     devices: [],
     invites: [],
     members: [],
+    membersLoading: false,
     recoveryKey: null,
     backupReady: false,
   };

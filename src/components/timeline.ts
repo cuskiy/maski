@@ -2,6 +2,7 @@ import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
 import { formatBytes } from "../lib/bytes.ts";
+import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
 import type { ChatState, Media, MessageRow } from "../core/types.ts";
 import { messagePositions, type MessagePosition } from "../core/messageGroups.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
@@ -70,8 +71,14 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
       </div>
     </div>
     <div class="timeline-wrap">
-      <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state">
-        ${stateNote(state, c)}${ready && state.messages.length === 0 ? html`<p class="note">${t(c, "chat.empty")}</p>` : html``}
+      <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state" ${state.windowLoading ? html` aria-busy="true"` : html``}>
+        ${stateNote(state, c)}${
+          ready && state.windowLoading && state.messages.length === 0
+            ? html`<p class="note" role="status">${t(c, "chat.loading")}</p>`
+            : ready && state.messages.length === 0
+              ? html`<p class="note">${t(c, "chat.empty")}</p>`
+              : html``
+        }
       </div>
       ${
         ready
@@ -82,7 +89,9 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
               ${state.olderLoading ? html` disabled` : html``}
               ${state.hasOlder || state.olderLoading ? html`` : html` hidden`}
             >
-              ${icons.older}<span>${t(c, state.olderLoading ? "chat.loadingOlder" : "chat.loadOlder")}</span>
+              ${
+                state.olderLoading ? html`<span class="router-spinner" aria-hidden="true"></span>` : icons.older
+              }<span>${t(c, state.olderLoading ? "chat.loadingOlder" : "chat.loadOlder")}</span>
             </button>`
           : html``
       }
@@ -141,6 +150,7 @@ function messageRow(
         </button>
       </h3>`
     : html``;
+  const senderAvatar = safeAvatarUrl(message.senderAvatar);
   const avatar = groupEnd
     ? html`<button
         class="message-avatar"
@@ -152,9 +162,9 @@ function messageRow(
         aria-label="${t(c, "surface.profile")}: ${message.senderName}"
       >
         ${
-          message.senderAvatar === null
+          senderAvatar === null
             ? message.senderName.slice(0, 1)
-            : html`<img src="${message.senderAvatar}" alt="" />`
+            : html`<img src="${senderAvatar}" alt="" loading="lazy" decoding="async" />`
         }
       </button>`
     : html`<span class="message-avatar" aria-hidden="true"></span>`;
@@ -176,14 +186,17 @@ function messageRow(
         ></span>`
     : html``;
   const meta = messageMeta(message, c, time, status);
-  const content =
-    message.encryption.state === "undecryptable"
-      ? html`<div class="bubble is-unreadable">${sender}<p class="message-unreadable">
-          ${t(c, UNREADABLE_KEYS[message.encryption.reason])}
+  const content = message.redacted
+    ? html`<div class="bubble is-redacted">${sender}<p class="message-redacted">
+          ${t(c, "message.redacted")}
         </p>${meta}</div>`
+    : message.encryption.state === "undecryptable"
+      ? html`<div class="bubble is-unreadable">${sender}<p class="message-unreadable">
+            ${t(c, UNREADABLE_KEYS[message.encryption.reason])}
+          </p>${meta}</div>`
       : message.media === null
         ? html`<div class="bubble">${sender}${messageText(message)}${meta}</div>`
-        : html`<div class="message-media-wrap">${mediaView(message, c, meta)}</div>`;
+        : html`<div class="message-media-wrap">${sender}${mediaView(message, c, meta)}</div>`;
   return html`${dayStart ? html`<li class="row-day"><time datetime="${new Date(message.ts).toISOString()}">${day.format(message.ts)}</time></li>` : html``}
     <li class="message${message.own ? " is-own" : ""}${groupStart ? " is-group-start" : ""}${groupEnd ? " is-group-end" : ""}${system ? " is-system" : ""}${message.encryption.state === "undecryptable" ? " is-unreadable" : ""}" id="${message.id}" data-id="${message.id}">
       <article
@@ -194,7 +207,6 @@ function messageRow(
         ${avatar}
         <div class="message-body">
           ${reply}
-          ${showSender && message.media !== null && message.encryption.state !== "undecryptable" ? sender : html``}
           <div class="message-line">${content}</div>
         </div>
         ${reactionsView(message, c)}
@@ -213,8 +225,9 @@ function messageRow(
 }
 
 function messageText(message: MessageRow): Html {
+  const kind = message.kind === "notice" ? " is-notice" : message.kind === "emote" ? " is-emote" : "";
   // Fixture HTML is controlled; the client sanitizes incoming HTML before it reaches this field.
-  return html`<div class="message-text${message.html === null ? "" : " is-rich"}" dir="auto">${message.html === null ? message.body : raw(message.html)}</div>`;
+  return html`<div class="message-text${message.html === null ? "" : " is-rich"}${kind}" dir="auto">${message.html === null ? message.body : raw(message.html)}</div>`;
 }
 
 function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat, status: Html): Html {
@@ -230,7 +243,8 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   const media = message.media;
   if (media === null) return html``;
   const label = t(c, MEDIA_LABELS[media.kind]);
-  if (media.kind === "sticker" && media.url === null) {
+  const mediaUrl = safeMediaUrl(media.url, media.kind);
+  if (media.kind === "sticker" && mediaUrl === null) {
     return html`<figure class="message-media is-sticker">
       <div class="media-frame">
         <span class="sticker" role="img" aria-label="${media.name}">${message.body}</span>
@@ -247,13 +261,22 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           type="button"
           data-media-open="${media.name}"
           data-media-kind="video"
-          ${media.url === null ? html`` : html` data-media-url="${media.url}"`}
+          ${mediaUrl === null ? html`` : html` data-media-url="${mediaUrl}"`}
           commandfor="${SURFACE.viewer}"
           command="show-modal"
           aria-label="${label}: ${title}"
-        >
-          <span class="video-play" aria-hidden="true">${icons.play}</span>
-        </button>
+        >${
+          mediaUrl === null
+            ? html``
+            : html`<video
+            class="media-element video-element"
+            src="${mediaUrl}"
+            data-media-video
+            preload="metadata"
+            muted
+            playsinline
+          ></video><span class="video-play" aria-hidden="true">${icons.play}</span>`
+        }</button>
         <div class="media-footer">${meta}</div>
       </div>
     </figure>`;
@@ -267,7 +290,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
         >
       </span>`;
     const content =
-      media.url === null
+      mediaUrl === null
         ? html`<button
             class="attachment media-open"
             type="button"
@@ -278,33 +301,39 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           >
             ${details}${meta}
           </button>`
-        : html`<a class="attachment" href="${media.url}" download>${details}${meta}</a>`;
+        : html`<a class="attachment" href="${mediaUrl}" download rel="noreferrer">${details}${meta}</a>`;
     return content;
   }
   const content =
-    media.url === null
+    mediaUrl === null
       ? html`<button
           class="media-placeholder media-open"
           type="button"
           data-media-open="${media.name}"
           data-media-kind="${media.kind}"
-          ${media.url === null ? html`` : html` data-media-url="${media.url}"`}
           commandfor="${SURFACE.viewer}"
           command="show-modal"
           aria-label="${label}: ${media.name}"
-        >
-          ${MEDIA_ICONS[media.kind]}
-        </button>`
+        ></button>`
       : html`<button
           class="media-open"
           type="button"
           data-media-open="${media.name}"
           data-media-kind="${media.kind}"
-          data-media-url="${media.url}"
+          data-media-url="${mediaUrl}"
           commandfor="${SURFACE.viewer}"
           command="show-modal"
         >
-          <img class="media-element" src="${media.url}" alt="${media.name}" loading="lazy" decoding="async" />
+          <img
+            class="media-element"
+            src="${mediaUrl}"
+            alt="${media.name}"
+            data-media-image
+            width="${String(media.width ?? 16)}"
+            height="${String(media.height ?? 9)}"
+            loading="lazy"
+            decoding="async"
+          />
         </button>`;
   return html`<figure class="message-media is-${media.kind}">
     <div class="media-frame">

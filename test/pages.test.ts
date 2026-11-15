@@ -10,6 +10,7 @@ import { registerView } from "../src/pages/register.ts";
 import { routerView } from "../src/pages/router.ts";
 import { serverView } from "../src/pages/server.ts";
 import { REGION, SURFACE } from "../src/core/regions.ts";
+import { metaContentSecurityPolicy } from "../src/lib/csp.ts";
 import { renderPages } from "../scripts/pages.ts";
 import type { PageContext } from "../src/pages/kit.ts";
 
@@ -19,6 +20,10 @@ const assets = {
   guard: "/assets/guard-x.js",
   prepaint: "/assets/prepaint-x.js",
   client: "/assets/client-x.js",
+  reviewClient: "/assets/review-client-x.js",
+  imageWorker: "/assets/image-worker-x.js",
+  matrixWorker: "/assets/matrix-worker-x.js",
+  cryptoWasm: "/assets/matrix-sdk-crypto-x.wasm",
 };
 
 const views = {
@@ -63,6 +68,18 @@ for (const page of pages()) {
     assert.match(page.html, /<noscript>/u);
   });
 }
+
+void test("pages keep media local and do not leak referrers", () => {
+  const html = pages()[0]?.html ?? "";
+  const csp = /http-equiv="Content-Security-Policy" content="([^"]+)"/u.exec(html)?.[1] ?? "";
+  assert.equal(csp, metaContentSecurityPolicy);
+  assert.match(csp, /img-src 'self' data: blob:/u);
+  assert.match(csp, /media-src 'self' data: blob:/u);
+  assert.match(csp, /connect-src 'self' https: wss:/u);
+  assert.doesNotMatch(csp, /connect-src[^;]*http:/u);
+  assert.match(html, /<meta name="referrer" content="no-referrer"/u);
+  assert.match(html, /<meta http-equiv="x-dns-prefetch-control" content="off"/u);
+});
 
 void test("chat carries every region and surface", () => {
   const chat = pages().find((page) => page.name === "en/chat")?.html ?? "";

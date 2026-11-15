@@ -2,14 +2,19 @@ import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
 import { formatBytes } from "../lib/bytes.ts";
-import type { ChatState, Member, MemberMembership, MessageRow, RoomJoinRule, RoomSummary } from "../core/types.ts";
+import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
+import type { ChatState, Member, Membership, MessageRow, RoomJoinRule, RoomSummary } from "../core/types.ts";
+import { hasTag, isSpaceRoom } from "../core/rooms.ts";
+import { memberPermissions, roomPermissions } from "../core/permissions.ts";
+import { uniqueLinks } from "../core/links.ts";
 import { config } from "../config.ts";
+import { emptyChatState } from "../core/state.ts";
 import { SURFACE } from "../core/regions.ts";
 import { field, selectField, submit } from "../components/form.ts";
 import { surfaceHead } from "./surface.ts";
 import { stickerPickerBody } from "../components/stickers.ts";
 import { icons } from "../components/icons.ts";
-import { LICENSES } from "../core/licenses.ts";
+import { ATTRIBUTIONS, LICENSES } from "../core/licenses.ts";
 import { sasDialog } from "./sas.ts";
 
 function textForm(c: Catalog, id: string, labelKey: CatalogKey, submitKey: CatalogKey): Html {
@@ -35,9 +40,7 @@ const MENU_ICONS = {
   "messageMenu.edit": icons.compose,
   "messageMenu.delete": icons.trash,
   "messageMenu.cancel": icons.close,
-  "messageMenu.retry": icons.send,
   "messageMenu.copy": icons.copy,
-  "messageMenu.copyLink": icons.link,
   "messageMenu.source": icons.code,
   "messageMenu.select": icons.check,
   "selection.copy": icons.copy,
@@ -54,6 +57,7 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
   const files = messages.filter(
     (message) => message.media !== null && (message.media.kind === "file" || message.media.kind === "audio"),
   );
+  const links = uniqueLinks(messages);
   return html`<div class="media-files" data-media-files>
     <div class="media-files-tabs" role="tablist" aria-label="${t(c, "surface.mediaFiles")}">
       <button
@@ -79,6 +83,18 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
       >
         ${t(c, "surface.mediaFiles.files")}
       </button>
+      <button
+        class="media-files-tab"
+        type="button"
+        role="tab"
+        id="media-files-tab-links"
+        aria-controls="media-files-panel-links"
+        aria-selected="false"
+        tabindex="-1"
+        data-media-files-tab="links"
+      >
+        ${t(c, "surface.mediaFiles.links")}
+      </button>
     </div>
     <div
       class="media-files-panel"
@@ -91,31 +107,42 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
         media.length === 0
           ? html`<p class="note">${t(c, "surface.mediaFiles.empty")}</p>`
           : html`<div class="media-files-grid">
-              ${media.map(
-                (message) =>
-                  html`<button
-                    class="media-file is-${message.media?.kind ?? "image"}"
+              ${media.map((message) => {
+                const kind = message.media?.kind ?? "image";
+                const url = safeMediaUrl(message.media?.url ?? null, kind);
+                return html`<button
+                    class="media-file is-${kind}"
                     type="button"
                     data-media-open="${message.media?.name ?? ""}"
-                    data-media-kind="${message.media?.kind ?? "image"}"
-                    ${
-                      message.media?.url === null || message.media?.url === undefined
-                        ? html``
-                        : html` data-media-url="${message.media.url}"`
-                    }
+                    data-media-kind="${kind}"
+                    ${url === null ? html`` : html` data-media-url="${url}"`}
                     commandfor="${SURFACE.viewer}"
                     command="show-modal"
                     aria-label="${message.media?.name ?? ""}"
                   >
                     ${
-                      message.media?.kind === "image" && message.media.url !== null
-                        ? html`<img src="${message.media.url}" alt="" loading="lazy" decoding="async" />`
-                        : message.media?.kind === "video"
-                          ? icons.video
-                          : icons.image
+                      kind === "image" && url !== null
+                        ? html`<img
+                            class="media-file-image"
+                            src="${url}"
+                            alt=""
+                            data-media-image
+                            loading="lazy"
+                            decoding="async"
+                          />`
+                        : kind === "video" && url !== null
+                          ? html`<video
+                              class="media-file-video"
+                              src="${url}"
+                              data-media-video
+                              preload="metadata"
+                              muted
+                            ></video>
+                            <span class="media-file-play" data-media-play aria-hidden="true">${icons.play}</span>`
+                          : html``
                     }
-                  </button>`,
-              )}
+                  </button>`;
+              })}
             </div>`
       }
     </div>
@@ -151,6 +178,34 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
             </div>`
       }
     </div>
+    <div
+      class="media-files-panel"
+      id="media-files-panel-links"
+      role="tabpanel"
+      aria-labelledby="media-files-tab-links"
+      data-media-files-panel="links"
+      hidden
+    >
+      ${
+        links.length === 0
+          ? html`<p class="note">${t(c, "surface.mediaFiles.empty")}</p>`
+          : html`<div class="media-files-list">
+              ${links.map(
+                (link) => html`<a
+                  class="media-file-row media-link-row"
+                  href="${link.url}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  dir="ltr"
+                >
+                  ${icons.link}
+                  <span class="media-file-name" dir="auto">${link.url}</span>
+                  <span class="media-file-meta">${link.host}</span>
+                </a>`,
+              )}
+            </div>`
+      }
+    </div>
   </div>`;
 }
 
@@ -163,29 +218,39 @@ const JOIN_RULE_KEYS: Readonly<Record<RoomJoinRule, CatalogKey>> = {
   invite: "roomSettings.joinRuleInvite",
   knock: "roomSettings.joinRuleKnock",
   restricted: "roomSettings.joinRuleRestricted",
+  knock_restricted: "roomSettings.joinRuleKnockRestricted",
 };
 
-const MEMBERSHIP_LABELS: Readonly<Record<MemberMembership, CatalogKey>> = {
+const MEMBERSHIP_LABELS: Readonly<Record<"join" | "invite" | "ban", CatalogKey>> = {
   join: "roomSettings.members",
   invite: "roomSettings.invited",
   ban: "roomSettings.banned",
 };
 
 function memberMenu(c: Catalog, room: RoomSummary, member: Member, state: ChatState, index: number): Html {
-  const self = member.userId === state.session?.userId;
-  if (!room.capabilities.manage || self) return html``;
-  const actions =
-    member.membership === "ban"
-      ? [{ action: "unban", key: "roomSettings.unban" as const, icon: icons.check }]
-      : member.membership === "invite"
-        ? [
-            { action: "kick", key: "roomSettings.revokeInvite" as const, icon: icons.exit },
-            { action: "ban", key: "roomSettings.ban" as const, icon: icons.close },
-          ]
-        : [
-            { action: "kick", key: "roomSettings.kick" as const, icon: icons.exit },
-            { action: "ban", key: "roomSettings.ban" as const, icon: icons.close },
-          ];
+  const permissions = memberPermissions(room, member, state.session?.userId ?? null);
+  const actions: Array<{
+    readonly action: "kick" | "ban" | "unban";
+    readonly key: "roomSettings.kick" | "roomSettings.revokeInvite" | "roomSettings.ban" | "roomSettings.unban";
+    readonly icon: Html;
+  }> = [];
+  if (member.membership === "ban") {
+    if (permissions.unban) {
+      actions.push({ action: "unban", key: "roomSettings.unban", icon: icons.check });
+    }
+  } else {
+    if (permissions.kick) {
+      actions.push({
+        action: "kick",
+        key: member.membership === "invite" ? "roomSettings.revokeInvite" : "roomSettings.kick",
+        icon: icons.exit,
+      });
+    }
+    if (permissions.ban) {
+      actions.push({ action: "ban", key: "roomSettings.ban", icon: icons.close });
+    }
+  }
+  if (actions.length === 0) return html``;
   const id = `member-menu-${String(index)}`;
   return html`<button
       class="member-more"
@@ -215,8 +280,8 @@ function memberMenu(c: Catalog, room: RoomSummary, member: Member, state: ChatSt
 }
 
 function memberPanel(c: Catalog, state: ChatState, room: RoomSummary): Html {
-  const groups: ReadonlyArray<MemberMembership> = ["join", "invite", "ban"];
-  const panel = (membership: MemberMembership): Html => {
+  const groups = ["join", "invite", "ban"] as const;
+  const panel = (membership: Membership): Html => {
     const members = state.members.filter((member) => member.membership === membership);
     const empty =
       membership === "invite"
@@ -224,11 +289,12 @@ function memberPanel(c: Catalog, state: ChatState, room: RoomSummary): Html {
         : membership === "ban"
           ? "roomSettings.noBanned"
           : "roomSettings.membersEmpty";
-    return html`<div class="member-panel" id="member-panel-${membership}" role="tabpanel" aria-labelledby="member-tab-${membership}" data-member-panel="${membership}" ${membership === "join" ? html`` : html`hidden`}>
-      ${
-        members.length === 0
-          ? html`<p class="note">${t(c, empty)}</p>`
-          : html`<ul class="member-list" role="list">
+    const body =
+      members.length === 0
+        ? state.membersLoading && membership === "join"
+          ? html`<p class="note">${t(c, "roomSettings.membersLoading")}</p>`
+          : html`<p class="note">${t(c, empty)}</p>`
+        : html`<ul class="member-list" role="list">
               ${members.map((member) => {
                 const memberIndex = state.members.findIndex((entry) => entry.userId === member.userId);
                 return html`<li class="member-row">
@@ -246,8 +312,9 @@ function memberPanel(c: Catalog, state: ChatState, room: RoomSummary): Html {
                   ${memberMenu(c, room, member, state, memberIndex)}
                 </li>`;
               })}
-            </ul>`
-      }
+            </ul>`;
+    return html`<div class="member-panel" id="member-panel-${membership}" role="tabpanel" aria-labelledby="member-tab-${membership}" data-member-panel="${membership}" ${membership === "join" ? html`` : html`hidden`}>
+      ${body}
     </div>`;
   };
   return html`<div class="member-tabs" role="tablist" aria-label="${t(c, "roomSettings.members")}">
@@ -271,10 +338,10 @@ function memberPanel(c: Catalog, state: ChatState, room: RoomSummary): Html {
 }
 
 function searchBody(c: Catalog, state: ChatState): Html {
-  const current = state.rooms.find((room) => room.roomId === state.roomId && !room.isSpace) ?? null;
+  const current = state.rooms.find((room) => room.roomId === state.roomId && !isSpaceRoom(room)) ?? null;
   const scope = current?.roomId ?? "all";
   const label = current?.name ?? t(c, "surface.search.all");
-  const rooms = state.rooms.filter((room) => !room.isSpace && room.membership === "join");
+  const rooms = state.rooms.filter((room) => !isSpaceRoom(room) && room.membership === "join");
   return html`<form class="search-form" method="post" data-surface="search" data-search-scope="${scope}">
     <div class="search-head">
       <label class="visually-hidden" for="search-field">${t(c, "surface.search.label")}</label>
@@ -338,6 +405,20 @@ function searchBody(c: Catalog, state: ChatState): Html {
   </form>`;
 }
 
+export function bootSurfaceBody(c: Catalog, id: string): Html {
+  switch (id) {
+    case SURFACE.roomMenu:
+    case SURFACE.messageMenu:
+    case SURFACE.selectionMenu:
+    case SURFACE.sendMenu:
+    case SURFACE.confirm:
+    case SURFACE.licenses:
+      return surfaceBodyFor(c, id, emptyChatState());
+    default:
+      return html`<p class="note">${t(c, "noscript.surface")}</p>`;
+  }
+}
+
 export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
   switch (id) {
     case SURFACE.search:
@@ -385,9 +466,7 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
           "messageMenu.react",
           "messageMenu.edit",
           "messageMenu.delete",
-          "messageMenu.retry",
           "messageMenu.copy",
-          "messageMenu.copyLink",
           "messageMenu.source",
           "messageMenu.select",
           "messageMenu.cancel",
@@ -414,28 +493,36 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
           (entry) => html`<li class="license-row">
             <span class="license-name">${entry.name}</span>
             <span class="license-meta">${entry.version}</span>
-            <a class="link license-link" href="${entry.url}">${entry.license}</a>
+            <a class="link license-link" href="${entry.url}" target="_blank" rel="noopener noreferrer">${entry.license}</a>
+          </li>`,
+        )}
+        ${ATTRIBUTIONS.map(
+          (entry) => html`<li class="license-row">
+            <span class="license-name">${entry.name}</span>
+            <span class="license-meta">${entry.version}</span>
+            <a class="link license-link" href="${entry.url}" target="_blank" rel="noopener noreferrer">${entry.license}</a>
           </li>`,
         )}
       </ul>`;
     case SURFACE.messageSource:
       return html`<p class="note">${t(c, "surface.messageSource")}</p>`;
     case SURFACE.forward: {
-      const rooms = state.rooms.filter((room) => !room.isSpace);
+      const rooms = state.rooms.filter((room) => !isSpaceRoom(room));
       if (rooms.length === 0) return html`<p class="note">${t(c, "surface.forward.empty")}</p>`;
       return html`<p class="note">${t(c, "surface.forward.hint")}</p>
         <div class="forward-list">
-          ${rooms.map(
-            (room) => html`<button class="forward-room" type="button" data-forward-room="${room.roomId}">
+          ${rooms.map((room) => {
+            const avatar = safeAvatarUrl(room.avatar);
+            return html`<button class="forward-room" type="button" data-forward-room="${room.roomId}">
               <span class="forward-avatar" aria-hidden="true"
-                >${room.avatar === null ? room.name.slice(0, 1) : html`<img src="${room.avatar}" alt="" />`}</span
+                >${avatar === null ? room.name.slice(0, 1) : html`<img src="${avatar}" alt="" loading="lazy" decoding="async" />`}</span
               >
               <span class="forward-copy">
                 <span class="forward-name" dir="auto">${room.name}</span>
                 <span class="forward-topic" dir="auto">${room.topic}</span>
               </span>
-            </button>`,
-          )}
+            </button>`;
+          })}
         </div>`;
     }
     case SURFACE.attach:
@@ -508,8 +595,8 @@ function settingsBody(c: Catalog, state: ChatState): Html {
           : html`<div class="profile-line">
                 <span class="profile-avatar" aria-hidden="true">${session.displayName.slice(0, 1)}</span>
                 <div class="profile-text">
-                  <strong>${session.displayName}</strong>
-                  <p class="note">${session.userId}</p>
+                  <strong dir="auto">${session.displayName}</strong>
+                  <p class="note" dir="ltr">${session.userId}</p>
                 </div>
               </div>
               ${
@@ -524,6 +611,11 @@ function settingsBody(c: Catalog, state: ChatState): Html {
     <section class="surface-section" id="settings-notifications">
       <h3>${t(c, "settings.notifications")}</h3>
       <label class="setting-row"
+        ><span>${t(c, "settings.desktop")}</span><input type="checkbox" data-setting="desktop"
+          ${checked(state.notifications.desktop)} /></label
+      >
+      <p class="form-error" data-notification-error role="alert" hidden></p>
+      <label class="setting-row"
         ><span>${t(c, "settings.badge")}</span><input type="checkbox" data-setting="badge"
           ${checked(state.notifications.badge)} /></label
       >
@@ -532,25 +624,21 @@ function settingsBody(c: Catalog, state: ChatState): Html {
           ${checked(state.notifications.titleTotal)} /></label
       >
       <label class="setting-row"
-        ><span>${t(c, "settings.desktop")}</span><input type="checkbox" data-setting="desktop"
-          ${checked(state.notifications.desktop)} /></label
+        ><span>${t(c, "settings.preview")}</span><input type="checkbox" data-setting="preview"
+          ${checked(state.notifications.preview)} /></label
       >
-      <p class="form-error" data-notification-error role="alert" hidden></p>
       ${selectField({
         id: "notification-level",
         label: t(c, "settings.notificationLevel"),
         value: state.notifications.level,
         dataName: "notification-level",
+        layout: "inline",
         options: [
           { value: "all", label: t(c, "roomSettings.allMessages") },
           { value: "mentions", label: t(c, "roomSettings.mentions") },
           { value: "mute", label: t(c, "roomSettings.mute") },
         ],
       })}
-      <label class="setting-row"
-        ><span>${t(c, "settings.preview")}</span><input type="checkbox" data-setting="preview"
-          ${checked(state.notifications.preview)} /></label
-      >
     </section>
     <section class="surface-section" id="settings-security">
       <h3>${t(c, "settings.security")}</h3>
@@ -562,31 +650,11 @@ function settingsBody(c: Catalog, state: ChatState): Html {
       </div>
       ${
         capabilities?.recoveryKey === true
-          ? html`<button class="button-quiet" type="button" data-settings-action="recovery">
+          ? html`<button class="button-quiet" type="button" data-settings-action="reset-key">
             ${t(c, "settings.recoveryShow")}
           </button>`
           : html``
       }
-      <div class="key-reveal" data-region="recovery-key" hidden>
-        <p class="note">${t(c, "settings.recoveryOnce")}</p>
-        <p class="key-out" data-field="recovery-value"></p>
-        <div class="key-actions">
-          ${
-            capabilities?.recoveryKey === true
-              ? html`<button class="button-quiet" type="button" data-settings-action="copy-recovery">
-                ${t(c, "settings.copy")}
-              </button>`
-              : html``
-          }
-          ${
-            capabilities?.recoveryKey === true
-              ? html`<button class="button-quiet" type="button" data-settings-action="download-recovery">
-                ${t(c, "settings.download")}
-              </button>`
-              : html``
-          }
-        </div>
-      </div>
       <div class="setting-row">
         <span>${t(c, "settings.backup")}</span>
         <span class="setting-value" data-setting-value="backup"
@@ -613,19 +681,21 @@ function settingsBody(c: Catalog, state: ChatState): Html {
         closedby="any"
         aria-labelledby="reset-key-dialog-title"
       >
-        ${surfaceHead(c, "reset-key-dialog", "settings.recovery")}
+        ${surfaceHead(c, "reset-key-dialog", "settings.newRecoveryKey")}
         <div class="surface-body">
           <p class="note">${t(c, "settings.recoveryOnce")}</p>
-          <p class="key-out" data-reset-key-value hidden></p>
+          <p class="key-out" data-reset-key-value></p>
           <div class="key-actions">
-            <button class="button-quiet" type="button" data-settings-action="toggle-reset-key">
-              ${t(c, "settings.showKey")}
-            </button>
             <button class="button-quiet" type="button" data-settings-action="copy-reset-key">
               ${t(c, "settings.copy")}
             </button>
             <button class="button-quiet" type="button" data-settings-action="download-reset-key">
               ${t(c, "settings.download")}
+            </button>
+          </div>
+          <div class="confirm-actions">
+            <button class="button-primary" type="button" commandfor="reset-key-dialog" command="close">
+              ${t(c, "settings.done")}
             </button>
           </div>
         </div>
@@ -640,16 +710,21 @@ function settingsBody(c: Catalog, state: ChatState): Html {
                 (device) => html`<li class="device-row" data-device-id="${device.id}">
                   <div class="device-main">
                     <strong dir="auto"
-                      >${device.name}${device.current ? html` · ${t(c, "settings.deviceCurrent")}` : html``}</strong
+                      >${device.name}${device.current ? html` · ${t(c, "settings.deviceCurrent")}` : html``}${
+                        device.verified
+                          ? html`<span
+                              class="device-verified"
+                              role="img"
+                              aria-label="${t(c, "settings.verified")}"
+                              title="${t(c, "settings.verified")}"
+                              >${icons.check}</span
+                            >`
+                          : html``
+                      }</strong
                     >
                     <span class="note">${t(c, "settings.lastSeen")}: ${device.lastSeen}</span>
                   </div>
                   <div class="device-actions">
-                    ${
-                      device.verified
-                        ? html`<span class="device-verified">${t(c, "settings.verified")}</span>`
-                        : html`<span class="session-state">${t(c, "settings.notVerified")}</span>`
-                    }
                     ${
                       device.capabilities.verify && !device.verified
                         ? html`<button
@@ -686,21 +761,14 @@ function settingsBody(c: Catalog, state: ChatState): Html {
           </button>`
           : html``
       }
-      ${
-        capabilities?.signOut === true
-          ? html`<button class="button-quiet is-danger" type="button" data-settings-action="sign-out-all">
-            ${t(c, "settings.signOutAll")}
-          </button>`
-          : html``
-      }
     </section>
     <section class="surface-section" id="settings-low-priority">
       <h3>${t(c, "settings.lowPriority")}</h3>
       ${
-        state.rooms.filter((room) => room.lowPriority === true && !room.isSpace).length === 0
+        state.rooms.filter((room) => hasTag(room, "m.lowpriority") && !isSpaceRoom(room)).length === 0
           ? html`<p class="note">${t(c, "settings.lowPriorityEmpty")}</p>`
           : html`${state.rooms
-              .filter((room) => room.lowPriority === true && !room.isSpace)
+              .filter((room) => hasTag(room, "m.lowpriority") && !isSpaceRoom(room))
               .map(
                 (room) => html`<button
                   class="profile-line"
@@ -708,21 +776,26 @@ function settingsBody(c: Catalog, state: ChatState): Html {
                   data-low-priority-room="${room.roomId}"
                 >
                   <span class="profile-avatar" aria-hidden="true">${room.name.slice(0, 1)}</span>
-                  <span class="profile-text"><strong>${room.name}</strong><span class="note">${room.topic}</span></span>
+                  <span class="profile-text"
+                    ><strong dir="auto">${room.name}</strong
+                    ><span class="note" dir="auto">${room.topic}</span></span
+                  >
                 </button>`,
               )}`
       }
     </section>
     <section class="surface-section" id="settings-about">
       <h3>${t(c, "settings.about")}</h3>
-      <p class="setting-line"><span>${t(c, "settings.version")}</span><span>${config.app.version}</span></p>
-      <p class="setting-line"><a class="link" href="${config.app.source}">${t(c, "settings.source")}</a></p>
+      <div class="setting-stack">
+        <span class="field-label">${t(c, "settings.version")}</span>
+        <span>${config.app.version}</span>
+      </div>
+      <p class="setting-line"><a class="link" href="${config.app.source}" target="_blank" rel="noopener noreferrer">${t(c, "settings.source")}</a></p>
       <p class="setting-line">
         <button class="button-quiet" type="button" commandfor="${SURFACE.licenses}" command="show-modal">
           ${t(c, "settings.thirdParty")}
         </button>
       </p>
-      <p class="note">${t(c, "settings.privacy")}</p>
     </section>
     </div>
   </div>`;
@@ -731,23 +804,14 @@ function settingsBody(c: Catalog, state: ChatState): Html {
 function roomSettingsBody(c: Catalog, state: ChatState): Html {
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
   if (room === null) return html``;
-  const capabilities = room.capabilities;
-  const canManage = capabilities.manage;
+  const permissions = roomPermissions(room, state.session?.userId ?? null);
   const encryption =
     room.encryption === "encrypted"
       ? "roomSettings.encrypted"
       : room.encryption === "none"
         ? "roomSettings.encryptionNone"
         : "roomSettings.encryptionUnknown";
-  const historyKey =
-    room.historyVisibility === "world_readable"
-      ? "roomSettings.historyWorld"
-      : room.historyVisibility === "shared"
-        ? "roomSettings.historyShared"
-        : room.historyVisibility === "invited"
-          ? "roomSettings.historyInvited"
-          : "roomSettings.historyJoined";
-  const matrixRoomId = room.roomId.includes(":") ? room.roomId : `!${room.roomId}:matrix.org`;
+  const roomAvatar = safeAvatarUrl(room.avatar);
   return html`<div class="settings-layout">
     ${settingsTabs(c, "surface.roomSettings", [
       { href: "#room-settings-overview", key: "roomSettings.overview" },
@@ -759,27 +823,35 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
       <h3>${t(c, "roomSettings.overview")}</h3>
       <div class="room-settings-profile">
         ${
-          room.avatar === null
+          roomAvatar === null
             ? html`<span class="room-settings-avatar" aria-hidden="true">${room.name.slice(0, 1)}</span>`
-            : html`<img class="room-settings-avatar" src="${room.avatar}" alt="" />`
+            : html`<img
+                class="room-settings-avatar"
+                src="${roomAvatar}"
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />`
         }
-        ${
-          canManage
-            ? html`<label class="field room-settings-field">
-                <span class="field-label">${t(c, "roomSettings.name")}</span>
-                <input class="input" type="text" dir="auto" maxlength="255" value="${room.name}" data-room-name-input />
-              </label>`
-            : html`<p class="setting-line"><span>${t(c, "roomSettings.name")}</span><span dir="auto">${room.name}</span></p>`
-        }
+        <div class="room-settings-profile-fields">
+          ${
+            permissions.name
+              ? html`<label class="field">
+                  <span class="field-label">${t(c, "roomSettings.name")}</span>
+                  <input class="input" type="text" dir="auto" maxlength="255" value="${room.name}" data-room-name-input />
+                </label>`
+              : html`<p class="setting-line"><span>${t(c, "roomSettings.name")}</span><span dir="auto">${room.name}</span></p>`
+          }
+          ${
+            permissions.topic
+              ? html`<label class="field">
+                  <span class="field-label">${t(c, "roomSettings.topic")}</span>
+                  <textarea class="input room-topic-input" rows="2" maxlength="1024" dir="auto" data-room-topic-input>${room.topic}</textarea>
+                </label>`
+              : html`<p class="setting-line"><span>${t(c, "roomSettings.topic")}</span><span dir="auto">${room.topic}</span></p>`
+          }
+        </div>
       </div>
-      ${
-        canManage
-          ? html`<label class="field">
-              <span class="field-label">${t(c, "roomSettings.topic")}</span>
-              <textarea class="input room-topic-input" rows="2" maxlength="1024" dir="auto" data-room-topic-input>${room.topic}</textarea>
-            </label>`
-          : html`<p class="setting-line"><span>${t(c, "roomSettings.topic")}</span><span dir="auto">${room.topic}</span></p>`
-      }
       <h4>${t(c, "roomSettings.publicAddresses")}</h4>
       ${
         room.aliases.length === 0
@@ -787,16 +859,16 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
           : html`<ul class="address-list" role="list">
               ${room.aliases.map(
                 (address) => html`<li class="address-row">
-                  <code dir="ltr">${address}</code>
+                  <code class="address-value" dir="ltr">${address}</code>
                   ${
-                    canManage
+                    permissions.aliases
                       ? html`<button
-                          class="button-quiet"
+                          class="button-quiet button-icon"
                           type="button"
                           data-room-address-remove="${address}"
                           aria-label="${t(c, "composer.remove")}"
                         >
-                          ${icons.close}
+                          ${icons.trash}
                         </button>`
                       : html``
                   }
@@ -805,7 +877,7 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
             </ul>`
       }
       ${
-        canManage
+        permissions.aliases
           ? html`<form class="address-form" method="post" data-surface="room-address">
               <input
                 class="input"
@@ -827,23 +899,61 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
         <span class="setting-value" data-room-encryption>${t(c, encryption)}</span>
       </div>
       <h4>${t(c, "roomSettings.access")}</h4>
-      <p class="setting-line">
-        <span>${t(c, "roomSettings.joinRule")}</span><span>${t(c, JOIN_RULE_KEYS[room.joinRule])}</span>
-      </p>
-      <p class="setting-line">
-        <span>${t(c, "roomSettings.guestAccess")}</span><span>${t(c, room.guestAccess ? "roomSettings.yes" : "roomSettings.no")}</span>
-      </p>
-      <p class="setting-line">
-        <span>${t(c, "roomSettings.directory")}</span><span>${t(c, room.directoryPublished ? "roomSettings.yes" : "roomSettings.no")}</span>
-      </p>
-      <p class="setting-line">
-        <span>${t(c, "roomSettings.historyVisibility")}</span><span>${t(c, historyKey)}</span>
-      </p>
+      ${selectField({
+        id: "room-join-rule",
+        label: t(c, "roomSettings.joinRule"),
+        value: room.joinRule,
+        dataName: "room-join",
+        layout: "inline",
+        disabled: !permissions.access,
+        options: (["public", "invite", "knock", "restricted", "knock_restricted"] as const).map((value) => ({
+          value,
+          label: t(c, JOIN_RULE_KEYS[value]),
+        })),
+      })}
+      ${selectField({
+        id: "room-guest-access",
+        label: t(c, "roomSettings.guestAccess"),
+        value: room.guestAccess,
+        dataName: "room-guest",
+        layout: "inline",
+        disabled: !permissions.access,
+        options: [
+          { value: "forbidden", label: t(c, "roomSettings.no") },
+          { value: "can_join", label: t(c, "roomSettings.yes") },
+        ],
+      })}
+      ${selectField({
+        id: "room-directory",
+        label: t(c, "roomSettings.directory"),
+        value: String(room.directoryPublished),
+        dataName: "room-directory",
+        layout: "inline",
+        disabled: !permissions.directory,
+        options: [
+          { value: "false", label: t(c, "roomSettings.no") },
+          { value: "true", label: t(c, "roomSettings.yes") },
+        ],
+      })}
+      ${selectField({
+        id: "room-history",
+        label: t(c, "roomSettings.historyVisibility"),
+        value: room.historyVisibility,
+        dataName: "room-history",
+        layout: "inline",
+        disabled: !permissions.access,
+        options: [
+          { value: "world_readable", label: t(c, "roomSettings.historyWorld") },
+          { value: "shared", label: t(c, "roomSettings.historyShared") },
+          { value: "invited", label: t(c, "roomSettings.historyInvited") },
+          { value: "joined", label: t(c, "roomSettings.historyJoined") },
+        ],
+      })}
       <h4>${t(c, "roomSettings.advanced")}</h4>
       <p class="setting-line">
         <span>${t(c, "roomSettings.roomId")}</span>
-        <span class="room-id-line"><code dir="ltr">${matrixRoomId}</code>
-          <button class="button-quiet" type="button" data-room-copy-id aria-label="${t(c, "roomSettings.copyId")}">
+        <span class="room-id-line"><code dir="ltr">${room.roomId}</code>
+          <button class="button-quiet button-icon" type="button" data-room-copy-id aria-label="${t(c, "roomSettings.copyId")}">
             ${icons.copy}
           </button>
         </span>
@@ -854,11 +964,11 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
       <p class="setting-line">
         <span>${t(c, "roomSettings.federation")}</span><span>${t(c, room.federated ? "roomSettings.federated" : "roomSettings.notFederated")}</span>
       </p>
-      ${!capabilities.manage ? html`<p class="note">${t(c, "roomSettings.readOnly")}</p>` : html``}
+      ${!permissions.manage ? html`<p class="note">${t(c, "roomSettings.readOnly")}</p>` : html``}
       ${
-        capabilities.leave
+        permissions.leave
           ? html`<button class="button-quiet is-danger" type="button" data-action="roomSettings.leave">
-            ${t(c, room.isSpace ? "spaceMenu.leave" : "roomSettings.leave")}
+            ${t(c, isSpaceRoom(room) ? "spaceMenu.leave" : "roomSettings.leave")}
           </button>`
           : html``
       }
@@ -871,10 +981,11 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
       <h3>${t(c, "roomSettings.notifications")}</h3>
       ${selectField({
         id: "room-notifications",
-        label: t(c, "roomSettings.notifications"),
+        label: t(c, "settings.notificationLevel"),
         value: room.notification,
         dataName: "room-notifications",
-        disabled: !capabilities.notifications,
+        layout: "inline",
+        disabled: !permissions.notifications,
         options: [
           { value: "default", label: t(c, "roomSettings.followGlobal") },
           { value: "all", label: t(c, "roomSettings.allMessages") },
@@ -890,8 +1001,9 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
 function inviteBody(c: Catalog, state: ChatState): Html {
   if (state.invites.length === 0) return html`<p class="note">${t(c, "surface.invite.empty")}</p>`;
   return html`<ul class="invite-list" role="list">
-    ${state.invites.map(
-      (invite) => html`<li class="invite-row">
+    ${state.invites.map((invite) => {
+      const avatar = safeAvatarUrl(invite.avatar);
+      return html`<li class="invite-row">
         <button
           class="invite-person"
           type="button"
@@ -901,10 +1013,16 @@ function inviteBody(c: Catalog, state: ChatState): Html {
           data-profile-id="${invite.inviterId}"
           aria-label="${t(c, "surface.invite.from", { name: invite.inviter })}: ${invite.name}"
         >
-          <span class="profile-avatar" aria-hidden="true">${invite.inviter.slice(0, 1)}</span>
+          <span class="profile-avatar" aria-hidden="true"
+            >${
+              avatar === null
+                ? invite.inviter.slice(0, 1)
+                : html`<img src="${avatar}" alt="" loading="lazy" decoding="async" />`
+            }</span
+          >
           <span class="invite-person-text">
             <strong dir="auto">${invite.inviter}</strong>
-            <span class="note" dir="auto">${invite.inviterId}</span>
+            <span class="invite-id" dir="ltr">${invite.inviterId}</span>
             <span class="invite-context" dir="auto"
               >${invite.name}${invite.topic === "" ? "" : ` · ${invite.topic}`}</span
             >
@@ -936,8 +1054,8 @@ function inviteBody(c: Catalog, state: ChatState): Html {
               : html``
           }
         </div>
-      </li>`,
-    )}
+      </li>`;
+    })}
   </ul>`;
 }
 

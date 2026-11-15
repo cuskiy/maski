@@ -1,5 +1,7 @@
 import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
+import { LOCALE_KEYS } from "../components/language.ts";
+import type { LocaleId } from "../core/locales.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
 export function routerView({ locale, localePath, alternates }: PageContext): PageView {
@@ -15,7 +17,7 @@ export function routerView({ locale, localePath, alternates }: PageContext): Pag
         <nav class="auth-links" aria-label="${t(c, "router.languages")}">
           ${alternates.map(
             (alternate) =>
-              html`<a class="link" href="${alternate.href}">${t(c, alternate.lang === "zh-CN" ? "language.zh" : "language.en")}</a>`,
+              html`<a class="link" href="${alternate.href}">${t(c, LOCALE_KEYS[alternate.lang as LocaleId] ?? "language.en")}</a>`,
           )}
         </nav>
         <a class="link" href="${localePath}server/">${t(c, "router.open")}</a>

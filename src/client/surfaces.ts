@@ -1,16 +1,19 @@
+// One delegated lifecycle for every overlay keeps focus, popover placement and teardown consistent.
 import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
-import type { ChatState, MessageRow, NotificationPrefs, RoomSummary } from "../core/types.ts";
+import type { ChatState, Media, MessageRow, NotificationPrefs, RoomSummary } from "../core/types.ts";
+import { safeMediaUrl } from "../lib/safeUrl.ts";
 import { SURFACE } from "../core/regions.ts";
-import { surfaceBodyFor } from "../components/surfaces.ts";
-import { mediaFilesBody } from "../components/surfaces.ts";
+import { isSpaceRoom } from "../core/rooms.ts";
+import { messagePermissions, roomPermissions } from "../core/permissions.ts";
+import { surfaceBodyFor, mediaFilesBody } from "../components/surfaces.ts";
+import { replaceHtml } from "./dom.ts";
 import { emojiPickerBody } from "../components/emoji.ts";
 import { icons } from "../components/icons.ts";
 import { CHAT_SURFACES } from "../core/surfaces.ts";
 import type { Actions } from "./actions.ts";
 import type { Store } from "./store.ts";
-import { setPosition, clearPosition } from "./position.ts";
 import type { Composer } from "./regions/composer.ts";
 
 interface SurfacesInput {
@@ -56,10 +59,11 @@ function hide(id: string): void {
 function closeContextMenus(): void {
   for (const id of CONTEXT_SURFACES) {
     const menu = document.getElementById(id);
-    if (menu instanceof HTMLElement && menu.matches(":popover-open")) menu.hidePopover();
+    if (!(menu instanceof HTMLElement)) continue;
+    menu.style.removeProperty("--context-x");
+    menu.style.removeProperty("--context-y");
+    if (menu.matches(":popover-open")) menu.hidePopover();
   }
-  clearPosition("--context-x");
-  clearPosition("--context-y");
 }
 
 function insideContextSurface(target: Element): boolean {
@@ -69,6 +73,12 @@ function insideContextSurface(target: Element): boolean {
   return false;
 }
 
+function closeSelectLists(except?: HTMLElement): void {
+  for (const list of document.querySelectorAll<HTMLElement>("[data-select-list]")) {
+    if (list !== except && list.matches(":popover-open")) list.hidePopover();
+  }
+}
+
 function closeRestoredPopovers(): void {
   closePopovers();
 }
@@ -76,14 +86,22 @@ function closeRestoredPopovers(): void {
 function showViewer(name: string, kind: string, url: string | null, c: Catalog): void {
   const body = document.querySelector<HTMLElement>(`[data-region="${SURFACE.viewer}-body"]`);
   if (body === null) return;
-  if (url !== null && kind === "video") {
-    body.innerHTML = html`<div class="viewer-preview is-video">
-      <video class="viewer-media" controls autoplay playsinline preload="metadata" src="${url}" aria-label="${name}"></video>
-    </div>`.value;
+  const mediaKind: Media["kind"] =
+    kind === "video" || kind === "audio" || kind === "sticker" || kind === "file" ? kind : "image";
+  const safeUrl = url === null ? null : safeMediaUrl(url, mediaKind);
+  if (safeUrl !== null && kind === "video") {
+    replaceHtml(
+      body,
+      html`<div class="viewer-preview is-video">
+      <video class="viewer-media" controls autoplay playsinline preload="metadata" src="${safeUrl}" aria-label="${name}"></video>
+    </div>`,
+    );
     return;
   }
-  if (url !== null && kind === "image") {
-    body.innerHTML = html`<div class="viewer-preview is-image">
+  if (safeUrl !== null && kind === "image") {
+    replaceHtml(
+      body,
+      html`<div class="viewer-preview is-image">
       <button
         class="viewer-zoom"
         type="button"
@@ -91,33 +109,43 @@ function showViewer(name: string, kind: string, url: string | null, c: Catalog):
         aria-label="${t(c, "surface.viewer.zoom")}"
         aria-pressed="false"
       >
-        <img class="viewer-media" src="${url}" alt="${name}" />
+        <img class="viewer-media" src="${safeUrl}" alt="${name}" />
       </button>
-    </div>`.value;
+    </div>`,
+    );
     return;
   }
-  if (url !== null && kind === "audio") {
-    body.innerHTML = html`<div class="viewer-preview is-audio">
-      <audio class="viewer-media" controls src="${url}" aria-label="${name}"></audio>
-      <span class="viewer-name">${name}</span>
-    </div>`.value;
+  if (safeUrl !== null && kind === "audio") {
+    replaceHtml(
+      body,
+      html`<div class="viewer-preview is-audio">
+      <audio class="viewer-media" controls src="${safeUrl}" aria-label="${name}"></audio>
+      <span class="viewer-name" dir="auto">${name}</span>
+    </div>`,
+    );
     return;
   }
   if (kind === "video" || kind === "image") {
     const icon = kind === "video" ? icons.video : icons.image;
-    body.innerHTML = html`<div class="viewer-preview is-missing">
+    replaceHtml(
+      body,
+      html`<div class="viewer-preview is-missing">
       <div class="viewer-missing">
         ${icon}
-        <span class="viewer-name">${name}</span>
+        <span class="viewer-name" dir="auto">${name}</span>
         <p class="note">${t(c, "surface.viewer.missingMedia")}</p>
       </div>
-    </div>`.value;
+    </div>`,
+    );
     return;
   }
   const icon = kind === "audio" ? icons.audio : kind === "sticker" ? icons.sticker : icons.file;
-  body.innerHTML = html`<div class="viewer-preview is-missing">
-    <div class="viewer-missing">${icon}<span class="viewer-name">${name}</span></div>
-  </div>`.value;
+  replaceHtml(
+    body,
+    html`<div class="viewer-preview is-missing">
+    <div class="viewer-missing">${icon}<span class="viewer-name" dir="auto">${name}</span></div>
+  </div>`,
+  );
 }
 
 function copy(text: string): void {
@@ -157,6 +185,16 @@ function onKeyDown(event: KeyboardEvent): void {
       if (scope instanceof HTMLElement && !scope.matches(":popover-open")) {
         event.preventDefault();
         scope.showPopover();
+      }
+    }
+    const selectTrigger = target.closest<HTMLElement>("[data-select-trigger]");
+    if (selectTrigger !== null && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      const listId = selectTrigger.getAttribute("aria-controls");
+      const list = listId === null ? null : document.getElementById(listId);
+      if (list instanceof HTMLElement && !list.matches(":popover-open")) {
+        event.preventDefault();
+        closeSelectLists(list);
+        list.showPopover();
       }
     }
   }
@@ -255,7 +293,7 @@ function showMessageSource(target: MessageRow): void {
     reactions: target.reactions,
     encryption: target.encryption,
   };
-  body.innerHTML = html`<pre class="message-source" dir="ltr">${JSON.stringify(source, null, 2)}</pre>`.value;
+  replaceHtml(body, html`<pre class="message-source" dir="ltr">${JSON.stringify(source, null, 2)}</pre>`);
   body.scrollTop = 0;
   dialog.showModal();
 }
@@ -407,7 +445,6 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   let confirmFocus: HTMLElement | null = null;
   let desktopRequest = 0;
   let pendingResetKey = false;
-  let pendingVerifyDeviceId: string | null = null;
 
   const state = (): ChatState => store.snapshot();
   const popoverReturnFocus = new Map<string, HTMLElement>();
@@ -420,11 +457,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (body === null) return;
     if (id === SURFACE.emoji || id === SURFACE.reaction) {
       const reaction = id === SURFACE.reaction;
-      body.innerHTML = emojiPickerBody(
-        c,
-        reaction ? state().recentReactions : state().recentEmoji,
-        reaction ? "reaction" : "emoji",
-      ).value;
+      replaceHtml(
+        body,
+        emojiPickerBody(c, reaction ? state().recentReactions : state().recentEmoji, reaction ? "reaction" : "emoji"),
+      );
       body.scrollTop = 0;
       for (const jump of body.querySelectorAll<HTMLElement>("[data-emoji-jump]")) {
         jump.addEventListener("click", (event) => {
@@ -447,7 +483,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const scrollTop = body.scrollTop;
     const current = state();
     const target = overrideRoomId === undefined ? current : { ...current, roomId: overrideRoomId };
-    body.innerHTML = surfaceBodyFor(c, id, target).value;
+    replaceHtml(body, surfaceBodyFor(c, id, target));
     body.scrollTop = scrollTop;
     if (memberGroup !== null) {
       const tab = body.querySelector<HTMLElement>(`[data-member-group="${CSS.escape(memberGroup)}"]`);
@@ -470,19 +506,20 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       const target = room(activeRoomId ?? state().roomId);
       const allowed = new Set<string>();
       if (target !== null) {
-        if (target.isSpace) {
+        const permissions = roomPermissions(target, state().session?.userId ?? null);
+        if (isSpaceRoom(target)) {
           allowed.add("spaceMenu.settings");
-          if (target.capabilities.leave) allowed.add("spaceMenu.leave");
+          if (permissions.leave) allowed.add("spaceMenu.leave");
         } else if (context) {
-          if (target.capabilities.markRead) allowed.add("roomMenu.markRead");
-          if (target.capabilities.mute) allowed.add("roomMenu.mute");
-          if (target.capabilities.favorite) allowed.add("roomMenu.favorite");
-          if (target.capabilities.leave) allowed.add("roomMenu.leave");
+          if (permissions.markRead) allowed.add("roomMenu.markRead");
+          if (permissions.mute) allowed.add("roomMenu.mute");
+          if (permissions.favorite) allowed.add("roomMenu.favorite");
+          if (permissions.leave) allowed.add("roomMenu.leave");
         } else {
           allowed.add("roomMenu.settings");
           allowed.add("roomMenu.mediaFiles");
           allowed.add("roomMenu.search");
-          if (target.capabilities.invite) allowed.add("roomMenu.invite");
+          if (permissions.invite) allowed.add("roomMenu.invite");
         }
       }
       for (const item of body.querySelectorAll<HTMLElement>("[data-menu-key]")) {
@@ -492,19 +529,17 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     }
     if (id === SURFACE.messageMenu) {
       const target = message(activeMessageId);
-      const capabilities = target?.capabilities;
       const allowed = new Set<string>();
-      if (capabilities !== undefined) {
-        if (capabilities.reply) allowed.add("messageMenu.reply");
-        if (capabilities.react) allowed.add("messageMenu.react");
-        if (capabilities.edit) allowed.add("messageMenu.edit");
-        if (capabilities.redact) allowed.add("messageMenu.delete");
-        if (capabilities.copy) allowed.add("messageMenu.copy");
-        if (capabilities.copyLink) allowed.add("messageMenu.copyLink");
+      if (target !== null) {
+        const permissions = messagePermissions(target, room(target.roomId), state().session?.userId ?? null);
+        if (permissions.reply) allowed.add("messageMenu.reply");
+        if (permissions.react) allowed.add("messageMenu.react");
+        if (permissions.edit) allowed.add("messageMenu.edit");
+        if (permissions.redact) allowed.add("messageMenu.delete");
+        if (permissions.copy) allowed.add("messageMenu.copy");
         allowed.add("messageMenu.source");
         allowed.add("messageMenu.select");
-        if (target !== null && target.own && target.status !== "sent") allowed.add("messageMenu.cancel");
-        if (target !== null && target.own && target.status === "failed") allowed.add("messageMenu.retry");
+        if (target.own && target.status !== "sent") allowed.add("messageMenu.cancel");
       }
       for (const item of body.querySelectorAll<HTMLElement>("[data-action]")) {
         item.hidden = !allowed.has(item.dataset["action"] ?? "");
@@ -531,16 +566,16 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     lastMenuWasKeyboard = keyboard;
     if (id === SURFACE.messageMenu) sourceElement.classList.add("is-active");
     menu.classList.add("is-context", "is-measuring");
-    setPosition("--context-x", `${String(point.x)}px`);
-    setPosition("--context-y", `${String(point.y)}px`);
+    menu.style.setProperty("--context-x", `${String(point.x)}px`);
+    menu.style.setProperty("--context-y", `${String(point.y)}px`);
     menu.showPopover();
     const rect = menu.getBoundingClientRect();
     let x = centered ? point.x - rect.width / 2 : point.x + 4;
     let y = centered ? point.y - rect.height / 2 : point.y + 4;
     x = Math.max(4, Math.min(x, window.innerWidth - rect.width - 4));
     y = Math.max(4, Math.min(y, window.innerHeight - rect.height - 4));
-    setPosition("--context-x", `${String(x)}px`);
-    setPosition("--context-y", `${String(y)}px`);
+    menu.style.setProperty("--context-x", `${String(x)}px`);
+    menu.style.setProperty("--context-y", `${String(y)}px`);
     menu.classList.remove("is-measuring");
     if (keyboard) {
       const first = menu.querySelector<HTMLElement>(
@@ -555,27 +590,17 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     profileTarget = { name, userId };
     const body = document.querySelector<HTMLElement>(`[data-region="${SURFACE.profile}-body"]`);
     if (body === null) return;
-    body.innerHTML = html`<div class="profile-card">
+    replaceHtml(
+      body,
+      html`<div class="profile-card">
       <span class="profile-avatar" aria-hidden="true">${name.slice(0, 1)}</span>
-      <h3 class="profile-name">${name}</h3>
-      <p class="note">${userId}</p>
+      <h3 class="profile-name" dir="auto">${name}</h3>
+      <p class="note" dir="ltr">${userId}</p>
       <button class="button-primary" type="button" data-profile-action="message">
         ${t(c, "surface.profile.message")}
       </button>
-    </div>`.value;
-  }
-
-  function updateRecovery(): void {
-    const key = state().recoveryKey;
-    const region = document.querySelector<HTMLElement>('[data-region="recovery-key"]');
-    if (region === null) return;
-    if (key === null) {
-      region.hidden = true;
-      return;
-    }
-    region.hidden = false;
-    const value = region.querySelector<HTMLElement>('[data-field="recovery-value"]');
-    if (value !== null) value.textContent = key.value;
+    </div>`,
+    );
   }
 
   function downloadRecovery(): void {
@@ -610,48 +635,69 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (status !== null) status.textContent = t(c, "settings.recoveryShown");
     if (output === null || output === undefined || !(dialog instanceof HTMLDialogElement)) return;
     output.textContent = value;
-    output.hidden = true;
-    const toggle = dialog.querySelector<HTMLElement>('[data-settings-action="toggle-reset-key"]');
-    if (toggle !== null) toggle.textContent = t(c, "settings.showKey");
     dialog.showModal();
+  }
+
+  function applySelectValue(name: string, value: string): void {
+    const roomId = activeRoomId ?? state().roomId;
+    if (name === "notification-level") {
+      actions.setNotificationLevel(value as NotificationPrefs["level"]);
+    } else if (name === "room-notifications" && roomId !== null) {
+      actions.setNotification(roomId, value as RoomSummary["notification"]);
+    } else if (name === "room-join" && roomId !== null) {
+      actions.updateRoomAccess(roomId, { joinRule: value as RoomSummary["joinRule"] });
+    } else if (name === "room-guest" && roomId !== null) {
+      actions.updateRoomAccess(roomId, { guestAccess: value === "can_join" ? "can_join" : "forbidden" });
+    } else if (name === "room-history" && roomId !== null) {
+      actions.updateRoomAccess(roomId, { historyVisibility: value as RoomSummary["historyVisibility"] });
+    } else if (name === "room-directory" && roomId !== null) {
+      actions.updateRoomAccess(roomId, { directoryPublished: value === "true" });
+    }
+  }
+
+  function chooseSelect(option: HTMLElement): void {
+    const field = option.closest<HTMLElement>("[data-select-field]");
+    const list = option.closest<HTMLElement>("[data-select-list]");
+    const trigger = field?.querySelector<HTMLElement>("[data-select-trigger]");
+    const value = option.dataset["optionValue"];
+    if (
+      field === null ||
+      field === undefined ||
+      list === null ||
+      trigger === null ||
+      trigger === undefined ||
+      value === undefined
+    ) {
+      return;
+    }
+    const label = option.textContent?.trim() ?? "";
+    for (const entry of list.querySelectorAll<HTMLElement>("[data-select-option]")) {
+      entry.setAttribute("aria-selected", entry === option ? "true" : "false");
+    }
+    const shown = trigger.querySelector<HTMLElement>("[data-select-value]");
+    if (shown !== null) shown.textContent = label;
+    list.hidePopover();
+    applySelectValue(field.dataset["selectName"] ?? "", value);
+    trigger.focus({ preventScroll: true });
   }
 
   function handleSettingsAction(action: string, element: HTMLElement): void {
     if (action === "logout") {
-      askConfirm(t(c, "settings.logoutConfirm"), () => actions.logout());
-      return;
-    } else if (action === "recovery") {
-      actions.revealRecoveryKey();
-      queueMicrotask(() => {
-        updateRecovery();
-        const value = document.querySelector<HTMLElement>('[data-setting-value="recovery"]');
-        if (value !== null) value.textContent = t(c, "settings.recoveryShown");
+      askConfirm(t(c, "settings.logoutConfirm"), () => {
+        void actions.logout();
       });
       return;
-    } else if (action === "copy-recovery") {
-      const key = state().recoveryKey;
-      if (key !== null) copy(key.value);
-      return;
-    } else if (action === "download-recovery") {
-      downloadRecovery();
+    } else if (action === "reset-key") {
+      askConfirm(t(c, "settings.resetKeyConfirm"), () => {
+        pendingResetKey = true;
+        actions.resetRecoveryKey();
+      });
       return;
     } else if (action === "reset-identity") {
       askConfirm(t(c, "settings.resetIdentityConfirm"), () => {
         pendingResetKey = true;
         actions.resetIdentity();
-        const key = state().recoveryKey;
-        if (key !== null && pendingResetKey) {
-          pendingResetKey = false;
-          showResetKeyDialog(key.value);
-        }
       });
-      return;
-    } else if (action === "toggle-reset-key") {
-      const dialog = document.getElementById("reset-key-dialog");
-      const value = dialog?.querySelector<HTMLElement>("[data-reset-key-value]");
-      if (value === null || value === undefined) return;
-      value.hidden = !value.hidden;
-      element.textContent = t(c, value.hidden ? "settings.showKey" : "settings.hideKey");
       return;
     } else if (action === "copy-reset-key") {
       const key = state().recoveryKey;
@@ -660,16 +706,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     } else if (action === "download-reset-key") {
       downloadRecovery();
       return;
-    } else if (action === "sign-out-all") {
-      askConfirm(t(c, "settings.signOutAllConfirm"), () => actions.signOutAll());
-      return;
     } else if (action === "verify-device") {
-      const deviceId = element.dataset["deviceId"] ?? "";
       const dialog = document.getElementById("device-sas-dialog");
-      if (deviceId !== "" && dialog instanceof HTMLDialogElement) {
-        pendingVerifyDeviceId = deviceId;
-        dialog.showModal();
-      }
+      if (dialog instanceof HTMLDialogElement) dialog.showModal();
       return;
     } else if (action === "sign-out-device") {
       const deviceId = element.dataset["deviceId"] ?? "";
@@ -697,7 +736,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const dialog = document.getElementById(SURFACE.mediaFiles);
     const body = dialog?.querySelector<HTMLElement>(`[data-region="${SURFACE.mediaFiles}-body"]`);
     if (!(dialog instanceof HTMLDialogElement) || body === null || body === undefined) return;
-    body.innerHTML = mediaFilesBody(c, actions.search([roomId], "")).value;
+    replaceHtml(body, mediaFilesBody(c, actions.search([roomId], "")));
     body.scrollTop = 0;
     dialog.showModal();
   }
@@ -781,12 +820,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       }
       return;
     } else if (action === "messageMenu.edit") composer.showEditing(target);
-    else if (action === "messageMenu.delete") actions.redact(target.id);
-    else if (action === "messageMenu.cancel") actions.discardMessage(target.id);
-    else if (action === "messageMenu.retry") actions.retryMessage(target.id);
+    else if (action === "messageMenu.delete") {
+      askConfirm(t(c, "messageMenu.deleteConfirm"), () => actions.redact(target.id));
+    } else if (action === "messageMenu.cancel") actions.discardMessage(target.id);
     else if (action === "messageMenu.copy") copy(target.body);
-    else if (action === "messageMenu.copyLink")
-      copy(`${location.origin}${location.pathname}#${target.roomId}/${target.id}`);
     else if (action === "messageMenu.source") showMessageSource(target);
     else if (action === "messageMenu.select") {
       document.dispatchEvent(new CustomEvent("maski:select-message", { detail: { id: target.id } }));
@@ -807,13 +844,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const roomIds =
       scope === "all"
         ? state()
-            .rooms.filter((entry) => !entry.isSpace && entry.membership === "join")
+            .rooms.filter((entry) => !isSpaceRoom(entry) && entry.membership === "join")
             .map((entry) => entry.roomId)
         : [scope];
     const matches = actions.search(roomIds, query, mediaKindsForQuery(c, query)).slice(0, 40);
-    results.innerHTML =
+    replaceHtml(
+      results,
       matches.length === 0
-        ? `<p class="note">${t(c, "surface.search.empty")}</p>`
+        ? html`<p class="note">${t(c, "surface.search.empty")}</p>`
         : html`${matches.map(
             (entry) => html`<button
               class="search-result"
@@ -824,7 +862,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
               <span class="search-result-room" dir="auto">${room(entry.roomId)?.name ?? ""}</span
               ><bdi dir="auto">${searchResultText(c, entry)}</bdi>
             </button>`,
-          )}`.value;
+          )}`,
+    );
   }
 
   function onInput(event: Event): void {
@@ -846,6 +885,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (suppressClick) {
       suppressClick = false;
       event.preventDefault();
+      return;
+    }
+
+    const selectOption = target.closest<HTMLElement>("[data-select-option]");
+    if (selectOption !== null) {
+      event.preventDefault();
+      chooseSelect(selectOption);
       return;
     }
 
@@ -964,6 +1010,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         hide(SURFACE.roomMenu);
         setDialogTitle(id, "roomMenu.settings");
         refreshBody(id, activeRoomId ?? state().roomId);
+      } else if (id !== null && id !== SURFACE.confirm && id !== SURFACE.viewer && id !== SURFACE.profile) {
+        refreshBody(id);
       }
     }
 
@@ -1038,22 +1086,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const profileAction = target.closest<HTMLElement>("[data-profile-action]");
     if (profileAction !== null && profileTarget !== null) {
       hide(SURFACE.profile);
-      const existing = state().rooms.find((entry) => entry.isDirect && entry.name === profileTarget?.name);
+      const existing = state().rooms.find((entry) => entry.directUserId === profileTarget?.userId);
       if (existing !== undefined) actions.selectRoom(existing.roomId);
-      else actions.addRoom(profileTarget.name, t(c, "room.directTopic"), true);
-      return;
-    }
-
-    const sasMatch = target.closest<HTMLElement>("#device-sas-dialog [data-sas-match]");
-    if (sasMatch !== null) {
-      const deviceId = pendingVerifyDeviceId;
-      const dialog = document.getElementById("device-sas-dialog");
-      if (dialog instanceof HTMLDialogElement) dialog.close();
-      pendingVerifyDeviceId = null;
-      if (deviceId !== null) {
-        actions.verifyDevice(deviceId);
-        queueMicrotask(() => refreshBody(SURFACE.settings));
-      }
+      else actions.startDirect(profileTarget.userId);
       return;
     }
 
@@ -1103,7 +1138,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (copyRoomId !== null) {
       event.preventDefault();
       const id = activeRoomId ?? state().roomId;
-      if (id !== null) copy(id.includes(":") ? id : `!${id}:matrix.org`);
+      if (id !== null) copy(id);
       return;
     }
 
@@ -1116,7 +1151,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       else if (surface?.id === SURFACE.selectionMenu) handleSelectionAction(action.dataset["action"] ?? "");
       else if (surface?.id === SURFACE.roomSettings && action.dataset["action"] === "roomSettings.leave") {
         const roomId = activeRoomId ?? state().roomId ?? "";
-        const leavingSpace = room(roomId)?.isSpace === true;
+        const leavingSpace = room(roomId) !== null && isSpaceRoom(room(roomId) as RoomSummary);
         askConfirm(t(c, leavingSpace ? "spaceMenu.leaveConfirm" : "roomMenu.leaveConfirm"), () => {
           actions.leaveRoom(roomId);
           hide(SURFACE.roomSettings);
@@ -1175,15 +1210,30 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     event.preventDefault();
     if (id === "search") search(form);
     else if (id === "new-message") {
-      const value = form.querySelector<HTMLInputElement>("#new-message-field")?.value.trim() ?? "";
-      if (value === "") return;
-      actions.addRoom(value, t(c, "room.directTopic"), true);
+      const input = form.querySelector<HTMLInputElement>("#new-message-field");
+      const value = input?.value.trim() ?? "";
+      if (input === null || value === "") return;
+      input.setCustomValidity("");
+      const result = actions.startDirect(value);
+      if (result === "invalid") {
+        input.setCustomValidity(t(c, "surface.newMessage.invalid"));
+        input.reportValidity();
+        return;
+      }
       hide(SURFACE.newMessage);
+      queueMicrotask(() => hide(SURFACE.newMessage));
     } else if (id === "join") {
-      const value = form.querySelector<HTMLInputElement>("#join-field")?.value.trim() ?? "";
-      if (value === "") return;
-      actions.addRoom(value, t(c, "room.joinedTopic"), false);
+      const input = form.querySelector<HTMLInputElement>("#join-field");
+      const value = input?.value.trim() ?? "";
+      if (input === null || value === "") return;
+      input.setCustomValidity("");
+      if (actions.joinRoom(value) === "notFound") {
+        input.setCustomValidity(t(c, "surface.join.notFound"));
+        input.reportValidity();
+        return;
+      }
       hide(SURFACE.join);
+      queueMicrotask(() => hide(SURFACE.join));
     } else if (id === "room-invite") {
       const input = form.querySelector<HTMLInputElement>("#room-invite-field");
       const value = input?.value.trim() ?? "";
@@ -1231,8 +1281,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       const name = form.querySelector<HTMLInputElement>("#create-name")?.value.trim() ?? "";
       const topic = form.querySelector<HTMLInputElement>("#create-topic")?.value.trim() ?? "";
       if (name === "") return;
-      actions.addRoom(name, topic, false);
+      actions.createRoom(name, topic);
       hide(SURFACE.create);
+      queueMicrotask(() => hide(SURFACE.create));
     }
   }
 
@@ -1291,15 +1342,6 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       if (key === "badge" || key === "titleTotal" || key === "preview") {
         actions.setPref(key, target.checked);
       }
-      return;
-    }
-    if (target instanceof HTMLSelectElement && target.dataset["notificationLevel"] !== undefined) {
-      actions.setNotificationLevel(target.value as NotificationPrefs["level"]);
-      return;
-    }
-    if (target instanceof HTMLSelectElement && target.dataset["roomNotifications"] !== undefined) {
-      const id = activeRoomId ?? state().roomId;
-      if (id !== null) actions.setNotification(id, target.value as RoomSummary["notification"]);
       return;
     }
     if (target instanceof HTMLInputElement && target.dataset["roomNameInput"] !== undefined) {
@@ -1444,19 +1486,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (event.newState !== "open") return;
     const active = document.activeElement;
     if (active instanceof HTMLElement && !target.contains(active)) popoverReturnFocus.set(target.id, active);
-    if (target.id === "search-scope") {
-      document.querySelector<HTMLElement>("[data-search-scope-button]")?.setAttribute("aria-expanded", "true");
-      window.setTimeout(() => {
-        target.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus({ preventScroll: true });
-      }, 40);
-      return;
-    }
+    if (target.id === "search-scope" || target.matches("[data-select-list]")) return;
     if (target.id === SURFACE.emoji || target.id === SURFACE.reaction) {
       refreshBody(target.id);
       return;
     }
-    if (target.id === SURFACE.sticker) {
-      refreshBody(SURFACE.sticker);
+    if (target.id === SURFACE.sticker || target.id === SURFACE.attach) {
+      refreshBody(target.id);
       return;
     }
     if (target.id === SURFACE.roomMenu) {
@@ -1473,10 +1509,31 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   }
 
   const onDocumentToggle = (event: Event): void => {
-    if (!(event instanceof ToggleEvent) || event.newState !== "closed") return;
-    if (!(event.target instanceof HTMLElement)) return;
-    const closing = event.target;
+    if (!(event instanceof ToggleEvent) || !(event.target instanceof HTMLElement)) return;
+    const target = event.target;
+    if (event.newState === "open") {
+      if (target.id === "search-scope") {
+        document.querySelector<HTMLElement>("[data-search-scope-button]")?.setAttribute("aria-expanded", "true");
+        target.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus({ preventScroll: true });
+        return;
+      }
+      if (target.matches("[data-select-list]")) {
+        const field = target.closest<HTMLElement>("[data-select-field]");
+        field?.querySelector<HTMLElement>("[data-select-trigger]")?.setAttribute("aria-expanded", "true");
+        target.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus({ preventScroll: true });
+        return;
+      }
+      return;
+    }
+    if (event.newState !== "closed") return;
+    const closing = target;
     if (closing.matches(":popover-open")) return;
+    if (closing.matches("[data-select-list]")) {
+      const field = closing.closest<HTMLElement>("[data-select-field]");
+      field?.querySelector<HTMLElement>("[data-select-trigger]")?.setAttribute("aria-expanded", "false");
+      popoverReturnFocus.delete(closing.id);
+      return;
+    }
     if (closing.id === "search-scope") {
       document.querySelector<HTMLElement>("[data-search-scope-button]")?.setAttribute("aria-expanded", "false");
     }
@@ -1491,6 +1548,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       return;
     }
     closing.classList.remove("is-context", "is-measuring");
+    closing.style.removeProperty("--context-x");
+    closing.style.removeProperty("--context-y");
     const anotherContextOpen = [...CONTEXT_SURFACE_IDS].some(
       (id) => id !== closing.id && document.getElementById(id)?.matches(":popover-open") === true,
     );
@@ -1502,8 +1561,6 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     lastMenuSource = null;
     lastMenuPoint = null;
     lastMenuWasKeyboard = false;
-    clearPosition("--context-x");
-    clearPosition("--context-y");
   };
 
   const confirmDialog = document.getElementById(SURFACE.confirm);
@@ -1518,8 +1575,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     .map((id) => document.getElementById(id))
     .filter((dialog): dialog is HTMLDialogElement => dialog instanceof HTMLDialogElement);
   const onSettingsClose = (): void => {
+    closeSelectLists();
     pendingResetKey = false;
-    pendingVerifyDeviceId = null;
     if (state().recoveryKey !== null) actions.clearRecoveryKey();
     clearSettingsHash();
   };
@@ -1532,7 +1589,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   const onViewerClose = (): void => {
     for (const media of viewer?.querySelectorAll<HTMLMediaElement>("video, audio") ?? []) media.pause();
     const body = viewer?.querySelector<HTMLElement>(`.surface-body`);
-    if (body !== null && body !== undefined) body.innerHTML = "";
+    if (body !== null && body !== undefined) body.replaceChildren();
   };
   viewer?.addEventListener("close", onViewerClose);
 
@@ -1542,7 +1599,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const body = dialog.querySelector<HTMLElement>(`[data-region="${SURFACE.forward}-body"]`);
     if (body === null) return;
     dialog.dataset["forwardIds"] = ids.join(",");
-    body.innerHTML = surfaceBodyFor(c, SURFACE.forward, state()).value;
+    replaceHtml(body, surfaceBodyFor(c, SURFACE.forward, state()));
     body.scrollTop = 0;
     dialog.showModal();
   };
@@ -1572,6 +1629,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     showResetKeyDialog(key.value);
   });
 
+  const unwatchMembers = store.watch(["members", "membersLoading"], () => {
+    const dialog = document.getElementById(SURFACE.roomSettings);
+    if (dialog instanceof HTMLDialogElement && dialog.open) {
+      refreshBody(SURFACE.roomSettings, activeRoomId ?? state().roomId);
+    }
+  });
+
   document.addEventListener("click", onClick);
   document.addEventListener("maski:forward-open", onForwardOpen);
   document.addEventListener("maski:reply-message", onReplyMessage);
@@ -1593,6 +1657,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
   return () => {
     unwatchResetKey();
+    unwatchMembers();
     document.removeEventListener("click", onClick);
     document.removeEventListener("maski:forward-open", onForwardOpen);
     document.removeEventListener("maski:reply-message", onReplyMessage);

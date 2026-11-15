@@ -5,4 +5,8 @@ export interface Assets {
   readonly guard: string;
   readonly prepaint: string;
   readonly client: string;
+  readonly reviewClient: string;
+  readonly imageWorker: string;
+  readonly matrixWorker: string;
+  readonly cryptoWasm: string;
 }

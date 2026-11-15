@@ -1,4 +1,5 @@
 import { html, type Html } from "../lib/html.ts";
+import { icons } from "./icons.ts";
 
 export interface FieldInput {
   readonly id: string;
@@ -49,30 +50,66 @@ export interface SelectOption {
   readonly label: string;
 }
 
+export type SelectFieldName =
+  "notification-level" | "room-notifications" | "room-join" | "room-guest" | "room-history" | "room-directory";
+
 export interface SelectFieldInput {
   readonly id: string;
   readonly label: string;
   readonly value: string;
   readonly options: readonly SelectOption[];
   readonly disabled?: boolean;
-  readonly dataName?: "notification-level" | "room-notifications";
+  readonly layout?: "stack" | "inline";
+  readonly dataName: SelectFieldName;
 }
 
 export function selectField(input: SelectFieldInput): Html {
-  const data =
-    input.dataName === "notification-level"
-      ? html` data-notification-level`
-      : input.dataName === "room-notifications"
-        ? html` data-room-notifications`
-        : html``;
-  return html`<div class="field">
-    <label class="field-label" for="${input.id}">${input.label}</label>
-    <select class="input" id="${input.id}" name="${input.id}" ${data}${input.disabled === true ? html` disabled` : html``}>
+  const selected = input.options.find((option) => option.value === input.value);
+  const inline = input.layout === "inline";
+  const label = html`<span class="field-label" id="${input.id}-label">${input.label}</span>`;
+  return html`<div
+    class="field select-field${inline ? " is-inline" : ""}"
+    data-select-field
+    data-select-name="${input.dataName}"
+  >
+    ${inline ? html`` : label}
+    <button
+      class="input select-trigger"
+      id="${input.id}"
+      type="button"
+      data-select-trigger
+      aria-haspopup="listbox"
+      aria-expanded="false"
+      aria-labelledby="${input.id}-label"
+      aria-controls="${input.id}-list"
+      popovertarget="${input.id}-list"
+      ${input.disabled === true ? html` disabled` : html``}
+    >
+      ${inline ? label : html``}
+      <span class="select-value" data-select-value>${selected?.label ?? ""}</span>
+      ${icons.chevron}
+    </button>
+    <div
+      class="select-popover"
+      id="${input.id}-list"
+      popover
+      role="listbox"
+      aria-labelledby="${input.id}-label"
+      data-select-list
+    >
       ${input.options.map(
-        (option) => html`<option value="${option.value}" ${option.value === input.value ? html` selected` : html``}>
+        (option, index) => html`<button
+          class="select-option"
+          type="button"
+          role="option"
+          data-select-option
+          data-option-value="${option.value}"
+          aria-selected="${option.value === input.value ? "true" : "false"}"
+          ${index === 0 ? html` autofocus` : html``}
+        >
           ${option.label}
-        </option>`,
+        </button>`,
       )}
-    </select>
+    </div>
   </div>`;
 }

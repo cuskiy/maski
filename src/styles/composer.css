@@ -11,6 +11,11 @@
     gap: var(--space-2);
   }
 
+  .composer-error {
+    color: var(--danger);
+    font-size: var(--text-xs);
+  }
+
   .tray {
     display: flex;
     flex-wrap: wrap;
@@ -45,7 +50,7 @@
     inline-size: 4rem;
     block-size: 4rem;
     border-radius: var(--radius-sm);
-    background: var(--card-hover-bg);
+    background: var(--tray-thumb-bg);
     object-fit: cover;
   }
 
@@ -190,6 +195,7 @@
   }
 
   .composer-field {
+    position: relative;
     display: flex;
     flex: 1;
     align-items: flex-end;
@@ -208,6 +214,7 @@
   }
 
   .composer-input {
+    position: relative;
     align-self: center;
     flex: 1;
     min-inline-size: 0;
@@ -218,30 +225,138 @@
     border: 0;
     background: none;
     color: var(--field-ink);
-    field-sizing: content;
     font-size: var(--text-md);
     line-height: var(--leading-normal);
+    overflow-wrap: anywhere;
     overflow-y: auto;
-    resize: none;
+    white-space: pre-wrap;
+  }
+
+  .composer-input[data-empty="true"]::before {
+    position: absolute;
+    inset-block-start: 5px;
+    inset-inline-start: 0;
+    max-inline-size: 100%;
+    overflow: hidden;
+    color: var(--field-placeholder);
+    content: attr(data-placeholder);
+    pointer-events: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .composer-input:focus-visible {
     outline: none;
   }
 
-  .composer-input::placeholder {
+  .composer-input[contenteditable="false"] {
+    cursor: default;
+  }
+
+  .composer-field:has(.composer-input[contenteditable="false"]) {
+    opacity: 60%;
+  }
+
+  .mention {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 1px 0.45rem 1px 0.2rem;
+    border-radius: var(--radius-pill);
+    background: var(--composer-token-bg);
+    color: var(--composer-ink);
+    font-size: var(--text-sm);
+    line-height: 1.35;
+    user-select: none;
+    vertical-align: baseline;
+  }
+
+  .mention-avatar {
+    inline-size: 1.2rem;
+    block-size: 1.2rem;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .mention-id {
+    max-inline-size: 10rem;
     overflow: hidden;
-    color: var(--field-placeholder);
+    color: var(--composer-muted);
+    font-size: var(--text-xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .composer-input:disabled {
-    cursor: default;
+  .mention-menu {
+    position: absolute;
+    inset-block-end: calc(100% + var(--space-2));
+    inset-inline-start: 0;
+    z-index: 4;
+    display: grid;
+    gap: 1px;
+    inline-size: min(22rem, calc(100% - var(--space-2)));
+    max-block-size: 13rem;
+    overflow-y: auto;
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    background: var(--menu-bg);
+    color: var(--menu-ink);
+    backdrop-filter: blur(var(--float-blur));
+    overscroll-behavior: contain;
   }
 
-  .composer-field:has(.composer-input:disabled) {
-    opacity: 0.6;
+  .mention-option {
+    display: grid;
+    grid-template-columns: var(--avatar) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 2.5rem;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--menu-ink);
+    text-align: start;
+  }
+
+  .mention-option[aria-selected="true"],
+  .mention-option:hover {
+    background: var(--menu-hover-bg);
+  }
+
+  .mention-option-avatar {
+    display: grid;
+    inline-size: var(--avatar);
+    block-size: var(--avatar);
+    place-items: center;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--avatar-bg);
+    color: var(--menu-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+    object-fit: cover;
+  }
+
+  .mention-option-text {
+    display: grid;
+    min-inline-size: 0;
+  }
+
+  .mention-option-name,
+  .mention-option-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mention-option-name {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .mention-option-id {
+    color: var(--menu-muted);
+    font-size: var(--text-xs);
   }
 
   .composer-send {
@@ -265,7 +380,7 @@
   .composer-action:disabled,
   .composer-emoji:disabled,
   .composer-send:disabled {
-    opacity: 0.35;
+    opacity: 35%;
     cursor: default;
   }
 }

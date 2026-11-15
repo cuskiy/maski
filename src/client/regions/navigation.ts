@@ -4,6 +4,7 @@ import type { ChatState, SectionId } from "../../core/types.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
 import { bindSwipe } from "../swipe.ts";
+import { roomPermissions } from "../../core/permissions.ts";
 
 interface NavigationInput {
   readonly store: Store;
@@ -13,7 +14,7 @@ interface NavigationInput {
 
 function rowKey(row: Element): string | null {
   if (!(row instanceof HTMLElement)) return null;
-  return row.dataset.room ?? row.dataset.space ?? null;
+  return row.dataset["room"] ?? row.dataset["space"] ?? null;
 }
 
 function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void {
@@ -36,7 +37,7 @@ function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void 
       continue;
     }
     const old = existing.get(key);
-    if (old !== undefined && old.outerHTML === (desired as HTMLElement).outerHTML) {
+    if (old !== undefined && old.isEqualNode(desired)) {
       fragment.append(old);
       existing.delete(key);
       continue;
@@ -63,7 +64,7 @@ function reconcile(current: HTMLElement, next: HTMLElement): void {
     else sections.removeAttribute("aria-busy");
   }
   for (const nextSection of next.querySelectorAll<HTMLDetailsElement>("details.section[data-section]")) {
-    const id = nextSection.dataset.section;
+    const id = nextSection.dataset["section"];
     if (id === undefined) continue;
     const currentSection = current.querySelector<HTMLDetailsElement>(
       `details.section[data-section="${CSS.escape(id)}"]`,
@@ -89,7 +90,11 @@ function reconcile(current: HTMLElement, next: HTMLElement): void {
     const source = next.querySelector<HTMLElement>(`.nav-account [data-field="${field}"]`);
     const target = current.querySelector<HTMLElement>(`.nav-account [data-field="${field}"]`);
     if (source !== null && target !== null) {
-      target.textContent = source.textContent;
+      if (field === "avatar") {
+        target.replaceChildren(...Array.from(source.childNodes, (node) => node.cloneNode(true)));
+      } else {
+        target.textContent = source.textContent;
+      }
       target.hidden = source.hidden;
     }
   }
@@ -111,7 +116,7 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
   const onToggle = (event: Event): void => {
     const target = event.target;
     if (!(target instanceof HTMLDetailsElement) || !target.matches("details.section[data-section]")) return;
-    const id = target.dataset.section;
+    const id = target.dataset["section"];
     if (id === undefined) return;
     actions.toggleSection(id as SectionId, target.open);
   };
@@ -129,6 +134,10 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
     if (room !== null) {
       event.preventDefault();
       actions.selectRoom(room.dataset["room"] ?? "");
+      requestAnimationFrame(() => {
+        const composer = document.querySelector<HTMLElement>("#composer-input");
+        if (composer?.contentEditable !== "false") composer?.focus();
+      });
     }
   };
 
@@ -142,7 +151,9 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
       const room = store.snapshot().rooms.find((entry) => entry.roomId === roomId);
       if (room === undefined) return;
       if (direction === "right" && (room.unread > 0 || room.highlight > 0)) actions.markRead(roomId);
-      if (direction === "left" && room.capabilities.mute) actions.toggleMute(roomId);
+      if (direction === "left" && roomPermissions(room, store.snapshot().session?.userId ?? null).mute) {
+        actions.toggleMute(roomId);
+      }
     },
   });
   const unsubscribe = store.watch(

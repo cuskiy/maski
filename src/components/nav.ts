@@ -1,6 +1,8 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
+import { safeAvatarUrl } from "../lib/safeUrl.ts";
+import { hasTag, isDirectRoom, isMuted, isSpaceRoom } from "../core/rooms.ts";
 import type { ChatState, RoomSummary, SectionId } from "../core/types.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
 import { icons } from "./icons.ts";
@@ -17,16 +19,17 @@ const ACTIONS = [
 
 const SECTIONS: ReadonlyArray<{
   id: SectionId;
-  key: "sections.favorites" | "sections.rooms" | "sections.direct" | "sections.channels";
+  key: "sections.favorites" | "sections.rooms" | "sections.direct" | "sections.spaces";
 }> = [
   { id: "favorites", key: "sections.favorites" },
   { id: "rooms", key: "sections.rooms" },
   { id: "direct", key: "sections.direct" },
-  { id: "channels", key: "sections.channels" },
+  { id: "spaces", key: "sections.spaces" },
 ];
 
 export function nav(state: ChatState, c: Catalog): Html {
   const session = state.session;
+  const accountAvatar = safeAvatarUrl(session?.avatar ?? null);
   return html`<aside class="nav" data-region="${REGION.nav}" aria-label="${t(c, "nav.label")}">
     <nav
       class="nav-sections"
@@ -52,10 +55,16 @@ export function nav(state: ChatState, c: Catalog): Html {
       type="button"
       data-region="${REGION.menu}"
       popovertarget="${SURFACE.navMenu}"
-      aria-label="${t(c, "nav.menu")}"
+      aria-label="${session === null ? t(c, "nav.menu") : `${session.displayName} — ${t(c, "nav.menu")}`}"
     >
       <span class="nav-avatar" data-field="avatar" aria-hidden="true" ${session === null ? html`hidden` : html``}
-        >${session === null ? "" : session.displayName.slice(0, 1)}</span
+        >${
+          session === null
+            ? ""
+            : accountAvatar === null
+              ? session.displayName.slice(0, 1)
+              : html`<img src="${accountAvatar}" alt="" loading="lazy" decoding="async" />`
+        }</span
       >
       <span class="nav-account-text">
         <span class="nav-account-name" data-field="name" dir="auto">${session?.displayName ?? ""}</span>
@@ -77,7 +86,7 @@ function sectionView(state: ChatState, c: Catalog, id: SectionId, key: Parameter
       <span class="section-chevron" aria-hidden="true">${icons.chevron}</span>
     </summary>
     <ol class="section-rows" role="list" data-rows="${id}">
-      ${loading ? skeletonRows() : rooms.map((room) => (room.isSpace ? spaceRow(state, c, room) : roomRow(state, c, room)))}
+      ${loading ? skeletonRows() : rooms.map((room) => (isSpaceRoom(room) ? spaceRow(state, c, room) : roomRow(state, c, room)))}
     </ol>
   </details>`;
 }
@@ -93,12 +102,13 @@ function skeletonRows(): Html {
 }
 
 function belongs(room: RoomSummary, section: SectionId): boolean {
-  if (room.lowPriority === true) return false;
+  if (hasTag(room, "m.lowpriority")) return false;
   if (room.spaceId !== null) return false;
-  if (section === "favorites") return room.favorite;
-  if (section === "direct") return room.isDirect && !room.favorite;
-  if (section === "channels") return room.isSpace && !room.favorite;
-  return !room.isDirect && !room.isSpace && !room.favorite;
+  const favorite = hasTag(room, "m.favourite");
+  if (section === "favorites") return favorite;
+  if (section === "direct") return isDirectRoom(room) && !favorite;
+  if (section === "spaces") return isSpaceRoom(room) && !favorite;
+  return !isDirectRoom(room) && !isSpaceRoom(room) && !favorite;
 }
 
 function badge(room: RoomSummary, c: Catalog, visible: boolean): Html {
@@ -122,7 +132,7 @@ function muted(c: Catalog): Html {
 
 function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
   const open = state.openSpaces.includes(room.roomId);
-  const children = state.rooms.filter((child) => child.spaceId === room.roomId && child.lowPriority !== true);
+  const children = state.rooms.filter((child) => child.spaceId === room.roomId && !hasTag(child, "m.lowpriority"));
   return html`<li class="room is-space${open ? " is-open" : ""}" data-space="${room.roomId}">
     <button
       class="room-main"
@@ -137,7 +147,7 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       </span>
       <span class="room-side">
         ${badge(room, c, state.notifications.badge)}
-        ${room.muted ? muted(c) : html``}
+        ${isMuted(room) ? muted(c) : html``}
         <span class="space-chevron" aria-hidden="true">${icons.chevron}</span>
       </span>
     </button>
@@ -149,6 +159,7 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
 
 function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
   const active = room.roomId === state.roomId;
+  const avatar = safeAvatarUrl(room.avatar);
   return html`<li class="room${active ? " is-active" : ""}" data-room="${room.roomId}">
     <button
       class="room-main"
@@ -157,14 +168,14 @@ function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       data-room="${room.roomId}"
     >
       <span class="room-avatar" aria-hidden="true"
-        >${room.avatar === null ? room.name.slice(0, 1) : html`<img src="${room.avatar}" alt="" />`}</span
+        >${avatar === null ? room.name.slice(0, 1) : html`<img src="${avatar}" alt="" loading="lazy" decoding="async" />`}</span
       >
       <span class="room-text">
         <span class="room-name" data-field="name" dir="auto">${room.name}</span>
         ${state.notifications.preview ? html`<span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>` : html``}
       </span>
       <span class="room-side">
-        ${badge(room, c, state.notifications.badge)}${room.muted ? muted(c) : html``}
+        ${badge(room, c, state.notifications.badge)}${isMuted(room) ? muted(c) : html``}
       </span>
     </button>
     <span class="room-swipe-hint is-start" aria-hidden="true">${icons.check}</span>

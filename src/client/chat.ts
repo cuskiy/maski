@@ -1,9 +1,9 @@
 import type { Catalog } from "../lib/catalog.ts";
 import type { ChatState, SectionId } from "../core/types.ts";
 import { emptyChatState } from "../core/state.ts";
-import { mockChatState } from "../core/mock.ts";
 import { createStore } from "./store.ts";
-import { MockSource } from "./mockSource.ts";
+import { WorkerSource } from "./workerSource.ts";
+import type { ChatSource } from "./source.ts";
 import { createActions, wireSources } from "./actions.ts";
 import { Composer } from "./regions/composer.ts";
 import { mountHeader } from "./regions/header.ts";
@@ -12,11 +12,15 @@ import { mountTimeline } from "./regions/timeline.ts";
 import { wireSurfaces } from "./surfaces.ts";
 import type { LocaleId } from "../core/locales.ts";
 import { mockSession } from "./session.ts";
+import { watchMediaLoads } from "./mediaLoads.ts";
+import { wireComposerInteractions } from "./interactions.ts";
 import * as prefs from "./prefs.ts";
 
-export function initChat(c: Catalog, locale: LocaleId, review = false): void {
-  const account = mockSession().account ?? "local";
-  const base = review ? mockChatState() : emptyChatState();
+export function initChat(c: Catalog, locale: LocaleId): void {
+  mountChat(c, locale, new WorkerSource(), emptyChatState(), mockSession().account ?? "local");
+}
+
+export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base: ChatState, account: string): void {
   const storedSections = prefs.readSections(account);
   const sections = { ...base.sections };
   if (storedSections !== null) {
@@ -36,14 +40,18 @@ export function initChat(c: Catalog, locale: LocaleId, review = false): void {
   };
 
   const store = createStore(initial);
-  const source = new MockSource(review);
   const actions = createActions({ store, source, c, account });
   const unwire = wireSources(store, source);
+  const unwatchMedia = watchMediaLoads();
 
   source.start();
-  if (initial.roomId !== null) source.open(initial.roomId);
+  if (initial.roomId !== null) {
+    source.open(initial.roomId);
+    source.members(initial.roomId);
+  }
 
   const composer = new Composer({ store, actions, c, account });
+  const unwireInteractions = wireComposerInteractions(composer);
   const disposers = [
     mountNavigation({ store, actions, c }),
     mountHeader({ store, actions, c }),
@@ -65,6 +73,8 @@ export function initChat(c: Catalog, locale: LocaleId, review = false): void {
     () => {
       unwire();
       unwatchTitle();
+      unwatchMedia();
+      unwireInteractions();
       composer.dispose();
       for (const dispose of disposers) dispose();
       source.dispose();

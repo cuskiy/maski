@@ -1,14 +1,111 @@
+// The composer owns its draft, tray, paste routing and caret state in one place.
 import { Marked } from "marked";
 import { t } from "../../lib/catalog.ts";
 import type { Catalog } from "../../lib/catalog.ts";
 import { html } from "../../lib/html.ts";
 import { formatBytes } from "../../lib/bytes.ts";
 import { REGION, SURFACE } from "../../core/regions.ts";
-import type { ChatState, MessageRow, ReplyRef } from "../../core/types.ts";
+import type { ChatState, Media, Member, MessageRow, ReplyRef } from "../../core/types.ts";
 import { icons } from "../../components/icons.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
 import * as prefs from "../prefs.ts";
+import { sanitizeImage } from "../imagePrivacy.ts";
+import { roomPermissions } from "../../core/permissions.ts";
+import { safeAvatarUrl } from "../../lib/safeUrl.ts";
+import { replaceHtml } from "../dom.ts";
+
+function composerText(field: HTMLElement): string {
+  let value = "";
+  const walk = (node: Node): void => {
+    if (node instanceof Text) {
+      value += node.data;
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    if (node.dataset["mentionText"] !== undefined) {
+      value += node.dataset["mentionText"];
+      return;
+    }
+    if (node.tagName === "BR") {
+      value += "\n";
+      return;
+    }
+    const block = node.tagName === "DIV" || node.tagName === "P";
+    if (block && value !== "" && !value.endsWith("\n")) value += "\n";
+    for (const child of Array.from(node.childNodes)) walk(child);
+    if (block && value !== "" && !value.endsWith("\n")) value += "\n";
+  };
+  for (const child of Array.from(field.childNodes)) walk(child);
+  return value;
+}
+
+function updateEmptyState(field: HTMLElement): void {
+  field.dataset["empty"] = String(composerText(field).trim() === "");
+}
+
+function setComposerText(field: HTMLElement, value: string): void {
+  field.replaceChildren();
+  if (value !== "") field.append(document.createTextNode(value));
+  updateEmptyState(field);
+}
+
+function placeCaretAtEnd(field: HTMLElement): void {
+  const range = document.createRange();
+  range.selectNodeContents(field);
+  range.collapse(false);
+  const selection = document.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function insertAtCaret(field: HTMLElement, node: Node): void {
+  const selection = document.getSelection();
+  const range =
+    selection !== null && selection.rangeCount > 0 && field.contains(selection.getRangeAt(0).startContainer)
+      ? selection.getRangeAt(0)
+      : null;
+  if (range === null) {
+    field.append(node);
+  } else {
+    range.deleteContents();
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+  updateEmptyState(field);
+}
+
+function mentionElement(name: string, userId: string, avatar: string | null): HTMLElement {
+  const mention = document.createElement("span");
+  mention.className = "mention";
+  mention.contentEditable = "false";
+  mention.dataset["mentionId"] = userId;
+  mention.dataset["mentionText"] = `@${name}`;
+  const source = safeAvatarUrl(avatar);
+  if (source === null) {
+    const initial = document.createElement("span");
+    initial.className = "mention-avatar";
+    initial.textContent = name.slice(0, 1);
+    mention.append(initial);
+  } else {
+    const image = document.createElement("img");
+    image.className = "mention-avatar";
+    image.src = source;
+    image.alt = "";
+    mention.append(image);
+  }
+  const label = document.createElement("span");
+  label.className = "mention-name";
+  label.textContent = name;
+  const id = document.createElement("span");
+  id.className = "mention-id";
+  id.textContent = userId;
+  mention.append(label, id);
+  return mention;
+}
 
 interface ComposerInput {
   readonly store: Store;
@@ -17,7 +114,25 @@ interface ComposerInput {
   readonly account: string;
 }
 
-type TrayKind = "image" | "file";
+type TrayKind = "image" | "video" | "audio" | "file";
+
+function fileKind(file: File): TrayKind {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "file";
+}
+
+function mediaForFile(file: File, kind: TrayKind): Media {
+  return {
+    kind,
+    name: file.name,
+    width: null,
+    height: null,
+    size: file.size,
+    url: URL.createObjectURL(file),
+  };
+}
 
 function escapeHtmlText(value: string): string {
   return value.replace(/[&<>"']/gu, (character) => {
@@ -49,36 +164,49 @@ interface TrayEntry {
   readonly kind: TrayKind;
 }
 
+interface MentionQuery {
+  readonly range: Range;
+  readonly query: string;
+}
+
 export class Composer {
   private readonly actions: Actions;
   private readonly c: Catalog;
+  private readonly store: Store;
   private readonly account: string;
   private readonly form: HTMLFormElement | null;
-  private readonly textarea: HTMLTextAreaElement | null;
+  private readonly input: HTMLElement | null;
   private readonly trayRegion: HTMLElement | null;
   private readonly replyRegion: HTMLElement | null;
+  private readonly errorRegion: HTMLElement | null;
   private tray: TrayEntry[] = [];
   private readonly previews = new Map<File, string>();
+  private sending = false;
   private replyTo: MessageRow | null = null;
   private editing: MessageRow | null = null;
   private preDraft: string | null = null;
   private roomId: string | null;
   private draftRoom: string | null = null;
   private draftTimer: number | null = null;
+  private mentionMenu: HTMLElement | null = null;
+  private mentionOptions: readonly Member[] = [];
+  private mentionIndex = 0;
   private readonly abort = new AbortController();
   private readonly unsubscribe: () => void;
 
   constructor({ store, actions, c, account }: ComposerInput) {
     this.actions = actions;
     this.c = c;
+    this.store = store;
     this.account = account;
     this.form = document.querySelector<HTMLFormElement>(".composer");
-    this.textarea = document.querySelector<HTMLTextAreaElement>("#composer-input");
+    this.input = document.querySelector<HTMLElement>("#composer-input");
     this.trayRegion = document.querySelector<HTMLElement>(`[data-region="${REGION.tray}"]`);
     this.replyRegion = document.querySelector<HTMLElement>(`[data-region="${REGION.composerReply}"]`);
+    this.errorRegion = document.querySelector<HTMLElement>("[data-composer-error]");
     this.roomId = store.read("roomId");
     this.mount();
-    this.unsubscribe = store.watch(["roomId", "rooms", "phase"], () => this.render(store.snapshot()));
+    this.unsubscribe = store.watch(["roomId", "rooms", "phase", "members"], () => this.render(store.snapshot()));
     this.render(store.snapshot());
   }
 
@@ -87,6 +215,231 @@ export class Composer {
     this.abort.abort();
     this.clearDraftTimer();
     this.releasePreviews();
+  }
+
+  focus(): void {
+    const input = this.input;
+    if (input === null || input.contentEditable === "false") return;
+    input.focus();
+    if (document.getSelection()?.isCollapsed !== false) placeCaretAtEnd(input);
+  }
+
+  insertMention(name: string, userId: string, avatar: string | null): void {
+    const input = this.input;
+    if (input === null || input.contentEditable === "false" || name === "" || userId === "") return;
+    this.focus();
+    insertAtCaret(input, mentionElement(name, userId, avatar));
+    const space = document.createTextNode(" ");
+    const selection = document.getSelection();
+    const range = selection?.rangeCount === 0 ? null : selection?.getRangeAt(0);
+    if (range !== null && range !== undefined) {
+      range.insertNode(space);
+      range.setStartAfter(space);
+      range.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } else {
+      input.append(space);
+    }
+    updateEmptyState(input);
+    this.saveDraft();
+    input.focus();
+  }
+
+  private ensureMentionMenu(): HTMLElement | null {
+    if (this.mentionMenu !== null) return this.mentionMenu;
+    const host = this.input?.closest(".composer-field");
+    if (host === null || host === undefined) return null;
+    const menu = document.createElement("div");
+    menu.className = "mention-menu";
+    menu.id = "composer-mentions";
+    menu.role = "listbox";
+    menu.hidden = true;
+    host.append(menu);
+    this.mentionMenu = menu;
+    this.input?.setAttribute("aria-autocomplete", "list");
+    this.input?.setAttribute("aria-controls", menu.id);
+    this.input?.setAttribute("aria-expanded", "false");
+    return menu;
+  }
+
+  private mentionQuery(): MentionQuery | null {
+    const input = this.input;
+    const selection = document.getSelection();
+    if (input === null || selection === null || selection.rangeCount === 0 || !selection.isCollapsed) return null;
+    const range = selection.getRangeAt(0);
+    if (!input.contains(range.startContainer)) return null;
+    const node = range.startContainer;
+    if (!(node instanceof Text)) return null;
+    const offset = range.startOffset;
+    const before = node.data.slice(0, offset);
+    const at = before.lastIndexOf("@");
+    if (at < 0) return null;
+    if (at > 0 && !/\s/u.test(before.charAt(at - 1))) return null;
+    const query = before.slice(at + 1);
+    if (query.includes(" ") || query.includes("\n")) return null;
+    const match = document.createRange();
+    match.setStart(node, at);
+    match.setEnd(node, offset);
+    return { range: match, query };
+  }
+
+  private renderMentionMenu(): void {
+    const menu = this.ensureMentionMenu();
+    if (menu === null) return;
+    menu.replaceChildren();
+    if (this.mentionOptions.length === 0) {
+      this.hideMentionMenu();
+      return;
+    }
+    for (const [index, member] of this.mentionOptions.entries()) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "mention-option";
+      option.id = `composer-mention-${String(index)}`;
+      option.role = "option";
+      option.setAttribute("aria-selected", index === this.mentionIndex ? "true" : "false");
+      const source = safeAvatarUrl(member.avatar);
+      if (source === null) {
+        const initial = document.createElement("span");
+        initial.className = "mention-option-avatar";
+        initial.textContent = member.displayName.slice(0, 1);
+        option.append(initial);
+      } else {
+        const image = document.createElement("img");
+        image.className = "mention-option-avatar";
+        image.src = source;
+        image.alt = "";
+        option.append(image);
+      }
+      const text = document.createElement("span");
+      text.className = "mention-option-text";
+      const name = document.createElement("span");
+      name.className = "mention-option-name";
+      name.textContent = member.displayName;
+      const id = document.createElement("span");
+      id.className = "mention-option-id";
+      id.textContent = member.userId;
+      text.append(name, id);
+      option.append(text);
+      option.addEventListener("pointerdown", (event) => event.preventDefault());
+      option.addEventListener("click", () => this.chooseMention(index));
+      menu.append(option);
+    }
+    menu.hidden = false;
+    this.input?.setAttribute("aria-expanded", "true");
+    this.highlightMention();
+  }
+
+  private highlightMention(): void {
+    const menu = this.mentionMenu;
+    if (menu === null) return;
+    for (const [index, option] of [...menu.querySelectorAll<HTMLElement>(".mention-option")].entries()) {
+      option.setAttribute("aria-selected", index === this.mentionIndex ? "true" : "false");
+    }
+    const active = menu.querySelector<HTMLElement>(`#composer-mention-${String(this.mentionIndex)}`);
+    this.input?.setAttribute("aria-activedescendant", active?.id ?? "");
+    active?.scrollIntoView({ block: "nearest" });
+  }
+
+  private hideMentionMenu(): void {
+    const menu = this.mentionMenu;
+    if (menu === null) return;
+    menu.hidden = true;
+    menu.replaceChildren();
+    this.mentionOptions = [];
+    this.mentionIndex = 0;
+    this.input?.setAttribute("aria-expanded", "false");
+    this.input?.removeAttribute("aria-activedescendant");
+  }
+
+  private refreshMentionMenu(): void {
+    const parsed = this.mentionQuery();
+    if (parsed === null || this.input?.contentEditable === "false") {
+      this.hideMentionMenu();
+      return;
+    }
+    const needle = parsed.query.toLocaleLowerCase();
+    this.mentionOptions = this.store
+      .snapshot()
+      .members.filter(
+        (member) =>
+          member.membership === "join" &&
+          (needle === "" ||
+            member.displayName.toLocaleLowerCase().includes(needle) ||
+            member.userId.toLocaleLowerCase().includes(needle)),
+      )
+      .slice(0, 8);
+    this.mentionIndex = 0;
+    this.renderMentionMenu();
+  }
+
+  private chooseMention(index: number): void {
+    const parsed = this.mentionQuery();
+    const member = this.mentionOptions[index];
+    if (parsed === null || member === undefined) return;
+    const range = parsed.range;
+    range.deleteContents();
+    const mention = mentionElement(member.displayName, member.userId, member.avatar);
+    range.insertNode(mention);
+    const space = document.createTextNode(" ");
+    mention.after(space);
+    const next = document.createRange();
+    next.setStartAfter(space);
+    next.collapse(true);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(next);
+    this.hideMentionMenu();
+    const input = this.input;
+    if (input !== null) updateEmptyState(input);
+    this.saveDraft();
+    input?.focus();
+  }
+
+  private handleMentionKey(event: KeyboardEvent): boolean {
+    if (this.mentionMenu === null || this.mentionMenu.hidden) return false;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      this.mentionIndex = (this.mentionIndex + direction + this.mentionOptions.length) % this.mentionOptions.length;
+      this.highlightMention();
+      return true;
+    }
+    if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      this.chooseMention(this.mentionIndex);
+      return true;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.hideMentionMenu();
+      return true;
+    }
+    return false;
+  }
+
+  private deleteMention(key: "Backspace" | "Delete"): boolean {
+    const input = this.input;
+    const selection = document.getSelection();
+    if (input === null || selection === null || selection.rangeCount === 0 || !selection.isCollapsed) return false;
+    const range = selection.getRangeAt(0);
+    if (!input.contains(range.startContainer)) return false;
+    const container = range.startContainer;
+    let mention: Node | null = null;
+    if (container instanceof Text) {
+      if (key === "Backspace" && range.startOffset === 0) mention = container.previousElementSibling;
+      if (key === "Delete" && range.startOffset === container.data.length) mention = container.nextElementSibling;
+    } else if (container instanceof HTMLElement) {
+      const index = range.startOffset;
+      mention = key === "Backspace" ? (container.childNodes[index - 1] ?? null) : (container.childNodes[index] ?? null);
+      if (!(mention instanceof HTMLElement)) mention = null;
+    }
+    if (!(mention instanceof HTMLElement) || !mention.classList.contains("mention")) return false;
+    mention.remove();
+    updateEmptyState(input);
+    this.saveDraft();
+    return true;
   }
 
   private mount(): void {
@@ -99,19 +452,32 @@ export class Composer {
       },
       { signal },
     );
-    this.textarea?.addEventListener(
+    this.input?.addEventListener(
       "keydown",
       (event) => {
         if (event.isComposing) return;
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
           void this.send("text");
+          return;
+        }
+        if (this.handleMentionKey(event)) return;
+        if ((event.key === "Backspace" || event.key === "Delete") && this.deleteMention(event.key)) {
+          event.preventDefault();
         }
       },
       { signal },
     );
-    this.textarea?.addEventListener("input", () => this.scheduleDraft(), { signal });
-    this.textarea?.addEventListener(
+    this.input?.addEventListener(
+      "input",
+      () => {
+        if (this.input !== null) updateEmptyState(this.input);
+        this.refreshMentionMenu();
+        this.scheduleDraft();
+      },
+      { signal },
+    );
+    this.input?.addEventListener(
       "paste",
       (event) => {
         const clipboard = event.clipboardData;
@@ -122,9 +488,31 @@ export class Composer {
           const file = item.getAsFile();
           if (file !== null) files.push(file);
         }
-        if (files.length === 0) return;
+        if (files.length === 0) {
+          const text = clipboard.getData("text/plain");
+          if (text !== "") {
+            event.preventDefault();
+            const field = this.input;
+            if (field !== null) {
+              insertAtCaret(field, document.createTextNode(text));
+              this.scheduleDraft();
+            }
+          }
+          return;
+        }
         event.preventDefault();
         this.addFiles(files);
+      },
+      { signal },
+    );
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (this.mentionMenu === null || this.mentionMenu.hidden) return;
+        const target = event.target;
+        if (target instanceof Node && this.mentionMenu.contains(target)) return;
+        if (target instanceof Element && target.closest(".composer-field") !== null) return;
+        this.hideMentionMenu();
       },
       { signal },
     );
@@ -139,20 +527,29 @@ export class Composer {
         this.saveDraft();
       }
       this.roomId = state.roomId;
+      this.hideMentionMenu();
       this.clearTray();
       this.clearReplyState();
+      this.clearError();
       this.draftRoom = null;
     }
-    const textarea = this.textarea;
-    if (textarea === null) return;
-    const disabled = room === null || state.phase !== "ready";
-    textarea.disabled = disabled;
-    textarea.placeholder =
-      room === null ? t(this.c, "composer.placeholder") : t(this.c, "composer.placeholderRoom", { room: room.name });
+    const input = this.input;
+    if (input === null) return;
+    const canSend = room !== null && roomPermissions(room, state.session?.userId ?? null).send;
+    const disabled = room === null || state.phase !== "ready" || !canSend;
+    input.contentEditable = disabled ? "false" : "true";
+    input.setAttribute("aria-disabled", disabled ? "true" : "false");
+    input.dataset["placeholder"] =
+      room === null
+        ? t(this.c, "composer.placeholder")
+        : canSend
+          ? t(this.c, "composer.placeholderRoom", { room: room.name })
+          : t(this.c, "composer.noPermission");
     if (!disabled && this.editing === null && this.draftRoom !== room.roomId) {
-      textarea.value = prefs.readDraft(this.account, room.roomId);
+      setComposerText(input, prefs.readDraft(this.account, room.roomId));
       this.draftRoom = room.roomId;
     }
+    updateEmptyState(input);
     for (const button of document.querySelectorAll<HTMLButtonElement>(
       ".composer-send, .composer-action, .composer-emoji",
     )) {
@@ -179,10 +576,42 @@ export class Composer {
   private saveDraft(): void {
     this.clearDraftTimer();
     if (this.editing !== null) return;
-    const textarea = this.textarea;
+    const input = this.input;
     const roomId = this.roomId;
-    if (textarea === null || roomId === null) return;
-    prefs.saveDraft(this.account, roomId, textarea.value);
+    if (input === null || roomId === null) return;
+    prefs.saveDraft(this.account, roomId, composerText(input));
+  }
+
+  private clearError(): void {
+    if (this.errorRegion === null) return;
+    this.errorRegion.hidden = true;
+    this.errorRegion.textContent = "";
+  }
+
+  private showImageError(): void {
+    if (this.errorRegion === null) return;
+    this.errorRegion.textContent = t(this.c, "composer.imageFailed");
+    this.errorRegion.hidden = false;
+  }
+
+  private setBusy(busy: boolean): void {
+    this.sending = busy;
+    if (this.form === null) return;
+    if (busy) this.form.setAttribute("aria-busy", "true");
+    else this.form.removeAttribute("aria-busy");
+  }
+
+  private async prepareImage(
+    file: File,
+  ): Promise<{ readonly file: File; readonly width: number; readonly height: number; readonly url: string } | null> {
+    try {
+      const sanitized = await sanitizeImage(file);
+      const url = await readFileDataUrl(sanitized.file);
+      if (url === null) return null;
+      return { file: sanitized.file, width: sanitized.width, height: sanitized.height, url };
+    } catch {
+      return null;
+    }
   }
 
   private clearReplyState(): void {
@@ -198,19 +627,23 @@ export class Composer {
   private setReply(label: string, body: string): void {
     if (this.replyRegion === null) return;
     this.replyRegion.hidden = false;
-    this.replyRegion.innerHTML = html`<div class="composer-reply-text">
-        <span class="composer-reply-label">${label}</span><span class="composer-reply-body">${body}</span>
+    replaceHtml(
+      this.replyRegion,
+      html`<div class="composer-reply-text">
+        <span class="composer-reply-label" dir="auto">${label}</span
+        ><span class="composer-reply-body" dir="auto">${body}</span>
       </div>
       <button class="tray-remove" type="button" data-clear-reply aria-label="${t(this.c, "chat.cancelReply")}">
         ${icons.close}
-      </button>`.value;
+      </button>`,
+    );
   }
 
   showReply(message: MessageRow): void {
     if (this.editing !== null) this.leaveEditing();
     this.replyTo = message;
     this.setReply(t(this.c, "chat.replyingTo", { name: message.senderName }), message.body);
-    this.textarea?.focus();
+    this.input?.focus();
   }
 
   showEditing(message: MessageRow): void {
@@ -218,10 +651,11 @@ export class Composer {
     this.editing = message;
     this.replyTo = null;
     this.setReply(t(this.c, "chat.editing"), message.body);
-    const textarea = this.textarea;
-    if (textarea !== null) {
-      textarea.value = message.body;
-      textarea.focus();
+    const input = this.input;
+    if (input !== null) {
+      setComposerText(input, message.body);
+      input.focus();
+      placeCaretAtEnd(input);
     }
   }
 
@@ -230,12 +664,12 @@ export class Composer {
     const draft = this.preDraft ?? "";
     this.editing = null;
     this.preDraft = null;
-    if (this.textarea !== null) this.textarea.value = draft;
+    if (this.input !== null) setComposerText(this.input, draft);
     this.saveDraft();
   }
 
   cancelReply(): void {
-    const textarea = this.textarea;
+    const textarea = this.input;
     this.leaveEditing();
     this.clearReplyState();
     textarea?.focus();
@@ -248,14 +682,25 @@ export class Composer {
       this.trayRegion.replaceChildren();
       return;
     }
-    this.trayRegion.innerHTML = html`${this.tray.map(({ file, kind }, index) => {
-      const preview = this.previews.get(file);
-      return html`<div class="tray-item${preview === undefined ? "" : " has-thumb"}">
+    replaceHtml(
+      this.trayRegion,
+      html`${this.tray.map(({ file, kind }, index) => {
+        const preview = this.previews.get(file);
+        return html`<div class="tray-item${preview === undefined ? "" : " has-thumb"}">
         ${preview === undefined ? icons.file : html`<img class="tray-thumb" src="${preview}" alt="" data-tray-preview="${preview}" data-tray-name="${file.name}" />`}
         <span class="tray-text"
           ><span class="tray-name" dir="auto">${file.name}</span
           ><span class="tray-size"
-            >${t(this.c, kind === "image" ? "chat.media.image" : "chat.media.file")} ·
+            >${t(
+              this.c,
+              kind === "image"
+                ? "chat.media.image"
+                : kind === "video"
+                  ? "chat.media.video"
+                  : kind === "audio"
+                    ? "chat.media.audio"
+                    : "chat.media.file",
+            )} ·
             ${formatBytes(file.size)}</span
           ></span
         >
@@ -268,23 +713,25 @@ export class Composer {
           ${icons.close}
         </button>
       </div>`;
-    })}`.value;
+      })}`,
+    );
   }
 
   addFiles(files: readonly File[]): void {
     if (files.length === 0) return;
     const entries = files.map((file): TrayEntry => ({
       file,
-      kind: file.type.startsWith("image/") ? "image" : "file",
+      kind: fileKind(file),
     }));
     for (const { file } of entries) {
       if (!this.previews.has(file) && file.type.startsWith("image/")) {
         this.previews.set(file, URL.createObjectURL(file));
       }
     }
+    this.clearError();
     this.tray = [...this.tray, ...entries];
     this.renderTray();
-    this.textarea?.focus();
+    this.input?.focus();
   }
 
   removeTray(index: number): void {
@@ -292,22 +739,23 @@ export class Composer {
     const hadFocus = removeButton !== null && removeButton !== undefined && document.activeElement === removeButton;
     const removed = this.tray[index];
     if (removed !== undefined) this.releasePreview(removed.file);
+    this.clearError();
     this.tray = this.tray.filter((_entry, position) => position !== index);
     this.renderTray();
     if (hadFocus) {
       const buttons = this.trayRegion?.querySelectorAll<HTMLElement>("[data-tray-index]");
       const next = buttons?.[Math.min(index, (buttons?.length ?? 0) - 1)];
-      (next ?? this.textarea)?.focus();
+      (next ?? this.input)?.focus();
     }
   }
 
   insertEmoji(emoji: string): void {
-    const textarea = this.textarea;
-    if (textarea === null || emoji === "") return;
-    textarea.setRangeText(emoji, textarea.selectionStart, textarea.selectionEnd, "end");
+    const input = this.input;
+    if (input === null || emoji === "") return;
+    insertAtCaret(input, document.createTextNode(emoji));
     this.actions.recordEmoji(emoji);
     this.saveDraft();
-    textarea.focus();
+    input.focus();
     this.hide(SURFACE.emoji);
     this.hide(SURFACE.sticker);
   }
@@ -350,10 +798,21 @@ export class Composer {
   }
 
   async send(mode: "text" | "markdown"): Promise<void> {
-    const textarea = this.textarea;
+    if (this.sending) return;
+    this.setBusy(true);
+    this.clearError();
+    try {
+      await this.sendNow(mode);
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  private async sendNow(mode: "text" | "markdown"): Promise<void> {
+    const input = this.input;
     const roomId = this.roomId;
-    if (textarea === null || roomId === null) return;
-    const text = textarea.value.trim();
+    if (input === null || roomId === null) return;
+    const text = composerText(input).trim();
     const tray = [...this.tray];
     if (text === "" && tray.length === 0) return;
 
@@ -368,9 +827,9 @@ export class Composer {
         this.replyRegion.hidden = true;
         this.replyRegion.replaceChildren();
       }
-      if (textarea !== null) {
-        textarea.value = previous;
-        textarea.focus();
+      if (input !== null) {
+        setComposerText(input, previous);
+        input.focus();
       }
       this.saveDraft();
       return;
@@ -380,7 +839,7 @@ export class Composer {
       this.replyTo === null
         ? null
         : {
-            messageId: this.replyTo.id,
+            messageId: this.replyTo.eventId ?? this.replyTo.id,
             senderName: this.replyTo.senderName,
             body: this.replyTo.body === "" ? (this.replyTo.media?.name ?? "") : this.replyTo.body,
           };
@@ -392,11 +851,22 @@ export class Composer {
     for (const [index, entry] of tray.entries()) {
       const file = entry.file;
       if (entry.kind === "image") {
-        const url = await readFileDataUrl(file);
+        const prepared = await this.prepareImage(file);
+        if (prepared === null) {
+          this.showImageError();
+          return;
+        }
         rows.push(
           this.actions.createRow(roomId, "", {
             kind: "image",
-            media: { kind: "image", name: file.name, width: null, height: null, size: file.size, url },
+            media: {
+              kind: "image",
+              name: prepared.file.name,
+              width: prepared.width,
+              height: prepared.height,
+              size: prepared.file.size,
+              url: prepared.url,
+            },
             ts: now + index,
             status: "sending",
           }),
@@ -404,14 +874,15 @@ export class Composer {
       } else {
         rows.push(
           this.actions.createRow(roomId, "", {
-            kind: "file",
-            media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
+            kind: entry.kind,
+            media: mediaForFile(file, entry.kind),
             ts: now + index,
             status: "sending",
           }),
         );
       }
     }
+    if (this.roomId !== roomId) return;
     if (text !== "") {
       rows.push(
         this.actions.createRow(roomId, text, {
@@ -436,13 +907,13 @@ export class Composer {
   }
 
   private clearComposer(): void {
-    const textarea = this.textarea;
-    if (textarea !== null) textarea.value = "";
+    const input = this.input;
+    if (input !== null) setComposerText(input, "");
     if (this.roomId !== null) prefs.saveDraft(this.account, this.roomId, "");
     this.draftRoom = this.roomId;
     this.clearTray();
     this.clearReplyState();
-    textarea?.focus();
+    input?.focus();
   }
 
   private releasePreview(file: File): void {
@@ -472,23 +943,58 @@ export class Composer {
   handleFileInput(input: HTMLInputElement): void {
     const files = input.files;
     const roomId = this.roomId;
-    if (files !== null && files.length > 0 && roomId !== null) {
-      const now = Date.now();
-      this.actions.appendRows(
-        roomId,
-        Array.from(files, (file, index) =>
-          this.actions.createRow(roomId, "", {
-            kind: "file",
-            media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
-            ts: now + index,
-            status: "sending",
-          }),
-        ),
-      );
-    }
+    const selected = files === null ? [] : Array.from(files);
     input.value = "";
     this.hide(SURFACE.attach);
-    this.textarea?.focus();
+    this.input?.focus();
+    if (selected.length > 0 && roomId !== null) void this.sendAttachments(selected, roomId);
+  }
+
+  private async sendAttachments(files: readonly File[], roomId: string): Promise<void> {
+    if (this.sending) return;
+    this.setBusy(true);
+    this.clearError();
+    try {
+      const now = Date.now();
+      const rows: MessageRow[] = [];
+      for (const [index, file] of files.entries()) {
+        if (file.type.startsWith("image/")) {
+          const prepared = await this.prepareImage(file);
+          if (prepared === null) {
+            this.showImageError();
+            return;
+          }
+          rows.push(
+            this.actions.createRow(roomId, "", {
+              kind: "image",
+              media: {
+                kind: "image",
+                name: prepared.file.name,
+                width: prepared.width,
+                height: prepared.height,
+                size: prepared.file.size,
+                url: prepared.url,
+              },
+              ts: now + index,
+              status: "sending",
+            }),
+          );
+        } else {
+          const kind = fileKind(file);
+          rows.push(
+            this.actions.createRow(roomId, "", {
+              kind,
+              media: mediaForFile(file, kind),
+              ts: now + index,
+              status: "sending",
+            }),
+          );
+        }
+      }
+      if (rows.length > 0) this.actions.appendRows(roomId, rows);
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   handleClick(target: Element): boolean {

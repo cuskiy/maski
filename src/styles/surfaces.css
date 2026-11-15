@@ -50,18 +50,22 @@
     flex: none;
     display: grid;
     place-items: center;
-    inline-size: 2rem;
-    block-size: 2rem;
-    border-radius: var(--radius-sm);
-    background: var(--dialog-hover-bg);
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--dialog-ink) 7%, transparent);
     color: var(--dialog-ink);
-    font-size: var(--text-xl);
     transition: var(--control-transition);
+  }
+
+  .surface-close .icon {
+    inline-size: 0.625rem;
+    block-size: 0.625rem;
   }
 
   .surface-close:hover,
   .surface-close:focus-visible {
-    background: var(--dialog-active-bg);
+    background: color-mix(in srgb, var(--dialog-ink) 11%, transparent);
   }
 
   .surface-close:focus-visible {
@@ -105,6 +109,7 @@
   }
 
   .media-file {
+    position: relative;
     display: grid;
     aspect-ratio: 1;
     min-inline-size: 0;
@@ -112,19 +117,53 @@
     overflow: hidden;
     place-items: center;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--card-bg) 45%, var(--page) 55%);
+    background: var(--media-card-bg);
     color: var(--media-symbol-ink);
   }
 
-  .media-file img {
+  .media-file-image,
+  .media-file-video {
     inline-size: 100%;
     block-size: 100%;
     object-fit: cover;
+    opacity: 0%;
+    filter: blur(0.75rem);
+    transition:
+      opacity var(--duration) var(--ease),
+      filter var(--duration) var(--ease);
   }
 
-  .media-file > .icon {
-    inline-size: 42%;
-    block-size: 42%;
+  .media-file-image.is-loaded {
+    opacity: 100%;
+    filter: none;
+  }
+
+  .media-file.is-ready .media-file-video {
+    opacity: 100%;
+    filter: none;
+  }
+
+  .media-file-play {
+    position: absolute;
+    display: grid;
+    inline-size: 2rem;
+    block-size: 2rem;
+    place-items: center;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--page) 70%, transparent);
+    color: var(--dialog-ink);
+    opacity: 0%;
+    transition: opacity var(--duration) var(--ease);
+  }
+
+  .media-file.is-ready .media-file-play {
+    opacity: 100%;
+  }
+
+  .media-file-play .icon {
+    inline-size: 0.875rem;
+    block-size: 0.875rem;
+    margin-inline-start: 1px;
   }
 
   .media-files-list {
@@ -142,6 +181,18 @@
     border-radius: var(--radius-sm);
     color: var(--dialog-ink);
     text-align: start;
+    text-decoration: none;
+  }
+
+  .media-link-row .media-file-name {
+    color: var(--dialog-ink);
+  }
+
+  .media-link-row .media-file-meta {
+    max-inline-size: 10rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .media-file-row:hover {
@@ -247,13 +298,13 @@
     max-block-size: calc(100dvh - 2 * var(--overlay-inset));
     margin: auto;
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--dialog-bg) 82%, transparent);
-    backdrop-filter: blur(24px) saturate(1.08);
+    background: var(--viewer-stage-bg);
+    backdrop-filter: blur(var(--dialog-blur));
   }
 
   #surface-viewer::backdrop {
     background: var(--scrim);
-    backdrop-filter: blur(32px);
+    backdrop-filter: blur(var(--scrim-blur));
   }
 
   #surface-viewer:has(.viewer-preview.is-image) {
@@ -305,30 +356,25 @@
   }
 
   #surface-viewer .surface-close {
-    inline-size: 2rem;
-    block-size: 2rem;
-    border-radius: 50%;
-    background: var(--overlay-control-bg);
+    background: color-mix(in srgb, var(--dialog-ink) 7%, transparent);
     color: var(--dialog-ink);
-    font-size: var(--text-base);
   }
 
   #surface-viewer .surface-close:hover,
   #surface-viewer .surface-close:focus-visible {
-    background: var(--overlay-control-bg);
-    color: var(--overlay-control-ink);
-    backdrop-filter: blur(10px);
+    background: color-mix(in srgb, var(--dialog-ink) 11%, transparent);
+    color: var(--dialog-ink);
   }
 
-  #surface-settings .surface-head,
-  #surface-room-settings .surface-head {
+  #surface-settings > .surface-head,
+  #surface-room-settings > .surface-head {
     position: relative;
     isolation: isolate;
     background: var(--dialog-bg);
   }
 
-  #surface-settings .surface-head::before,
-  #surface-room-settings .surface-head::before {
+  #surface-settings > .surface-head::before,
+  #surface-room-settings > .surface-head::before {
     position: absolute;
     z-index: -1;
     inset-block: 0;
@@ -387,7 +433,7 @@
     flex: none;
     padding: var(--space-2);
     border-radius: var(--radius-sm);
-    color: var(--card-muted);
+    color: var(--card-ink);
     white-space: nowrap;
   }
 
@@ -446,10 +492,9 @@
   .settings-panels > .surface-section {
     display: none;
     gap: var(--space-3);
-    max-inline-size: 34rem;
-    padding: var(--space-4);
-    border-radius: var(--radius-lg);
-    background: var(--card-bg);
+    max-inline-size: 36rem;
+    padding: 0;
+    background: transparent;
     color: var(--card-ink);
   }
 
@@ -481,12 +526,18 @@
     justify-self: start;
     min-block-size: 2rem;
     padding-inline: var(--space-3);
-    background: var(--dialog-hover-bg);
+    background: var(--dialog-control-bg);
   }
 
   .settings-panels .surface-section .button-quiet:hover,
   .settings-panels .surface-section .button-quiet:focus-visible {
     background: var(--dialog-active-bg);
+  }
+
+  .settings-panels .surface-section .button-icon {
+    min-block-size: 2rem;
+    padding: 0;
+    background: var(--dialog-control-bg);
   }
 
   .settings-panels .surface-section .button-quiet.is-danger {
@@ -497,7 +548,7 @@
   }
 
   .settings-panels .surface-section > h4 {
-    margin-block-start: var(--space-3);
+    margin-block: var(--space-3) 0;
     color: var(--dialog-muted);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
@@ -526,9 +577,17 @@
     gap: var(--space-3);
   }
 
+  .room-settings-profile-fields {
+    display: grid;
+    flex: 1;
+    gap: var(--space-3);
+    min-inline-size: 0;
+  }
+
   .room-settings-avatar {
     display: grid;
     flex: none;
+    align-self: flex-start;
     inline-size: 4rem;
     block-size: 4rem;
     place-items: center;
@@ -539,11 +598,6 @@
     font-size: var(--text-xl);
     font-weight: var(--weight-strong);
     object-fit: cover;
-  }
-
-  .room-settings-field {
-    flex: 1;
-    min-inline-size: 0;
   }
 
   .room-topic-input {
@@ -564,31 +618,36 @@
   .address-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-2);
     min-inline-size: 0;
-    padding-inline-start: var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--dialog-field-bg);
   }
 
-  .address-row code {
+  .address-row .address-value {
+    display: block;
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: var(--field-height);
     overflow: hidden;
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--dialog-field-bg);
     color: var(--dialog-ink);
     font-size: var(--text-sm);
+    line-height: var(--field-height);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .address-row .button-quiet {
-    flex: none;
-    justify-content: center;
-    padding-inline: var(--space-2);
+  #surface-room-settings .address-row .button-icon {
+    background: transparent;
+  }
+
+  #surface-room-settings .address-row .button-icon:hover,
+  #surface-room-settings .address-row .button-icon:focus-visible {
     background: var(--dialog-hover-bg);
   }
 
-  .address-row .button-quiet:hover,
-  .address-row .button-quiet:focus-visible {
+  #surface-room-settings .address-row .button-icon:active {
     background: var(--dialog-active-bg);
   }
 
@@ -617,11 +676,6 @@
     max-inline-size: 16rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .room-id-line .button-quiet {
-    min-block-size: 1.75rem;
-    padding-inline: var(--space-1);
   }
 
   .member-tabs {
@@ -681,18 +735,19 @@
   .member-more {
     display: grid;
     flex: none;
-    inline-size: 1.75rem;
-    block-size: 1.75rem;
+    inline-size: 2rem;
+    block-size: 2rem;
+    margin-inline-end: var(--space-1);
     place-items: center;
-    border-radius: var(--radius-sm);
-    background: var(--dialog-hover-bg);
+    border-radius: 50%;
+    background: transparent;
     color: var(--dialog-muted);
     transition: var(--control-transition);
   }
 
   .member-more:hover,
   .member-more:focus-visible {
-    background: var(--dialog-active-bg);
+    background: transparent;
     color: var(--dialog-ink);
   }
 
@@ -708,7 +763,11 @@
 
   .device-list {
     display: grid;
-    gap: var(--space-1);
+    gap: 2px;
+    padding: 2px;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background: var(--dialog-field-bg);
   }
 
   .device-row {
@@ -718,7 +777,7 @@
     gap: var(--space-2);
     padding: var(--space-2);
     border-radius: var(--radius-sm);
-    background: var(--dialog-field-bg);
+    background: var(--dialog-bg);
   }
 
   .device-main {
@@ -728,6 +787,9 @@
   }
 
   .device-main strong {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -742,10 +804,19 @@
   }
 
   .device-verified {
-    color: var(--dialog-ink);
-    font-size: var(--text-xs);
-    font-weight: var(--weight-strong);
-    white-space: nowrap;
+    display: inline-grid;
+    flex: none;
+    inline-size: 1rem;
+    block-size: 1rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--verified-soft);
+    color: var(--verified);
+  }
+
+  .device-verified .icon {
+    inline-size: 0.7rem;
+    block-size: 0.7rem;
   }
 
   .license-list {
@@ -784,8 +855,17 @@
     min-block-size: 1.5rem;
   }
 
-  .reset-key-dialog {
-    inline-size: min(100% - 2 * var(--space-4), var(--dialog-width));
+  #reset-key-dialog {
+    inline-size: min(100% - 2 * var(--space-4), 26rem);
+  }
+
+  #reset-key-dialog .surface-body {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  #surface-room-invite {
+    inline-size: min(100% - 2 * var(--space-4), 26rem);
   }
 
   .reset-key-dialog .key-out {
@@ -805,6 +885,16 @@
     color: var(--dialog-ink);
   }
 
+  #surface-settings #settings-low-priority .profile-line {
+    padding: var(--space-2);
+    background: var(--dialog-row-bg);
+  }
+
+  #surface-settings #settings-low-priority .profile-line:hover,
+  #surface-settings #settings-low-priority .profile-line:focus-visible {
+    background: var(--dialog-active-bg);
+  }
+
   #surface-settings .settings-panels .profile-line .note {
     color: var(--dialog-muted);
   }
@@ -812,7 +902,7 @@
   .settings-panels .profile-line {
     padding: var(--space-3);
     border-radius: var(--radius-md);
-    background: var(--dialog-hover-bg);
+    background: var(--dialog-row-bg);
     color: var(--card-ink);
   }
 
@@ -848,8 +938,7 @@
 
     .settings-tabs {
       flex-direction: row;
-      overflow-x: auto;
-      overflow-y: hidden;
+      overflow: auto hidden;
       padding: var(--space-2) var(--space-3);
       background: var(--dialog-bg);
       color: var(--dialog-muted);
@@ -888,6 +977,7 @@
     inline-size: anchor-size(width);
     margin: 0 0 var(--space-2);
     border-radius: var(--radius-md);
+    background: var(--nav-menu-bg);
     position-anchor: --nav-account;
     position-area: top span-right;
     position-try-fallbacks: flip-block, flip-inline;
@@ -899,10 +989,7 @@
 
   #surface-nav-menu .surface-item:hover,
   #surface-nav-menu .surface-item:active {
-    background: light-dark(
-      color-mix(in srgb, var(--page) 55%, var(--nav-menu-bg)),
-      color-mix(in srgb, var(--ink) 8%, var(--nav-menu-bg))
-    );
+    background: light-dark(var(--surface-active), color-mix(in srgb, var(--ink) 14%, var(--nav-menu-bg)));
     color: var(--menu-ink);
   }
 
@@ -932,7 +1019,7 @@
     position-area: none;
     position-try-fallbacks: none;
     inset: auto;
-    inset-inline-start: var(--context-x, 0);
+    left: var(--context-x, 0);
     inset-block-start: var(--context-y, 0);
     margin: 0;
     transition: none;
@@ -1006,8 +1093,7 @@
     display: flex;
     flex: none;
     gap: 2px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
     padding-block: var(--space-2);
     scrollbar-width: none;
   }
@@ -1104,8 +1190,7 @@
     justify-content: flex-start;
     flex-wrap: nowrap;
     gap: 2px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
     padding: var(--space-2);
     scrollbar-width: none;
   }
@@ -1205,24 +1290,20 @@
     font-weight: var(--weight-strong);
   }
 
-  .surface .form {
-    gap: var(--space-2);
-  }
-
   .surface .button-primary {
     inline-size: 100%;
-    background: color-mix(in srgb, var(--dialog-ink) 14%, var(--dialog-bg));
+    background: var(--dialog-action-bg);
     color: var(--dialog-ink);
   }
 
   .surface .button-primary:hover {
-    background: color-mix(in srgb, var(--dialog-ink) 20%, var(--dialog-bg));
+    background: var(--dialog-action-hover-bg);
     color: var(--dialog-ink);
   }
 
   .surface .button-quiet:not(.is-danger) {
-    background: var(--dialog-hover-bg);
-    color: var(--dialog-muted);
+    background: var(--dialog-control-bg);
+    color: var(--dialog-ink);
   }
 
   .surface .button-quiet:not(.is-danger):hover,
@@ -1250,10 +1331,6 @@
   }
 
   .surface .input::placeholder {
-    color: var(--dialog-field-placeholder);
-  }
-
-  .surface .field:has(> select.input)::after {
     color: var(--dialog-field-placeholder);
   }
 
@@ -1297,7 +1374,7 @@
     inset: 0;
     inline-size: 100%;
     block-size: 100%;
-    opacity: 0;
+    opacity: 0%;
     cursor: pointer;
   }
 
@@ -1330,11 +1407,15 @@
   }
 
   .setting-row:has(> input[type="checkbox"]:checked)::before {
-    background: var(--dialog-ink);
+    background: var(--switch-on-bg);
   }
 
   .setting-row:has(> input[type="checkbox"]:checked)::after {
     transform: translate(0.875rem, -50%);
+  }
+
+  :dir(rtl) .setting-row:has(> input[type="checkbox"]:checked)::after {
+    transform: translate(-0.875rem, -50%);
   }
 
   .setting-row:has(> input[type="checkbox"]:focus-visible)::before {
@@ -1349,6 +1430,17 @@
     gap: var(--space-3);
     color: var(--dialog-ink);
     font-size: var(--text-sm);
+  }
+
+  .setting-stack {
+    display: grid;
+    gap: var(--space-1);
+    color: var(--dialog-ink);
+    font-size: var(--text-sm);
+  }
+
+  .setting-stack .field-label {
+    color: var(--dialog-muted);
   }
 
   .setting-value,
@@ -1371,8 +1463,8 @@
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--nav-avatar-bg);
-    color: var(--nav-avatar-ink);
+    background: var(--avatar-bg);
+    color: var(--dialog-muted);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     line-height: 1;
@@ -1386,8 +1478,16 @@
 
   .profile-text strong {
     overflow: hidden;
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .profile-text .note {
+    font-size: var(--text-sm);
+    line-height: 1.3;
   }
 
   .profile-card {
@@ -1428,9 +1528,11 @@
   }
 
   .member-list {
-    block-size: 12rem;
-    overflow-x: hidden;
-    overflow-y: auto;
+    block-size: fit-content;
+    max-block-size: 12rem;
+    overflow: hidden auto;
+    align-content: start;
+    grid-auto-rows: min-content;
     overscroll-behavior: contain;
     padding: var(--space-1);
     border-radius: var(--radius-md);
@@ -1484,9 +1586,9 @@
     align-items: center;
     gap: var(--space-2);
     min-inline-size: 0;
-    padding: var(--space-2);
-    border-radius: var(--radius-pill);
-    background: var(--dialog-hover-bg);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background: transparent;
     color: var(--dialog-ink);
     text-align: start;
     transition: var(--control-transition);
@@ -1494,7 +1596,7 @@
 
   .invite-person:hover,
   .invite-person:focus-visible {
-    background: var(--dialog-active-bg);
+    background: var(--dialog-hover-bg);
   }
 
   .invite-person .profile-avatar {
@@ -1509,16 +1611,29 @@
   }
 
   .invite-person-text strong,
-  .invite-person-text .note,
+  .invite-id,
   .invite-context {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .invite-context {
+  .invite-id {
     color: var(--dialog-muted);
     font-size: var(--text-xs);
+    line-height: 1.3;
+  }
+
+  .invite-person-text strong {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    line-height: 1.3;
+  }
+
+  .invite-context {
+    color: var(--dialog-muted);
+    font-size: var(--text-sm);
+    line-height: 1.3;
   }
 
   .invite-actions {
@@ -1677,7 +1792,7 @@
     border: 0;
     border-radius: var(--radius-md);
     background: var(--menu-bg);
-    color: var(--menu-ink);
+    color: var(--dialog-ink);
     backdrop-filter: blur(var(--float-blur));
     position-anchor: --search-scope-button;
     position-area: bottom span-right;
@@ -1696,7 +1811,7 @@
     overflow: hidden;
     padding: 0 var(--space-2);
     border-radius: var(--radius-sm);
-    color: var(--menu-ink);
+    color: var(--dialog-ink);
     font-size: var(--text-sm);
     text-align: start;
     text-overflow: ellipsis;
@@ -1705,7 +1820,7 @@
 
   .search-scope-option:hover,
   .search-scope-option[aria-selected="true"] {
-    background: var(--menu-hover-bg);
+    background: var(--dialog-active-bg);
   }
 
   .search-results {
@@ -1769,6 +1884,7 @@
     line-height: 1.45;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
+    user-select: all;
   }
 
   .sas-grid {
@@ -1811,16 +1927,10 @@
     inline-size: auto;
   }
 
-  .key-reveal {
-    display: grid;
-    gap: var(--space-2);
-    padding-block: var(--space-2);
-  }
-
   .key-out {
     padding: var(--space-2);
     border-radius: var(--radius-sm);
-    background: var(--dialog-hover-bg);
+    background: var(--dialog-field-bg);
     color: var(--card-ink);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
@@ -1850,6 +1960,7 @@
     place-items: center;
     gap: var(--space-3);
     overflow: auto;
+    background: var(--viewer-stage-bg);
     color: var(--dialog-ink);
   }
 
@@ -1901,12 +2012,12 @@
     color: var(--dialog-ink);
     font-size: var(--text-sm);
     text-align: center;
-    opacity: 0.72;
+    opacity: 72%;
   }
 
   .viewer-preview .note {
     color: var(--dialog-ink);
-    opacity: 0.62;
+    opacity: 62%;
   }
 
   .viewer-missing {
@@ -1919,17 +2030,17 @@
   .viewer-missing .icon {
     inline-size: 2rem;
     block-size: 2rem;
-    opacity: 0.7;
+    opacity: 70%;
   }
 
   @starting-style {
     .surface.modal[open],
-    .surface.floating:popover-open:not(#surface-language) {
-      opacity: 0;
+    .surface.floating:popover-open:not(:where(#surface-language)) {
+      opacity: 0%;
     }
 
     .surface.floating.is-context:popover-open {
-      opacity: 1;
+      opacity: 100%;
     }
   }
 

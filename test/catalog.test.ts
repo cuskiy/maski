@@ -13,6 +13,15 @@ void test("no catalog entry is empty", () => {
   for (const value of Object.values(zhCN)) assert.ok(value.length > 0);
 });
 
+const placeholders = (value: string): readonly string[] =>
+  [...value.matchAll(/\{([a-z]+)\}/gu)].map((match) => match[1] ?? "").toSorted();
+
+void test("every language uses the same placeholders per key", () => {
+  for (const key of Object.keys(en) as Array<keyof typeof en>) {
+    assert.deepEqual(placeholders(en[key]), placeholders(zhCN[key]), key);
+  }
+});
+
 void test("placeholders are substituted", () => {
   assert.equal(t({ ...en, "app.description": "Hello {name}" }, "app.description", { name: "Ada" }), "Hello Ada");
 });

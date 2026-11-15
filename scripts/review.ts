@@ -11,7 +11,7 @@ import type { Assets } from "../src/lib/assets.ts";
 import type { Locale } from "../src/catalogs/index.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const dist = join(root, "dist");
+const reviewDist = join(root, "review-dist");
 
 const REVIEW_LOCALES: ReadonlyArray<{ locale: Locale; path: string }> = [
   { locale: { id: "en", path: "/en/", catalog: en }, path: "/review/" },
@@ -29,11 +29,12 @@ export async function writeReview(): Promise<void> {
       title: view.title,
       description: view.description ?? "",
       canonical: path,
+      robots: "noindex, nofollow",
       alternates: [],
       assets,
       body: view.body,
     });
-    const file = join(dist, path.replace(/^\//u, ""), "index.html");
+    const file = join(reviewDist, path.replace(/^\//u, ""), "index.html");
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, await minify(document.value, minifyOptions));
   }

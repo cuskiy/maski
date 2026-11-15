@@ -2,6 +2,7 @@ import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
 import type { SurfaceKind } from "../core/surfaces.ts";
+import { icons } from "./icons.ts";
 
 export type { SurfaceKind } from "../core/surfaces.ts";
 
@@ -15,7 +16,7 @@ export interface SurfaceInput {
 }
 
 export function surfaceHead(c: Catalog, id: string, titleKey: CatalogKey): Html {
-  return html`<header class="surface-head"><h2 id="${id}-title">${t(c, titleKey)}</h2><button class="surface-close" type="button" commandfor="${id}" command="close" aria-label="${t(c, "surface.close")}">×</button></header>`;
+  return html`<header class="surface-head"><h2 id="${id}-title">${t(c, titleKey)}</h2><button class="surface-close" type="button" commandfor="${id}" command="close" aria-label="${t(c, "surface.close")}">${icons.close}</button></header>`;
 }
 
 export function surface({ c, id, titleKey, kind, manual = false, body }: SurfaceInput): Html {

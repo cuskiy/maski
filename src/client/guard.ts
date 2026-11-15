@@ -15,7 +15,7 @@ function showStorageNote(): void {
 }
 
 function run(): void {
-  const page = document.documentElement.dataset.page ?? "";
+  const page = document.documentElement.dataset["page"] ?? "";
   const pathname = location.pathname;
 
   if (page === "router") {
