@@ -1258,7 +1258,7 @@ This is the only current-status section; counts and claims in `advice.md`, `past
 old commits are evidence, not status.
 
 - `npm run check` is green: **188 tests**, 11 generated pages, 343 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 312.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- Build sizes: stylesheet 83.8 KiB, client 313.3 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1411,7 +1411,8 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
      schemes and no two-tab lock test.
    - Known: pure tests cover projection/outbox/capability/cache rules; Chromium headless checked the gate
      redirect, the single recovery form and hidden controls, the visible two-tab lock note, the media-files
-     dialog opening by message id and the topbar menu set.
+     dialog opening by message id, the topbar menu set and a room selection reusing the same navigation row
+     while updating active/aria state.
    - Ruled out: calling source regexes, a mock screenshot or a pure fake `SessionPort` a browser proof.
    - Next: commit the Playwright harness for start, login against a fake homeserver, sync, open, older,
      send, echo, receipt, decrypt success/failure, malformed command and two-tab lock; capture first-paint

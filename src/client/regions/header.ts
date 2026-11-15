@@ -14,7 +14,7 @@ interface HeaderInput {
 
 function setAvatar(target: HTMLElement, room: RoomSummary | null): void {
   const source = room === null ? null : safeAvatarUrl(room.avatar);
-  const key = room === null ? "" : `${room.roomId}\n${source ?? ""}`;
+  const key = room === null ? "" : `${room.roomId}\n${source ?? `text:${room.name}`}`;
   if (target.dataset["avatarKey"] === key) return;
   target.dataset["avatarKey"] = key;
   target.replaceChildren();

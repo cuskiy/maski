@@ -23,6 +23,42 @@ function cloneElement(element: Element): HTMLElement | null {
   return clone instanceof HTMLElement ? clone : null;
 }
 
+function patchAttributes(current: Element, next: Element): void {
+  for (const name of current.getAttributeNames()) {
+    if (!next.hasAttribute(name)) current.removeAttribute(name);
+  }
+  for (const name of next.getAttributeNames()) {
+    const value = next.getAttribute(name);
+    if (value !== null && current.getAttribute(name) !== value) current.setAttribute(name, value);
+  }
+}
+
+function patchButton(current: HTMLButtonElement, next: HTMLButtonElement): void {
+  patchAttributes(current, next);
+  for (const selector of [".room-avatar", ".room-text", ".room-side"] as const) {
+    const target = current.querySelector<HTMLElement>(selector);
+    const source = next.querySelector<HTMLElement>(selector);
+    if (target === null || source === null) continue;
+    if (!target.isEqualNode(source)) {
+      target.replaceChildren(...Array.from(source.childNodes, (node) => target.ownerDocument.importNode(node, true)));
+    }
+  }
+}
+
+function patchRow(current: HTMLElement, next: HTMLElement): HTMLElement {
+  patchAttributes(current, next);
+  const currentButton = current.querySelector<HTMLButtonElement>(":scope > button.room-main");
+  const nextButton = next.querySelector<HTMLButtonElement>(":scope > button.room-main");
+  if (currentButton !== null && nextButton !== null) patchButton(currentButton, nextButton);
+  const currentChildren = current.querySelector<HTMLOListElement>(":scope > ol.space-rows");
+  const nextChildren = next.querySelector<HTMLOListElement>(":scope > ol.space-rows");
+  if (currentChildren !== null && nextChildren !== null) {
+    patchAttributes(currentChildren, nextChildren);
+    reconcileRows(currentChildren, nextChildren);
+  }
+  return current;
+}
+
 function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void {
   const active = document.activeElement;
   const focusedRow =
@@ -36,6 +72,7 @@ function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void 
   }
   const fragment = document.createDocumentFragment();
   for (const desired of next.children) {
+    if (!(desired instanceof HTMLElement)) continue;
     const key = rowKey(desired);
     if (key === null) {
       if (desired instanceof HTMLElement && desired.classList.contains("room-skeleton")) {
@@ -44,8 +81,8 @@ function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void 
       continue;
     }
     const old = existing.get(key);
-    if (old !== undefined && old.isEqualNode(desired)) {
-      fragment.append(old);
+    if (old !== undefined) {
+      fragment.append(old.isEqualNode(desired) ? old : patchRow(old, desired));
       existing.delete(key);
       continue;
     }
