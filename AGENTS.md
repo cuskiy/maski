@@ -274,7 +274,7 @@ Raising one is a change to this file with the reason.
 - 设置开关关闭时圆点在左，开启时圆点在右；开启轨道使用纸面墨色。弹窗卡片的模糊弱于悬浮菜单和顶栏。
 - 设置的左侧导航是一整块纸；账号行只保留自己一层背景，右侧内容不再套第二层 section 卡。
 - 左侧激活 tab 使用比纸面更深的 card step；右侧标题区和内容区使用同一层 dialog paper。
-- 设置侧栏只比 dialog 纸略亮或略深；激活项使用细 indicator 加很淡的 tint，不做过亮的整块填充。
+- 设置侧栏只比 dialog 纸略亮或略深；激活项使用很淡的 tint，不加侧边竖线，也不做过亮的整块填充。
 - 房间设置复用同一套左侧纸、右侧 dialog 纸、激活 tab 和 flat section；不额外套 section 卡片。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。

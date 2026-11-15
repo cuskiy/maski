@@ -151,25 +151,11 @@
   }
 
   .settings-tabs a {
-    position: relative;
     flex: none;
     padding: var(--space-2);
     border-radius: var(--radius-sm);
     color: var(--card-muted);
     white-space: nowrap;
-    --settings-tab-active: 0;
-  }
-
-  .settings-tabs a::before {
-    position: absolute;
-    inset-block: 25%;
-    inset-inline-start: 0;
-    inline-size: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--card-ink);
-    content: "";
-    opacity: var(--settings-tab-active);
-    transition: opacity var(--duration) var(--ease);
   }
 
   .settings-tabs a[aria-current="true"],
@@ -205,7 +191,6 @@
     background: var(--settings-active-bg);
     color: var(--card-ink);
     font-weight: var(--weight-strong);
-    --settings-tab-active: 1;
   }
 
   .settings-tabs a:not([aria-current="true"]):hover,
