@@ -44,6 +44,7 @@ export class MockSource implements ChatSource {
   private readonly listeners = new Map<SourceEvent, Set<Listener>>();
   private readonly timers = new Set<number>();
   private readonly olderLoaded = new Set<string>();
+  private readonly forwarded = new Map<string, MessageRow[]>();
   private readonly state = mockChatState();
   private devices: readonly DeviceSession[] = [...mockDevices];
   private invites: readonly Invite[] = [...mockInvites];
@@ -85,7 +86,7 @@ export class MockSource implements ChatSource {
   open(roomId: string): void {
     this.emit("window", {
       roomId,
-      messages: this.withData ? mockMessagesFor(roomId) : [],
+      messages: this.withData ? [...mockMessagesFor(roomId), ...(this.forwarded.get(roomId) ?? [])] : [],
       hasOlder: this.withData,
       older: false,
     });
@@ -117,6 +118,9 @@ export class MockSource implements ChatSource {
   react(_roomId: string, _messageId: string, _key: string): void {}
   edit(_roomId: string, _messageId: string, _body: string, _html: string | null): void {}
   redact(_roomId: string, _messageId: string): void {}
+  forward(roomId: string, rows: readonly MessageRow[]): void {
+    this.forwarded.set(roomId, [...(this.forwarded.get(roomId) ?? []), ...rows]);
+  }
   typing(_roomId: string): void {}
 
   setNotification(_roomId: string, _mode: RoomSummary["notification"]): void {}

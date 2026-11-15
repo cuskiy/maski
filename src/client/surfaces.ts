@@ -288,6 +288,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         if (capabilities.redact) allowed.add("messageMenu.delete");
         if (capabilities.copy) allowed.add("messageMenu.copy");
         if (capabilities.copyLink) allowed.add("messageMenu.copyLink");
+        allowed.add("messageMenu.select");
         if (target !== null && target.own && target.status !== "sent") allowed.add("messageMenu.cancel");
         if (target !== null && target.own && target.status === "failed") allowed.add("messageMenu.retry");
       }
@@ -441,6 +442,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     else if (action === "messageMenu.copy") copy(target.body);
     else if (action === "messageMenu.copyLink")
       copy(`${location.origin}${location.pathname}#${target.roomId}/${target.id}`);
+    else if (action === "messageMenu.select") {
+      document.dispatchEvent(new CustomEvent("maski:select-message", { detail: { id: target.id } }));
+    }
     hide(SURFACE.messageMenu);
   }
 
@@ -481,6 +485,18 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       event.preventDefault();
       return;
     }
+
+    const trayPreview = target.closest<HTMLElement>("[data-tray-preview]");
+    if (trayPreview !== null) {
+      const url = trayPreview.dataset["trayPreview"];
+      if (url !== undefined && viewer instanceof HTMLDialogElement && !viewer.open) {
+        event.preventDefault();
+        showViewer(trayPreview.dataset["trayName"] ?? "", "image", url, c);
+        viewer.showModal();
+      }
+      return;
+    }
+
     if (composer.handleClick(target)) {
       event.preventDefault();
       return;
@@ -555,6 +571,17 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
     const profile = target.closest<HTMLElement>("[data-profile]");
     if (profile !== null) showProfile(profile.dataset["profile"] ?? "", profile.dataset["profileId"] ?? "");
+
+    const forwardRoom = target.closest<HTMLElement>("[data-forward-room]");
+    if (forwardRoom !== null) {
+      const dialog = document.getElementById(SURFACE.forward);
+      if (!(dialog instanceof HTMLDialogElement)) return;
+      const ids = (dialog.dataset["forwardIds"] ?? "").split(",").filter(Boolean);
+      actions.forward(ids, forwardRoom.dataset["forwardRoom"] ?? "");
+      dialog.close();
+      document.dispatchEvent(new CustomEvent("maski:selection-clear"));
+      return;
+    }
 
     const media = target.closest<HTMLElement>("[data-media-open]");
     if (media !== null) {
@@ -851,20 +878,32 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   };
   viewer?.addEventListener("close", onViewerClose);
 
-  const onDoubleClick = (event: MouseEvent): void => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const preview = target.closest<HTMLElement>("[data-tray-preview]");
-    if (preview === null || !(viewer instanceof HTMLDialogElement) || viewer.open) return;
-    const url = preview.dataset["trayPreview"];
-    if (url === undefined) return;
-    event.preventDefault();
-    showViewer(preview.dataset["trayName"] ?? "", "image", url, c);
-    viewer.showModal();
+  const openForward = (ids: readonly string[]): void => {
+    const dialog = document.getElementById(SURFACE.forward);
+    if (!(dialog instanceof HTMLDialogElement) || ids.length === 0) return;
+    const body = dialog.querySelector<HTMLElement>(`[data-region="${SURFACE.forward}-body"]`);
+    if (body === null) return;
+    dialog.dataset["forwardIds"] = ids.join(",");
+    body.innerHTML = surfaceBodyFor(c, SURFACE.forward, state()).value;
+    body.scrollTop = 0;
+    dialog.showModal();
+  };
+
+  const onForwardOpen = (event: Event): void => {
+    const ids = (event as CustomEvent<{ ids?: readonly string[] }>).detail?.ids ?? [];
+    openForward(ids);
+  };
+
+  const onReplyMessage = (event: Event): void => {
+    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+    if (id === undefined) return;
+    const target = message(id);
+    if (target !== null) composer.showReply(target);
   };
 
   document.addEventListener("click", onClick);
-  document.addEventListener("dblclick", onDoubleClick);
+  document.addEventListener("maski:forward-open", onForwardOpen);
+  document.addEventListener("maski:reply-message", onReplyMessage);
   document.addEventListener("submit", onSubmit);
   document.addEventListener("change", onChange);
   document.addEventListener("contextmenu", onContextMenu);
@@ -880,7 +919,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
   return () => {
     document.removeEventListener("click", onClick);
-    document.removeEventListener("dblclick", onDoubleClick);
+    document.removeEventListener("maski:forward-open", onForwardOpen);
+    document.removeEventListener("maski:reply-message", onReplyMessage);
     document.removeEventListener("submit", onSubmit);
     document.removeEventListener("change", onChange);
     document.removeEventListener("contextmenu", onContextMenu);

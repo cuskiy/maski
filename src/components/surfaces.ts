@@ -31,6 +31,7 @@ const MENU_ICONS = {
   "messageMenu.retry": icons.send,
   "messageMenu.copy": icons.copy,
   "messageMenu.copyLink": icons.link,
+  "messageMenu.select": icons.check,
 } as const satisfies Record<string, Html>;
 
 type MenuKey = keyof typeof MENU_ICONS;
@@ -83,6 +84,7 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
         "messageMenu.retry",
         "messageMenu.copy",
         "messageMenu.copyLink",
+        "messageMenu.select",
       ]);
     case SURFACE.profile:
       return html`<p class="note">${t(c, "surface.profile.empty")}</p>`;
@@ -94,6 +96,24 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
         </div>`;
     case SURFACE.viewer:
       return html`<p class="note">${t(c, "surface.viewer.empty")}</p>`;
+    case SURFACE.forward: {
+      const rooms = state.rooms.filter((room) => !room.isSpace);
+      if (rooms.length === 0) return html`<p class="note">${t(c, "surface.forward.empty")}</p>`;
+      return html`<p class="note">${t(c, "surface.forward.hint")}</p>
+        <div class="forward-list">
+          ${rooms.map(
+            (room) => html`<button class="forward-room" type="button" data-forward-room="${room.roomId}">
+              <span class="forward-avatar" aria-hidden="true"
+                >${room.avatar === null ? room.name.slice(0, 1) : html`<img src="${room.avatar}" alt="" />`}</span
+              >
+              <span class="forward-copy">
+                <span class="forward-name">${room.name}</span>
+                <span class="forward-topic">${room.topic}</span>
+              </span>
+            </button>`,
+          )}
+        </div>`;
+    }
     case SURFACE.attach:
       return html`<div class="surface-menu">
           <button class="surface-item" type="button" data-attach="image">

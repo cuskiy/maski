@@ -30,6 +30,7 @@ export const SURFACE = {
   reaction: "surface-reaction",
   sendMenu: "surface-send-menu",
   viewer: "surface-viewer",
+  forward: "surface-forward",
   confirm: "surface-confirm",
   language: "surface-language",
 } as const;

@@ -85,11 +85,15 @@
   }
 
   .room {
+    position: relative;
     min-inline-size: 0;
+    overflow: hidden;
     list-style: none;
   }
 
   .room-main {
+    position: relative;
+    z-index: 1;
     display: grid;
     grid-template-columns: var(--avatar) minmax(0, 1fr) auto;
     align-items: center;
@@ -100,7 +104,10 @@
     border-radius: 0.625rem;
     color: var(--nav-ink);
     text-align: start;
-    transition: var(--control-transition);
+    touch-action: pan-y;
+    transition:
+      var(--control-transition),
+      transform var(--duration) var(--ease);
   }
 
   .room-main:hover {
@@ -214,6 +221,52 @@
 
   .room.is-space.is-open .space-chevron {
     rotate: 90deg;
+  }
+
+  .room-main.is-swiping {
+    transition: none;
+  }
+
+  .room-swipe-hint {
+    position: absolute;
+    z-index: 0;
+    inset-block-start: 50%;
+    display: grid;
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--surface-active);
+    color: var(--ink);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: opacity var(--duration) var(--ease);
+  }
+
+  .room-swipe-hint.is-start {
+    inset-inline-start: var(--space-3);
+  }
+
+  .room-swipe-hint.is-end {
+    inset-inline-end: var(--space-3);
+  }
+
+  .room.is-swiping-right .room-swipe-hint.is-start,
+  .room.is-swiping-left .room-swipe-hint.is-end {
+    opacity: 1;
+  }
+
+  .room-swipe-hint .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .room-main,
+    .room-swipe-hint {
+      transition: none;
+    }
   }
 
   .room-skeleton {

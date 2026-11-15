@@ -41,6 +41,52 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
   const positions = messagePositions(state.messages);
   return html`<section class="timeline-region" data-region="${REGION.timeline}" data-read-receipt="${room?.readReceipt ?? ""}" aria-label="${t(c, "chat.title")}">
     <div class="timeline-wrap">
+      <div
+        class="selection-bar"
+        data-selection-bar
+        role="toolbar"
+        aria-label="${t(c, "selection.label")}"
+        hidden
+      >
+        <div class="selection-start">
+          <button
+            class="selection-button"
+            type="button"
+            data-selection-action="cancel"
+            aria-label="${t(c, "selection.cancel")}"
+            title="${t(c, "selection.cancel")}"
+          >
+            ${icons.close}
+          </button>
+          <span class="selection-count" data-selection-count></span>
+        </div>
+        <button class="selection-button selection-all" type="button" data-selection-action="all">
+          ${icons.check}<span>${t(c, "selection.all")}</span>
+        </button>
+        <div class="selection-end">
+          <button class="selection-button" type="button" data-selection-action="forward">
+            ${icons.forward}<span>${t(c, "selection.forward")}</span>
+          </button>
+          <button
+            class="selection-button"
+            type="button"
+            data-selection-action="copy"
+            aria-label="${t(c, "selection.copy")}"
+            title="${t(c, "selection.copy")}"
+          >
+            ${icons.copy}
+          </button>
+          <button
+            class="selection-button is-danger"
+            type="button"
+            data-selection-action="delete"
+            aria-label="${t(c, "selection.delete")}"
+            title="${t(c, "selection.delete")}"
+          >
+            ${icons.trash}
+          </button>
+        </div>
+      </div>
       <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state">
         ${stateNote(state, c)}
       </div>
@@ -167,7 +213,10 @@ function messageRow(
           <div class="message-line">${content}</div>
         </div>
         ${reactionsView(message, c)}
+        <span class="message-select-mark" aria-hidden="true">${icons.check}</span>
       </article>
+      <span class="message-swipe-hint is-start" aria-hidden="true">${icons.reply}</span>
+      <span class="message-swipe-hint is-end" aria-hidden="true">${icons.check}</span>
     </li>`;
 }
 

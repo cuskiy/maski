@@ -166,5 +166,7 @@ function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
         ${badge(room, c)}${room.muted ? muted(c) : html``}
       </span>
     </button>
+    <span class="room-swipe-hint is-start" aria-hidden="true">${icons.check}</span>
+    <span class="room-swipe-hint is-end" aria-hidden="true">${icons.mute}</span>
   </li>`;
 }

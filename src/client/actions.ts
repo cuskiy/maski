@@ -43,6 +43,7 @@ export interface Actions {
   react(messageId: string, key: string): void;
   edit(messageId: string, body: string, html: string | null): void;
   redact(messageId: string): void;
+  forward(messageIds: readonly string[], targetRoomId: string): void;
   discardMessage(messageId: string): void;
   retryMessage(messageId: string): void;
   recordEmoji(emoji: string): void;
@@ -268,6 +269,39 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.read("messages").filter((entry) => entry.id !== messageId),
       );
       source.redact(message.roomId, messageId);
+    },
+    forward(messageIds, targetRoomId) {
+      if (messageIds.length === 0) return;
+      const target = store.read("rooms").find((entry) => entry.roomId === targetRoomId);
+      if (target === undefined) return;
+      const wanted = new Set(messageIds);
+      const rows = store
+        .read("messages")
+        .filter((message) => wanted.has(message.id))
+        .map((message) =>
+          Object.assign({}, message, {
+            id: `local-forward-${crypto.randomUUID()}`,
+            roomId: targetRoomId,
+            reactions: [],
+            reply: null,
+            edited: false,
+            status: "sent" as const,
+            error: null,
+          }),
+        );
+      const last = rows.at(-1);
+      if (last === undefined) return;
+      source.forward(targetRoomId, rows);
+      updateRoom(targetRoomId, {
+        preview: {
+          kind: last.kind,
+          body: last.body === "" ? (last.media?.name ?? "") : last.body,
+        },
+        lastTs: last.ts,
+      });
+      if (store.read("roomId") === targetRoomId) {
+        store.write("messages", [...store.read("messages"), ...rows]);
+      }
     },
     discardMessage(messageId) {
       store.write(

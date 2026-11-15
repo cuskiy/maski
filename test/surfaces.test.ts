@@ -6,6 +6,7 @@ import { CHAT_SURFACES } from "../src/core/surfaces.ts";
 import { surfaceBodyFor } from "../src/components/surfaces.ts";
 import { ALL_EMOJI } from "../src/components/emoji.ts";
 import { en } from "../src/catalogs/en.ts";
+import { mockChatState } from "../src/core/mock.ts";
 
 void test("chat surfaces are unique and come from the shared id registry", () => {
   const ids = CHAT_SURFACES.map((surface) => surface.id);
@@ -52,4 +53,12 @@ void test("the sticker picker includes every emoji and the recent stickers", () 
   assert.match(markup, /data-sticker-panel="emoji"/u);
   assert.match(markup, /sticker-recent-grid/u);
   assert.equal((markup.match(/data-emoji=/gu) ?? []).length, ALL_EMOJI.length);
+});
+
+void test("the message menu supports selection and forwarding offers rooms", () => {
+  const state = mockChatState();
+  const menu = surfaceBodyFor(en, SURFACE.messageMenu, state).value;
+  assert.match(menu, /data-action="messageMenu.select"/u);
+  const forward = surfaceBodyFor(en, SURFACE.forward, state).value;
+  assert.match(forward, /data-forward-room="design"/u);
 });

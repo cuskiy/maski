@@ -82,7 +82,139 @@
     margin-block-start: 0;
   }
 
+  .selection-bar {
+    position: sticky;
+    inset-block-start: calc(var(--topbar-height) + var(--space-1));
+    z-index: 6;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2);
+    margin-block-end: var(--space-2);
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+    color: var(--card-ink);
+    backdrop-filter: blur(10px);
+  }
+
+  .selection-bar[hidden] {
+    display: none;
+  }
+
+  .selection-start,
+  .selection-end {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .selection-end {
+    justify-content: flex-end;
+  }
+
+  .selection-count {
+    overflow: hidden;
+    padding-inline: var(--space-1);
+    color: var(--card-ink);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .selection-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-block-size: 2rem;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--card-muted);
+    font-size: var(--text-sm);
+    line-height: 1;
+    white-space: nowrap;
+    transition: var(--control-transition);
+  }
+
+  .selection-button:hover,
+  .selection-button:focus-visible {
+    background: var(--card-hover-bg);
+    color: var(--card-ink);
+  }
+
+  .selection-button.is-danger {
+    color: var(--danger);
+  }
+
+  .selection-start .selection-button {
+    inline-size: 2rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .selection-button .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+  }
+
+  .timeline-region.is-selecting .message-inner {
+    cursor: pointer;
+  }
+
+  .message.is-selected .message-inner {
+    background: var(--surface-hover);
+  }
+
+  .message-select-mark {
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-end: 2px;
+    z-index: 1;
+    display: none;
+    inline-size: 1rem;
+    block-size: 1rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--card-bg);
+    color: var(--card-muted);
+  }
+
+  .timeline-region.is-selecting .message-select-mark {
+    display: grid;
+  }
+
+  .message.is-selected .message-select-mark {
+    background: var(--card-active-bg);
+    color: var(--card-ink);
+  }
+
+  .message-select-mark .icon {
+    inline-size: 0.625rem;
+    block-size: 0.625rem;
+    opacity: 0;
+  }
+
+  .message.is-selected .message-select-mark .icon {
+    opacity: 1;
+  }
+
+  @container (inline-size < 44rem) {
+    .selection-button span {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .message-inner,
+    .message-swipe-hint {
+      transition: none;
+    }
+  }
+
   .message {
+    position: relative;
     list-style: none;
     scroll-margin-block-start: 4rem;
     --bubble-radius: 0.875rem;
@@ -124,12 +256,59 @@
   }
 
   .message-inner {
+    position: relative;
+    z-index: 1;
     display: grid;
     grid-template-columns: var(--avatar) minmax(0, 1fr) var(--avatar);
     align-items: start;
     column-gap: var(--space-2);
     padding-block: 2px;
     border-radius: var(--radius-md);
+    touch-action: pan-y;
+    transition: transform var(--duration) var(--ease);
+  }
+
+  .message-inner.is-swiping {
+    transition: none;
+  }
+
+  .message-inner :is(button, a, img) {
+    touch-action: pan-y;
+  }
+
+  .message-swipe-hint {
+    position: absolute;
+    z-index: 0;
+    inset-block-start: 50%;
+    display: grid;
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--surface-active);
+    color: var(--ink);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: opacity var(--duration) var(--ease);
+  }
+
+  .message-swipe-hint.is-start {
+    inset-inline-start: var(--space-7);
+  }
+
+  .message-swipe-hint.is-end {
+    inset-inline-end: var(--space-7);
+  }
+
+  .message:has(.message-inner.is-swiping-right) .message-swipe-hint.is-start,
+  .message:has(.message-inner.is-swiping-left) .message-swipe-hint.is-end {
+    opacity: 1;
+  }
+
+  .message-swipe-hint .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
   }
 
   .message-avatar {

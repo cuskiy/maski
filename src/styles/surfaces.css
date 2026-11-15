@@ -67,6 +67,84 @@
     inline-size: min(100% - 2 * var(--space-4), var(--sas-width));
   }
 
+  #surface-forward {
+    inline-size: min(100% - 2 * var(--space-4), 26rem);
+    block-size: fit-content;
+    max-block-size: min(70dvh, 34rem);
+  }
+
+  #surface-forward .surface-body {
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .forward-list {
+    display: grid;
+    gap: 2px;
+    margin-block-start: var(--space-2);
+  }
+
+  .forward-room {
+    display: grid;
+    grid-template-columns: var(--avatar) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 2.5rem;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--dialog-ink);
+    text-align: start;
+    transition: var(--control-transition);
+  }
+
+  .forward-room:hover,
+  .forward-room:focus-visible {
+    background: var(--dialog-hover-bg);
+  }
+
+  .forward-avatar {
+    display: grid;
+    inline-size: var(--avatar);
+    block-size: var(--avatar);
+    place-items: center;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--field-bg);
+    color: var(--dialog-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .forward-avatar img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .forward-copy {
+    display: grid;
+    gap: 1px;
+    min-inline-size: 0;
+  }
+
+  .forward-name,
+  .forward-topic {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .forward-name {
+    color: var(--dialog-ink);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .forward-topic {
+    color: var(--dialog-muted);
+    font-size: var(--text-xs);
+  }
+
   #surface-viewer {
     inline-size: min(100% - 2 * var(--space-4), 36rem);
     max-inline-size: none;

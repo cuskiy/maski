@@ -285,9 +285,13 @@ Raising one is a change to this file with the reason.
 - emoji 与贴纸 tile 在亮色模式使用更浅的纸面。
 - 贴纸和 emoji 弹窗的 section 标题与 nav 增加上下间距。
 - 图片附件的删除 X 叠在右上角，不占一列；默认无背景，仅 hover 有背景。
-- 关闭控件使用 ink 深度语义，暗色模式更亮、浅色模式更暗；媒体窗口的关闭填充更弱。
+- 关闭控件默认无背景，只有 hover / focus 时显示 ink-based overlay 背景，不固定黑色。
+- 账号弹出的菜单在暗色模式使用比普通浮层更亮的纸面，便于和背景分开；浅色模式不变。
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
+- 输入区的图片缩略图单击即可打开预览。
+- 消息右键菜单提供多选；多选后顶栏下方出现工具栏，左侧取消和计数，中间全选，右侧转发、复制、删除。转发选择一个目标房间并写入该房间。
+- 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
@@ -425,7 +429,12 @@ messages carry no visible filename; their time is a gray chip over a soft, blurr
 A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
 media, with no blur. An opened image or video is a compact
 36rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
-button floats on the window, image previews shrink to the image, and video uses its native controls. The first unread message is scrolled into view
+button floats on the window, image previews shrink to the image, and video uses its native controls. Selection starts
+from the message menu or a left swipe; the toolbar below the topbar shows cancel and the count on the left,
+select all in the middle, and forward, copy, and delete on the right. Forwarding writes the selected rows into a
+chosen room; escape, a room switch, or an action leaves selection. Room rows swipe right to mark read and
+left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
+threshold while the row moves. The first unread message is scrolled into view
 without a row background. The message avatar is a complete circle on the last message of a sender group, aligned to the
 group's bottom while the sender name is on the first, never clipped by `content-visibility` paint
 containment. Reactions occupy their own row below the message body, so the avatar aligns with the message,

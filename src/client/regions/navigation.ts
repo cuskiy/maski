@@ -3,6 +3,7 @@ import type { Catalog } from "../../lib/catalog.ts";
 import type { ChatState, SectionId } from "../../core/types.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
+import { bindSwipe } from "../swipe.ts";
 
 interface NavigationInput {
   readonly store: Store;
@@ -133,6 +134,17 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
 
   root.addEventListener("toggle", onToggle, true);
   root.addEventListener("click", onClick);
+  const unbindSwipe = bindSwipe(root, {
+    target: ".room-main[data-room]",
+    onSwipe: (element, direction) => {
+      const roomId = element.dataset["room"];
+      if (roomId === undefined) return;
+      const room = store.snapshot().rooms.find((entry) => entry.roomId === roomId);
+      if (room === undefined) return;
+      if (direction === "right" && (room.unread > 0 || room.highlight > 0)) actions.markRead(roomId);
+      if (direction === "left" && room.capabilities.mute) actions.toggleMute(roomId);
+    },
+  });
   const unsubscribe = store.watch(
     ["rooms", "roomsLoading", "roomId", "sections", "openSpaces", "session", "phase"],
     render,
@@ -140,6 +152,7 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
   render();
   return () => {
     unsubscribe();
+    unbindSwipe();
     root.removeEventListener("toggle", onToggle, true);
     root.removeEventListener("click", onClick);
   };
