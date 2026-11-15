@@ -1258,7 +1258,7 @@ This is the only current-status section; counts and claims in `advice.md`, `past
 old commits are evidence, not status.
 
 - `npm run check` is green: **194 tests**, 11 generated pages, 349 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.0 KiB, client 318.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- Build sizes: stylesheet 84.0 KiB, client 318.7 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
