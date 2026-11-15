@@ -583,13 +583,19 @@ export class MatrixSession implements SessionPort {
     const client = this.requireClient();
     const crypto = client.getCrypto();
     const own = client.getUserId();
-    if (crypto === undefined || own === null) throw new WorkerFailure("unavailable");
+    if (crypto === undefined || own === null) {
+      const failure = new WorkerFailure("unavailable");
+      this.emit({ type: "devices", payload: { devices: null, error: failure.code } });
+      throw failure;
+    }
     const current = client.getDeviceId();
     let response;
     try {
       response = await client.getDevices();
     } catch (error) {
-      throw this.transportFailure(error);
+      const failure = this.transportFailure(error);
+      this.emit({ type: "devices", payload: { devices: null, error: failure.code } });
+      throw failure;
     }
     const devices = await Promise.all(
       response.devices.map(async (device) => {
@@ -604,7 +610,7 @@ export class MatrixSession implements SessionPort {
         } satisfies DeviceSession;
       }),
     );
-    this.emit({ type: "devices", payload: devices });
+    this.emit({ type: "devices", payload: { devices, error: null } });
     return devices;
   }
 

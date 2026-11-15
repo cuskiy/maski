@@ -333,6 +333,7 @@ export interface ChatState {
   readonly sections: Readonly<Record<SectionId, SectionState>>;
   readonly notifications: NotificationPrefs;
   readonly devices: readonly DeviceSession[];
+  readonly devicesError: string | null;
   readonly invites: readonly Invite[];
   readonly members: readonly Member[];
   readonly membersLoading: boolean;

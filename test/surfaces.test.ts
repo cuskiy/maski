@@ -306,3 +306,10 @@ void test("closing an unanswered SAS surface sends no fake confirmation", () => 
   assert.match(markup, /commandfor="surface-sas"/u);
   assert.doesNotMatch(markup, /data-sas-action=(?:"confirm"|"accept")/u);
 });
+
+void test("a device-list failure is not rendered as an empty session list", () => {
+  const state = { ...mockChatState(), devices: [], devicesError: "network" };
+  const markup = surfaceBodyFor(en, SURFACE.settings, state).value;
+  assert.match(markup, /Could not load sessions/u);
+  assert.doesNotMatch(markup, /No devices/u);
+});

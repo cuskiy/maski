@@ -274,7 +274,11 @@ export interface EventMap {
     readonly patch: boolean;
   };
   readonly members: { readonly roomId: string; readonly members: readonly Member[] };
-  readonly devices: readonly DeviceSession[];
+  readonly devices: {
+    /** Null keeps the last known rows; the failure code explains why they are stale. */
+    readonly devices: readonly DeviceSession[] | null;
+    readonly error: FailureCode | null;
+  };
   readonly backup: BackupState;
   readonly invites: readonly Invite[];
   /** An ephemeral typing event replaces the whole user list; it is never stored. */
@@ -775,8 +779,16 @@ function isDeviceSession(value: unknown): value is DeviceSession {
   );
 }
 
-function isDevicesPayload(value: unknown): value is EventMap["devices"] {
+function isDeviceList(value: unknown): value is readonly DeviceSession[] {
   return isArrayOf(value, isDeviceSession);
+}
+
+function isDevicesPayload(value: unknown): value is EventMap["devices"] {
+  if (!isRecord(value)) return false;
+  return (
+    (value["devices"] === null || isArrayOf(value["devices"], isDeviceSession)) &&
+    (value["error"] === null || isFailureCode(value["error"]))
+  );
 }
 
 function isBackupState(value: unknown): value is BackupState {
@@ -953,7 +965,7 @@ export const REPLY_DATA_GUARDS: {
   discardSend: isNull,
   markRead: isNull,
   members: isNull,
-  devices: isDevicesPayload,
+  devices: isDeviceList,
   backupStatus: isBackupState,
   backupSetup: isBackupState,
   resetIdentity: isStringOrNull,

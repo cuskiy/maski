@@ -312,3 +312,16 @@ void test("the protocol parses SAS commands and rejects a malformed projection",
   assert.equal(REPLY_DATA_GUARDS.sasAccept(null), true);
   assert.equal(REPLY_DATA_GUARDS.sasAccept("null"), false);
 });
+
+void test("device events carry a list or a typed failure", () => {
+  assert.deepEqual(parseEvent({ type: "devices", payload: { devices: [], error: null } }), {
+    type: "devices",
+    payload: { devices: [], error: null },
+  });
+  assert.deepEqual(parseEvent({ type: "devices", payload: { devices: null, error: "network" } }), {
+    type: "devices",
+    payload: { devices: null, error: "network" },
+  });
+  assert.equal(parseEvent({ type: "devices", payload: [] }), null);
+  assert.equal(parseEvent({ type: "devices", payload: { devices: null, error: "bogus" } }), null);
+});

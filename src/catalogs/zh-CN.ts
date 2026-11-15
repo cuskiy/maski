@@ -181,6 +181,7 @@ export const zhCN = {
   "settings.download": "下载",
   "settings.deviceCurrent": "此设备",
   "settings.devicesEmpty": "没有设备。",
+  "settings.devicesFailed": "无法加载会话列表，请重试。",
   "surface.licenses": "第三方开源软件",
   "roomSettings.overview": "概况",
   "roomSettings.name": "名称",

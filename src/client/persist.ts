@@ -3,13 +3,14 @@ type Storage = Pick<StorageManager, "persist" | "persisted">;
 
 let requested: Promise<boolean> | undefined;
 
-export function requestPersistentStorage(storage: Storage | undefined): Promise<boolean> {
-  if (storage === undefined) return Promise.resolve(false);
-  return storage
-    .persisted()
-    .catch(() => false)
-    .then((already) => (already ? true : storage.persist()))
-    .catch(() => false);
+export async function requestPersistentStorage(storage: Storage | undefined): Promise<boolean> {
+  if (storage === undefined) return false;
+  try {
+    if (await storage.persisted()) return true;
+    return await storage.persist();
+  } catch {
+    return false;
+  }
 }
 
 /** One request per page; a failure is not retried on every surface mount. */

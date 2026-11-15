@@ -704,7 +704,12 @@ export function wireSources(store: Store, source: ChatSource): () => void {
         }
       });
     }),
-    source.on("devices", (devices) => store.write("devices", devices)),
+    source.on("devices", ({ devices, error }) =>
+      store.batch(() => {
+        if (devices !== null) store.write("devices", devices);
+        store.write("devicesError", error);
+      }),
+    ),
     source.on("backup", (backup) =>
       store.batch(() => {
         store.write("backupReady", backup.enabled && backup.trusted);

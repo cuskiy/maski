@@ -40,6 +40,7 @@ export function emptyChatState(): ChatState {
       level: "all",
     },
     devices: [],
+    devicesError: null,
     invites: [],
     members: [],
     membersLoading: false,

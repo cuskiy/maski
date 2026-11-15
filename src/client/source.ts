@@ -38,7 +38,10 @@ export interface SourceEvents {
   readonly members: { readonly roomId: string; readonly members: readonly Member[] };
   readonly typing: { readonly roomId: string; readonly userIds: readonly string[] };
   readonly phase: Phase;
-  readonly devices: readonly DeviceSession[];
+  readonly devices: {
+    readonly devices: readonly DeviceSession[] | null;
+    readonly error: FailureCode | null;
+  };
   readonly backup: BackupState;
   readonly invites: readonly Invite[];
   readonly connection: Connection;

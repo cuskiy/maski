@@ -749,8 +749,15 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
       }
       <h3>${t(c, "settings.sessions")}</h3>
       ${
+        state.devicesError === null
+          ? html``
+          : html`<p class="form-error" role="alert">${t(c, "settings.devicesFailed")}</p>`
+      }
+      ${
         state.devices.length === 0
-          ? html`<p class="note">${t(c, "settings.devicesEmpty")}</p>`
+          ? state.devicesError === null
+            ? html`<p class="note">${t(c, "settings.devicesEmpty")}</p>`
+            : html``
           : html`<ul class="device-list" role="list">
               ${state.devices.map(
                 (device) => html`<li class="device-row" data-device-id="${device.id}">

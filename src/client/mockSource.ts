@@ -154,7 +154,7 @@ export class MockSource implements ChatSource {
     this.emit("phase", "ready");
     this.emit("connection", "online");
     this.emit("rooms", { rooms: this.withData ? this.rooms : [], loading: false });
-    this.emit("devices", this.withData ? this.devices : []);
+    this.emit("devices", { devices: this.withData ? this.devices : [], error: null });
     this.emit("invites", this.withData ? this.invites : []);
   }
 
@@ -431,12 +431,12 @@ export class MockSource implements ChatSource {
 
   signOutDevice(deviceId: string): void {
     this.devices = this.devices.filter((device) => device.id !== deviceId || device.current);
-    this.emit("devices", this.devices);
+    this.emit("devices", { devices: this.devices, error: null });
   }
 
   signOutOthers(): void {
     this.devices = this.devices.filter((device) => device.current);
-    this.emit("devices", this.devices);
+    this.emit("devices", { devices: this.devices, error: null });
   }
 
   answerInvite(roomId: string, _accept: boolean): void {

@@ -184,6 +184,7 @@ export const en = {
   "settings.download": "Download",
   "settings.deviceCurrent": "This device",
   "settings.devicesEmpty": "No devices.",
+  "settings.devicesFailed": "Could not load sessions. Try again.",
   "surface.licenses": "Third-party software",
   "roomSettings.overview": "Overview",
   "roomSettings.name": "Name",

@@ -1257,8 +1257,8 @@ Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and 
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **188 tests**, 11 generated pages, 343 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 313.4 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **190 tests**, 11 generated pages, 344 catalog keys, 2 languages.
+- Build sizes: stylesheet 83.8 KiB, client 313.8 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1423,15 +1423,15 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
 
 9. **Command failure state is incomplete.**
    - Symptom: `open`, `older` and `members` can leave their visible loading state latched after a typed
-     failure or timeout; a failed device-list read is rendered as "No devices.", and several fire-and-forget
-     actions still convert a failure into silence.
-   - Known: the transport has timeouts and typed failure codes; `search`, media-file loading, sign-out and
-     the key page now surface their failures. A typed source failure event now clears the window, history
-     and member loading flags and shows the conversation failure note; other fire-and-forget actions still
-     have no per-command surface.
+     failure or timeout; several fire-and-forget actions still convert a failure into silence.
+   - Known: the transport has timeouts and typed failure codes; `search`, media-file loading, sign-out,
+     the key page and the device list now surface their failures. A typed source failure event clears the
+     window, history and member loading flags and shows the conversation failure note; the device event
+     carries either rows or a typed error and settings never renders an error as "No devices". Other
+     fire-and-forget actions still have no per-command surface.
    - Ruled out: treating a timeout as an empty result, a successful sign-out or a successful edit.
-   - Next: extend the typed failure event to the remaining commands, render a retry in the member/device
-     and action surfaces, and cover a forced rejection in the browser harness.
+   - Next: extend the typed failure event to the remaining commands, render a retry in the member and
+     action surfaces, and cover a forced rejection in the browser harness.
 
 ## 6.5 Migration order
 
