@@ -60,9 +60,13 @@
     position: absolute;
     inset-block-start: 2px;
     inset-inline-end: 2px;
+    background: none;
+    color: var(--media-ink);
+  }
+
+  .tray-item.has-thumb .tray-remove:hover {
     background: var(--overlay-control-bg);
     color: var(--overlay-control-ink);
-    backdrop-filter: blur(6px);
   }
 
   .tray-size {
@@ -222,7 +226,10 @@
   }
 
   .composer-input::placeholder {
+    overflow: hidden;
     color: var(--field-placeholder);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .composer-input:disabled {

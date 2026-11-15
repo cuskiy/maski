@@ -175,7 +175,7 @@ void test("media previews stay compact and the viewer can zoom", () => {
   assert.match(css, /\.tray-item\.has-thumb \.tray-remove\s*\{[^}]*position:\s*absolute/u);
   assert.match(css, /#surface-viewer \.surface-close\s*\{[^}]*background:\s*var\(--overlay-control-bg\)/u);
   assert.match(css, /#surface-viewer \.surface-close\s*\{[^}]*backdrop-filter:\s*blur/u);
-  assert.match(css, /#surface-viewer\s*\{[^}]*42rem/u);
+  assert.match(css, /#surface-viewer\s*\{[^}]*36rem/u);
   assert.match(css, /#surface-viewer \.surface-head\s*\{[^}]*position:\s*absolute/u);
   assert.match(css, /#surface-viewer \.surface-head h2\s*\{[^}]*clip-path:\s*inset\(50%\)/u);
 });

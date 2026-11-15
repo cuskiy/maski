@@ -281,8 +281,11 @@ Raising one is a change to this file with the reason.
 - 贴纸面板的 emoji tab 放全部 emoji，不再只放最近使用。
 - 图片和视频消息不显示文件名说明；时间使用灰色 chip；未加载前保留柔和的模糊环境底色。
 - 图片、视频、贴纸的时间气泡统一为右下角小 chip，不加模糊；图片附件的时间也落在右下角。
+- 输入框的房间 placeholder 保持一行，超长省略，不加书名号。
+- emoji 与贴纸 tile 在亮色模式使用更浅的纸面。
 - 贴纸和 emoji 弹窗的 section 标题与 nav 增加上下间距。
-- 图片附件的删除 X 叠在右上角，不占一列；关闭控件使用 ink 深度语义，暗色模式更亮、浅色模式更暗。
+- 图片附件的删除 X 叠在右上角，不占一列；默认无背景，仅 hover 有背景。
+- 关闭控件使用 ink 深度语义，暗色模式更亮、浅色模式更暗；媒体窗口的关闭填充更弱。
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
@@ -421,7 +424,7 @@ spacing is `space-3`; media timestamps sit inside the media at the bottom right 
 messages carry no visible filename; their time is a gray chip over a soft, blurred ambient placeholder.
 A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
 media, with no blur. An opened image or video is a compact
-42rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
+36rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
 button floats on the window, and video uses its native controls. The first unread message gets a full-row reveal background that clears after the
 reveal. The message avatar is a complete circle on the last message of a sender group, aligned to the
 group's bottom while the sender name is on the first, never clipped by `content-visibility` paint

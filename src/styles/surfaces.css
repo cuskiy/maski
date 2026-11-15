@@ -68,7 +68,7 @@
   }
 
   #surface-viewer {
-    inline-size: min(100% - 2 * var(--space-4), 42rem);
+    inline-size: min(100% - 2 * var(--space-4), 36rem);
     max-inline-size: none;
     block-size: fit-content;
     max-block-size: calc(100dvh - 2 * var(--overlay-inset));
@@ -1029,7 +1029,7 @@
     place-items: center;
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--card-bg);
+    background: color-mix(in srgb, var(--card-bg) 45%, var(--page) 55%);
     color: var(--card-ink);
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     font-size: clamp(1.5rem, 4vi, 1.9rem);

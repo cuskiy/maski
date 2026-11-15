@@ -216,7 +216,7 @@ export const zhCN = {
   "composer.remove": "移除",
   "composer.label": "消息",
   "composer.placeholder": "输入消息",
-  "composer.placeholderRoom": "发送消息到 «{room}»",
+  "composer.placeholderRoom": "发送消息到 {room}",
   "composer.send": "发送",
   "composer.attach": "添加附件",
   "composer.sticker": "贴纸",

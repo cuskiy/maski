@@ -216,7 +216,7 @@ export const en = {
   "composer.remove": "Remove",
   "composer.label": "Message",
   "composer.placeholder": "Write a message",
-  "composer.placeholderRoom": "Message «{room}»",
+  "composer.placeholderRoom": "Message {room}",
   "composer.send": "Send",
   "composer.attach": "Attach files",
   "composer.sticker": "Stickers",
