@@ -103,41 +103,31 @@
 
   .media-files-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: var(--space-1);
   }
 
   .media-file {
     display: grid;
-    gap: 4px;
+    aspect-ratio: 1;
     min-inline-size: 0;
     padding: 0;
+    overflow: hidden;
+    place-items: center;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--card-bg) 45%, var(--page) 55%);
     color: var(--dialog-muted);
-    text-align: start;
   }
 
-  .media-file img,
-  .media-file > .icon {
+  .media-file img {
     inline-size: 100%;
-    block-size: auto;
-    aspect-ratio: 1;
-    padding: 0;
-    border-radius: var(--radius-sm);
-    background: var(--field-bg);
+    block-size: 100%;
     object-fit: cover;
   }
 
   .media-file > .icon {
-    box-sizing: border-box;
-    padding: 28%;
-    color: var(--dialog-muted);
-  }
-
-  .media-file span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--text-xs);
+    inline-size: 42%;
+    block-size: 42%;
   }
 
   .media-files-list {

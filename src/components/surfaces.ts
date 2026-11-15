@@ -84,7 +84,6 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
                           ? icons.video
                           : icons.image
                     }
-                    <span>${message.media?.name ?? ""}</span>
                   </button>`,
               )}
             </div>`

@@ -291,7 +291,8 @@ Raising one is a change to this file with the reason.
 - 账号弹出的菜单在暗色模式使用与账号卡 hover 相同的纸面值，但用独立 token 书写；浅色模式不变。
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
-- 多选勾选按钮出现在左侧头像空隙、消息底部，绝对定位，不改变任何元素位置；点击整行或复选框都切换选中，选中背景圆角很小。
+- 多选勾选按钮出现在左侧头像空隙、消息底部，绝对定位，不改变任何元素位置；点击整行或复选框都切换选中，选中背景圆角很小、颜色很浅。
+- 媒体与文件弹窗中的媒体按钮不显示文件名，像 emoji tile 一样带独立背景并缩小为六列小方块。
 - 图片预览窗口再缩到 30rem 高约 20rem；放大在窗口内部滚动，不再撑大窗口。
 - 账号弹出菜单使用与账号卡 hover 相同的独立纸面值，但两者不共享变量。
 - 消息右键菜单提供多选；多选后顶栏下方出现独立按钮：左取消，中计数，右全选、删除、分享，分享最右。按钮不再共用一条有颜色的栏；删除先弹确认，顶栏房间菜单仍在最上层。
@@ -442,7 +443,9 @@ from the message menu or a left swipe; the toolbar sits directly below the topba
 the left, count in the middle, and select all, delete, share on the right, with share last. The topbar room menu
 stays above it, delete opens the confirm dialog, and share writes the selected rows into the chosen room; escape,
 a room switch, or an action leaves selection. A selection check appears in the left gutter at the row bottom,
-absolutely positioned so no element moves; the full row toggles it, and a selected row gets a small radius.
+absolutely positioned so no element moves; the full row toggles it, the selected message body gets a small
+radius and a five percent ink wash, and the check stays outside that wash. Media tiles in the media dialog
+hide names, use the emoji tile paper, and sit in six small columns.
 Room rows swipe right to mark read and
 left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
 threshold while the row moves. The first unread message is scrolled into view

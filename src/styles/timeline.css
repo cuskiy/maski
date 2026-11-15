@@ -161,9 +161,9 @@
     cursor: pointer;
   }
 
-  .message.is-selected .message-inner {
+  .message.is-selected .message-body {
     border-radius: var(--radius-xs);
-    background: var(--surface-hover);
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
   }
 
   .message-select-mark {
