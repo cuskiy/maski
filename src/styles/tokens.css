@@ -63,6 +63,7 @@
     --bubble-meta-ink: color-mix(in srgb, var(--bubble-ink) 58%, var(--bubble) 42%);
 
     --menu-bg: var(--float);
+    --nav-menu-bg: light-dark(rgb(253 253 253 / 88%), color-mix(in srgb, var(--ink) 16%, var(--float)));
     --menu-ink: var(--ink);
     --menu-muted: var(--ink-3);
     --menu-hover-bg: var(--menu-hover);

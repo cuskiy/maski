@@ -173,9 +173,10 @@ void test("media previews stay compact and the viewer can zoom", () => {
   assert.match(css, /\.media-footer \.bubble-meta\s*\{[^}]*var\(--media-watermark-bg\)/u);
   assert.match(css, /\.reactions\s*\{[^}]*grid-row:\s*2/u);
   assert.match(css, /\.tray-item\.has-thumb \.tray-remove\s*\{[^}]*position:\s*absolute/u);
-  assert.match(css, /#surface-viewer \.surface-close\s*\{[^}]*background:\s*var\(--overlay-control-bg\)/u);
-  assert.match(css, /#surface-viewer \.surface-close\s*\{[^}]*backdrop-filter:\s*blur/u);
+  assert.match(css, /#surface-viewer \.surface-close:hover,[\s\S]*?background:\s*var\(--overlay-control-bg\)/u);
+  assert.match(css, /#surface-viewer \.surface-close:hover,[\s\S]*?backdrop-filter:\s*blur/u);
   assert.match(css, /#surface-viewer\s*\{[^}]*36rem/u);
+  assert.match(css, /#surface-viewer:has\(\.viewer-preview\.is-image\)\s*\{[^}]*inline-size:\s*fit-content/u);
   assert.match(css, /#surface-viewer \.surface-head\s*\{[^}]*position:\s*absolute/u);
   assert.match(css, /#surface-viewer \.surface-head h2\s*\{[^}]*clip-path:\s*inset\(50%\)/u);
 });
@@ -183,4 +184,8 @@ void test("media previews stay compact and the viewer can zoom", () => {
 void test("the account card swaps its default and hover papers", () => {
   assert.match(css, /\.nav-account\s*\{[^}]*background:\s*var\(--account-hover-bg\)/u);
   assert.match(css, /\.nav-account:hover\s*\{[^}]*background:\s*var\(--account-bg\)/u);
+});
+
+void test("the first unread row adds no background reveal", () => {
+  assert.doesNotMatch(css, /is-unread-reveal/u);
 });

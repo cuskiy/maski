@@ -267,7 +267,7 @@ Raising one is a change to this file with the reason.
 - 顶栏和左侧背景应是同一层，都可以有一点透明；左侧看不出来也没关系。顶栏最右侧菜单与顶栏底部、浏览器窗口右边都留一个一致的、比较小的间距。
 - 下方聊天区不限宽，应该和容器一样宽。
 - 文字气泡按内容收缩，不因为字少就撑满整列；气泡之间的间距稍大。reaction 的背景要更淡。
-- 点击有未读计数气泡的房间时，跳到最后一次已读的位置；第一条新消息的整行背景短暂显示 hover 效果，然后消失。
+- 点击有未读计数气泡的房间时，跳到最后一次已读的位置；不再给第一条新消息加整行背景高亮。
 - 所有图标换成一套新的、统一的图标；现在的图标不好看。
 - 所有弹窗和右侧顶栏都用背景高斯模糊；具体强度由实现规划。
 - 组件的背景与文字颜色独立：导航、账号卡、顶栏、气泡、菜单、对话框、输入框和卡片各自声明纸与文字角色；卡片不必共用同一个 ink，文字颜色根据它所在的背景推导。
@@ -425,8 +425,8 @@ messages carry no visible filename; their time is a gray chip over a soft, blurr
 A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
 media, with no blur. An opened image or video is a compact
 36rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
-button floats on the window, and video uses its native controls. The first unread message gets a full-row reveal background that clears after the
-reveal. The message avatar is a complete circle on the last message of a sender group, aligned to the
+button floats on the window, image previews shrink to the image, and video uses its native controls. The first unread message is scrolled into view
+without a row background. The message avatar is a complete circle on the last message of a sender group, aligned to the
 group's bottom while the sender name is on the first, never clipped by `content-visibility` paint
 containment. Reactions occupy their own row below the message body, so the avatar aligns with the message,
 not with the reaction row. A group chains its inner bubble corners: the first bubble's bottom-left, the middle bubbles'
@@ -581,8 +581,7 @@ a visible outline at a small offset; never removed except the composer textarea,
 focus ring. The danger token is the only semantic state color; every other paper and text token is a fixed
 sRGB value.
 
-Decorative motion is absent or at most a 120ms opacity/color/rotate change. The first unread reveal uses
-the surface-hover background and clears after the reveal; reduced motion removes any transition. A section
+Decorative motion is absent or at most a 120ms opacity/color/rotate change. A section
 collapses natively and immediately. Overlays fade without sliding, the skeleton is static, and the
 functional loaders — the router spinner and the pending message dots — are the only looping animations;
 reduced motion stops them.
@@ -774,7 +773,7 @@ Every layout refactor re-checks these against the before crop. They have regress
 | area | reference that must survive |
 |---|---|
 | grouped message | avatar on the last row; sender name on the first; inner bubble corners chain |
-| bubble | content fit to `--bubble-max`, message spacing, unread reveal, faint reaction chip |
+| bubble | content fit to `--bubble-max`, message spacing, faint reaction chip |
 | page | watermark tile under the chat, unchanged opacity and placement |
 | chrome | topbar/navigation glass, account card, popover and context-menu glass |
 | composer | action alignment, tray height, send button and input growth |

@@ -218,7 +218,7 @@ export class Composer {
     this.trayRegion.innerHTML = html`${this.tray.map((file, index) => {
       const preview = this.previews.get(file);
       return html`<div class="tray-item${preview === undefined ? "" : " has-thumb"}">
-        ${preview === undefined ? icons.file : html`<img class="tray-thumb" src="${preview}" alt="" />`}
+        ${preview === undefined ? icons.file : html`<img class="tray-thumb" src="${preview}" alt="" data-tray-preview="${preview}" data-tray-name="${file.name}" />`}
         <span class="tray-text"
           ><span class="tray-name">${file.name}</span><span class="tray-size">${formatBytes(file.size)}</span></span
         >

@@ -223,11 +223,6 @@
     background: var(--bubble-hover-bg);
   }
 
-  .message.is-unread-reveal .message-inner {
-    background: var(--surface-hover);
-    transition: background-color var(--duration) var(--ease);
-  }
-
   .message.is-system :is(.message-text, .bubble-meta) {
     color: var(--bubble-meta-ink);
   }

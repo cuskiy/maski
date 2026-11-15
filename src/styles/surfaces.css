@@ -83,6 +83,15 @@
     backdrop-filter: blur(32px);
   }
 
+  #surface-viewer:has(.viewer-preview.is-image) {
+    inline-size: fit-content;
+    max-inline-size: calc(100% - 2 * var(--space-4));
+  }
+
+  #surface-viewer:has(.viewer-preview.is-image) .viewer-preview {
+    min-block-size: 0;
+  }
+
   #surface-viewer .surface-head {
     position: absolute;
     inset-block-start: 0;
@@ -106,14 +115,19 @@
     inline-size: 2rem;
     block-size: 2rem;
     border-radius: 50%;
+    background: none;
+    color: var(--dialog-ink);
+    font-size: var(--text-base);
+  }
+
+  #surface-viewer .surface-close:hover,
+  #surface-viewer .surface-close:focus-visible {
     background: var(--overlay-control-bg);
     color: var(--overlay-control-ink);
-    font-size: var(--text-base);
     backdrop-filter: blur(10px);
   }
 
   #surface-viewer .surface-close:focus-visible {
-    background: color-mix(in srgb, var(--overlay-control-bg) 82%, var(--ink) 18%);
     outline-color: var(--media-ink);
   }
 
@@ -376,6 +390,10 @@
     position-anchor: --nav-account;
     position-area: top span-right;
     position-try-fallbacks: flip-block, flip-inline;
+  }
+
+  #surface-nav-menu {
+    background: var(--nav-menu-bg);
   }
 
   #surface-room-menu,

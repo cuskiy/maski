@@ -851,7 +851,20 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   };
   viewer?.addEventListener("close", onViewerClose);
 
+  const onDoubleClick = (event: MouseEvent): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const preview = target.closest<HTMLElement>("[data-tray-preview]");
+    if (preview === null || !(viewer instanceof HTMLDialogElement) || viewer.open) return;
+    const url = preview.dataset["trayPreview"];
+    if (url === undefined) return;
+    event.preventDefault();
+    showViewer(preview.dataset["trayName"] ?? "", "image", url, c);
+    viewer.showModal();
+  };
+
   document.addEventListener("click", onClick);
+  document.addEventListener("dblclick", onDoubleClick);
   document.addEventListener("submit", onSubmit);
   document.addEventListener("change", onChange);
   document.addEventListener("contextmenu", onContextMenu);
@@ -867,6 +880,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
   return () => {
     document.removeEventListener("click", onClick);
+    document.removeEventListener("dblclick", onDoubleClick);
     document.removeEventListener("submit", onSubmit);
     document.removeEventListener("change", onChange);
     document.removeEventListener("contextmenu", onContextMenu);

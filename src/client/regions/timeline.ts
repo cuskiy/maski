@@ -42,7 +42,7 @@ function stateRoom(state: ChatState): RoomSummary | null {
   return state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
 }
 
-const RUNTIME_CLASSES = ["is-multiline", "is-active", "is-holding", "is-unread-reveal"] as const;
+const RUNTIME_CLASSES = ["is-multiline", "is-active", "is-holding"] as const;
 
 function stableMarkup(element: HTMLElement): string {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -66,8 +66,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let activeRoomId = store.read("roomId");
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
-  let revealTimer: number | null = null;
-  let revealUnread = false;
   let readOnLoad = false;
 
   const updateJump = (): void => {
@@ -176,7 +174,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       activeRoomId = state.roomId;
       pendingRoomId = state.roomId;
       pinned = true;
-      revealUnread = true;
       readOnLoad = state.roomId !== null;
     }
     if (state.messages.length === 0 && state.roomId !== null) pendingRoomId = state.roomId;
@@ -202,21 +199,12 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(first.id)}"]`);
         if (row !== null) {
           wrap.scrollTop = Math.max(0, row.offsetTop - wrap.clientHeight / 2 + row.offsetHeight / 2);
-          if (revealUnread) {
-            if (revealTimer !== null) window.clearTimeout(revealTimer);
-            row.classList.add("is-unread-reveal");
-            revealTimer = window.setTimeout(() => {
-              row.classList.remove("is-unread-reveal");
-              revealTimer = null;
-            }, 900);
-          }
         }
         pinned = false;
       } else {
         wrap.scrollTop = wrap.scrollHeight;
         pinned = true;
       }
-      revealUnread = false;
       if (readOnLoad) {
         actions.markRead(roomId);
         readOnLoad = false;
@@ -273,6 +261,5 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     resizeObserver.disconnect();
     wrap.removeEventListener("scroll", onScroll);
     region.removeEventListener("click", onClick);
-    if (revealTimer !== null) window.clearTimeout(revealTimer);
   };
 }
