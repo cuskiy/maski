@@ -31,6 +31,8 @@
     --media-ambient: color-mix(in srgb, var(--ink) 5%, var(--card-bg));
     --media-watermark-bg: color-mix(in srgb, var(--page) 68%, transparent);
     --media-watermark-ink: color-mix(in srgb, var(--ink) 68%, transparent);
+    --overlay-control-bg: color-mix(in srgb, var(--ink) 15%, var(--card-bg));
+    --overlay-control-ink: var(--dialog-ink);
 
     --nav-ink: var(--ink);
     --nav-muted: color-mix(in srgb, var(--ink) 66%, var(--nav) 34%);

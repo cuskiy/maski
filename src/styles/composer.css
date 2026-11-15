@@ -26,9 +26,14 @@
   }
 
   .tray-item.has-thumb {
+    position: relative;
     gap: var(--space-2);
     max-inline-size: min(100%, 18rem);
     padding: 4px;
+  }
+
+  .tray-item.has-thumb .tray-text {
+    padding-inline-end: var(--space-4);
   }
 
   .tray-thumb {
@@ -52,7 +57,12 @@
   }
 
   .tray-item.has-thumb .tray-remove {
-    margin-inline-start: auto;
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-end: 2px;
+    background: var(--overlay-control-bg);
+    color: var(--overlay-control-ink);
+    backdrop-filter: blur(6px);
   }
 
   .tray-size {

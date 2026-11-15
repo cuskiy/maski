@@ -262,7 +262,7 @@
     margin-block-start: var(--space-2);
     padding: 5px var(--space-2);
     border-radius: var(--radius-md);
-    background: var(--account-bg);
+    background: var(--account-hover-bg);
     color: var(--account-ink);
     text-align: start;
     anchor-name: --nav-account;
@@ -270,7 +270,7 @@
   }
 
   .nav-account:hover {
-    background: var(--account-hover-bg);
+    background: var(--account-bg);
     color: var(--account-ink);
   }
 
@@ -281,7 +281,7 @@
 
   #surface-nav-menu:popover-open + .nav-account,
   body:has(#surface-language:popover-open) .nav-account {
-    background: var(--account-hover-bg);
+    background: var(--account-bg);
     color: var(--account-ink);
   }
 
