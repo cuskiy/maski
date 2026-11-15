@@ -263,6 +263,9 @@ export class WorkerSource implements ChatSource {
       case "devices":
         this.emit("devices", event.payload);
         break;
+      case "invites":
+        this.emit("invites", event.payload);
+        break;
       case "typing":
         this.emit("typing", event.payload);
         break;

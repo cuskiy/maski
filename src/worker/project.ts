@@ -6,7 +6,15 @@ import {
   type Room,
   type TimelineEvents,
 } from "matrix-js-sdk";
-import type { Member, MessageEncryption, MessageKind, MessageRow, Membership, RoomSummary } from "../core/types.ts";
+import type {
+  Invite,
+  Member,
+  MessageEncryption,
+  MessageKind,
+  MessageRow,
+  Membership,
+  RoomSummary,
+} from "../core/types.ts";
 import { DEFAULT_POWER_LEVELS } from "../core/permissions.ts";
 import { createRoom, isRoomJoinRule } from "../core/rooms.ts";
 import { isRecord } from "../lib/json.ts";
@@ -414,6 +422,39 @@ export function projectRoom(
     unread: 0,
     highlight: 0,
   });
+}
+
+export function projectInvites(client: MatrixClient): readonly Invite[] {
+  const ownUserId = client.getUserId();
+  if (ownUserId === null || ownUserId === undefined) return [];
+  const direct = directRooms(client);
+  const invites: Invite[] = [];
+  for (const room of client.getRooms()) {
+    if (room.getMyMembership() !== "invite") continue;
+    const summary = projectRoom(room, ownUserId, direct);
+    if (summary === null) continue;
+    const inviteEvent = room.getMember(ownUserId)?.events.member;
+    const inviterId = inviteEvent?.getSender() ?? "";
+    const inviter = room.getMember(inviterId)?.name ?? inviterId;
+    invites.push({
+      roomId: room.roomId,
+      name: summary.name,
+      topic: summary.topic,
+      avatar: summary.avatar,
+      inviter,
+      inviterId,
+      directUserId: summary.directUserId,
+      roomType: summary.roomType,
+      joinRule: summary.joinRule,
+      guestAccess: summary.guestAccess,
+      historyVisibility: summary.historyVisibility,
+      encryption: summary.encryption,
+      roomVersion: summary.roomVersion,
+      federated: summary.federated,
+      capabilities: { accept: true, decline: true },
+    });
+  }
+  return invites;
 }
 
 export function projectMembers(room: Room): readonly Member[] {

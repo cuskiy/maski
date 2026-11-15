@@ -2,6 +2,7 @@ import type {
   Connection,
   DeviceSession,
   GuestAccess,
+  Invite,
   KeyGate,
   Media,
   Member,
@@ -31,6 +32,9 @@ export const PROTOCOL_VERSION = 1;
 export type CommandName =
   | "start"
   | "login"
+  | "loginToken"
+  | "ssoUrl"
+  | "register"
   | "logout"
   | "keyStatus"
   | "recover"
@@ -87,6 +91,13 @@ export interface MediaReply {
 export interface CommandMap {
   readonly start: { readonly wasmUrl: string };
   readonly login: {
+    readonly homeserver: string;
+    readonly username: string;
+    readonly password: string;
+  };
+  readonly loginToken: { readonly homeserver: string; readonly token: string };
+  readonly ssoUrl: { readonly homeserver: string; readonly redirectUrl: string };
+  readonly register: {
     readonly homeserver: string;
     readonly username: string;
     readonly password: string;
@@ -174,6 +185,12 @@ export interface CommandMap {
   };
 }
 
+export interface RegisterResult {
+  readonly session: SessionSummary;
+  readonly recoveryKey: string | null;
+  readonly key: KeyStatus;
+}
+
 export interface StartData {
   readonly session: SessionSummary | null;
   readonly connection: Connection;
@@ -183,6 +200,9 @@ export interface StartData {
 export interface ReplyData {
   readonly start: StartData;
   readonly login: SessionSummary;
+  readonly loginToken: SessionSummary;
+  readonly ssoUrl: string;
+  readonly register: RegisterResult;
   readonly logout: null;
   readonly keyStatus: KeyStatus;
   readonly recover: KeyStatus;
@@ -229,6 +249,7 @@ export interface EventMap {
   };
   readonly members: { readonly roomId: string; readonly members: readonly Member[] };
   readonly devices: readonly DeviceSession[];
+  readonly invites: readonly Invite[];
   /** An ephemeral typing event replaces the whole user list; it is never stored. */
   readonly typing: { readonly roomId: string; readonly userIds: readonly string[] };
   readonly connection: Connection;
@@ -270,6 +291,9 @@ export type Event = {
 const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "start",
   "login",
+  "loginToken",
+  "ssoUrl",
+  "register",
   "logout",
   "keyStatus",
   "recover",
@@ -321,6 +345,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
   "window",
   "members",
   "devices",
+  "invites",
   "typing",
   "connection",
   "outbox",
@@ -533,6 +558,15 @@ function isStartData(value: unknown): value is StartData {
   );
 }
 
+function isRegisterResult(value: unknown): value is RegisterResult {
+  return (
+    isRecord(value) &&
+    isSessionSummary(value["session"]) &&
+    isStringOrNull(value["recoveryKey"]) &&
+    isKeyStatus(value["key"])
+  );
+}
+
 function isPreview(value: unknown): value is Preview {
   return isRecord(value) && (value["kind"] === "error" || isMessageKind(value["kind"])) && isText(value["body"]);
 }
@@ -688,6 +722,34 @@ function isDevicesPayload(value: unknown): value is EventMap["devices"] {
   return isArrayOf(value, isDeviceSession);
 }
 
+function isInvite(value: unknown): value is Invite {
+  if (!isRecord(value)) return false;
+  const capabilities = value["capabilities"];
+  return (
+    isRoomId(value["roomId"]) &&
+    isText(value["name"]) &&
+    isText(value["topic"]) &&
+    isStringOrNull(value["avatar"]) &&
+    isText(value["inviter"]) &&
+    isString(value["inviterId"]) &&
+    isStringOrNull(value["directUserId"]) &&
+    isStringOrNull(value["roomType"]) &&
+    isJoinRule(value["joinRule"]) &&
+    isGuestAccess(value["guestAccess"]) &&
+    isHistoryVisibility(value["historyVisibility"]) &&
+    isRoomEncryption(value["encryption"]) &&
+    isText(value["roomVersion"]) &&
+    isBoolean(value["federated"]) &&
+    isRecord(capabilities) &&
+    isBoolean(capabilities["accept"]) &&
+    isBoolean(capabilities["decline"])
+  );
+}
+
+function isInvitesPayload(value: unknown): value is EventMap["invites"] {
+  return isArrayOf(value, isInvite);
+}
+
 function isRoomsPayload(value: unknown): value is EventMap["rooms"] {
   return isRecord(value) && isArrayOf(value["rooms"], isRoomSummary) && isBoolean(value["loading"]);
 }
@@ -784,6 +846,9 @@ export const REPLY_DATA_GUARDS: {
 } = {
   start: isStartData,
   login: isSessionSummary,
+  loginToken: isSessionSummary,
+  ssoUrl: isString,
+  register: isRegisterResult,
   logout: isNull,
   keyStatus: isKeyStatus,
   recover: isKeyStatus,
@@ -848,6 +913,8 @@ export function parseEvent(value: unknown): Event | null {
       return isMembersPayload(payload) ? { type, payload } : null;
     case "devices":
       return isDevicesPayload(payload) ? { type, payload } : null;
+    case "invites":
+      return isInvitesPayload(payload) ? { type, payload } : null;
     case "typing":
       return isTypingPayload(payload) ? { type, payload } : null;
     case "connection":
@@ -877,6 +944,24 @@ function validLogin(fields: Record<string, unknown>): fields is CommandMap["logi
     fields["username"].length <= 255 &&
     fields["password"].length <= 4096 &&
     fields["homeserver"].length <= 2048
+  );
+}
+
+function validLoginToken(fields: Record<string, unknown>): fields is CommandMap["loginToken"] {
+  return (
+    isString(fields["homeserver"]) &&
+    fields["homeserver"].length <= 2048 &&
+    isString(fields["token"]) &&
+    fields["token"].length <= 8192
+  );
+}
+
+function validSsoUrl(fields: Record<string, unknown>): fields is CommandMap["ssoUrl"] {
+  return (
+    isString(fields["homeserver"]) &&
+    fields["homeserver"].length <= 2048 &&
+    isString(fields["redirectUrl"]) &&
+    fields["redirectUrl"].length <= 2048
   );
 }
 
@@ -1104,6 +1189,31 @@ export function parseCommand(value: unknown): Command | null {
       if (!validStart(fields)) return null;
       return { id, type, payload: { wasmUrl: fields.wasmUrl } };
     case "login":
+      if (!validLogin(fields)) return null;
+      return {
+        id,
+        type,
+        payload: {
+          homeserver: fields.homeserver,
+          username: fields.username,
+          password: fields.password,
+        },
+      };
+    case "loginToken":
+      if (!validLoginToken(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { homeserver: fields.homeserver, token: fields.token },
+      };
+    case "ssoUrl":
+      if (!validSsoUrl(fields)) return null;
+      return {
+        id,
+        type,
+        payload: { homeserver: fields.homeserver, redirectUrl: fields.redirectUrl },
+      };
+    case "register":
       if (!validLogin(fields)) return null;
       return {
         id,

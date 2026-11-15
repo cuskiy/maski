@@ -27,12 +27,15 @@ export const en = {
   "auth.login.network": "The homeserver could not be reached. Check the address and connection.",
   "auth.login.unavailable": "The encryption worker is not available.",
   "auth.login.sso": "Continue with SSO",
-  "auth.login.ssoUnavailable": "SSO needs the browser callback flow and is not available yet.",
+  "auth.login.ssoFailed": "SSO sign-in could not start. Check the homeserver and try again.",
   "auth.login.register": "Create an account",
   "auth.links": "Account",
 
   "auth.register.title": "Create an account",
-  "auth.register.unavailable": "Registration is not available in this build yet.",
+  "auth.register.confirm": "Password again",
+  "auth.register.mismatch": "The passwords do not match.",
+  "auth.register.submit": "Create account",
+  "auth.register.failed": "The homeserver requires a registration step this client does not support.",
   "auth.register.existing": "I already have an account",
 
   "auth.key.title": "Set up encryption",

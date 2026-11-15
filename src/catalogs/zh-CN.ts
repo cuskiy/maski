@@ -27,12 +27,15 @@ export const zhCN = {
   "auth.login.network": "无法连接主服务器。请检查地址和网络。",
   "auth.login.unavailable": "加密 worker 不可用。",
   "auth.login.sso": "使用 SSO 继续",
-  "auth.login.ssoUnavailable": "SSO 需要浏览器回调和状态校验，目前还不可用。",
+  "auth.login.ssoFailed": "无法开始 SSO 登录。请检查主服务器后重试。",
   "auth.login.register": "注册",
   "auth.links": "账户",
 
   "auth.register.title": "注册",
-  "auth.register.unavailable": "这个构建还不能注册账户。",
+  "auth.register.confirm": "再输一次密码",
+  "auth.register.mismatch": "两次输入的密码不一致。",
+  "auth.register.submit": "创建账户",
+  "auth.register.failed": "主服务器要求一个此客户端尚不支持的注册步骤。",
   "auth.register.existing": "我已有账户",
 
   "auth.key.title": "设置加密密钥",

@@ -2,6 +2,7 @@ import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
 import { authLayout } from "../layouts/auth.ts";
 import { field, submit } from "../components/form.ts";
+import { surfaceHead } from "../components/surface.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
 export function keyView({ locale }: PageContext): PageView {
@@ -19,7 +20,31 @@ export function keyView({ locale }: PageContext): PageView {
             <p class="field-hint" data-key-status hidden></p>
             ${submit(t(c, "auth.key.unlock"))}
           </form>
-        </div>`,
+          <form class="form" method="post" data-flow="reset">
+            <p class="field-hint">${t(c, "settings.resetIdentityConfirm")}</p>
+            ${field({ id: "reset-password", label: t(c, "auth.password"), type: "password", autocomplete: "current-password", required: true })}
+            <button class="button-quiet is-danger" type="submit">${t(c, "settings.resetIdentity")}</button>
+          </form>
+        </div>
+        <dialog
+          id="key-reset-dialog"
+          class="surface modal reset-key-dialog"
+          closedby="none"
+          aria-labelledby="key-reset-dialog-title"
+        >
+          ${surfaceHead(c, "key-reset-dialog", "settings.newRecoveryKey")}
+          <div class="surface-body">
+            <p class="note">${t(c, "settings.recoveryOnce")}</p>
+            <p class="key-out" data-key-reset-value></p>
+            <div class="key-actions">
+              <button class="button-quiet" type="button" data-key-reset-copy>${t(c, "settings.copy")}</button>
+              <button class="button-quiet" type="button" data-key-reset-download>${t(c, "settings.download")}</button>
+            </div>
+            <div class="confirm-actions">
+              <button class="button-primary" type="button" data-key-reset-continue>${t(c, "settings.done")}</button>
+            </div>
+          </div>
+        </dialog>`,
       note: t(c, "noscript.key"),
     }),
   };

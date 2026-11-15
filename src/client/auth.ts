@@ -48,68 +48,213 @@ function initServer(c: Catalog, locale: LocaleId): void {
   });
 }
 
+function destination(gate: string, locale: LocaleId): string {
+  return gate === "ready" || gate === "unknown" ? localeRoot(locale) : `${localeRoot(locale)}key/`;
+}
+
+async function finishLogin(
+  transport: MatrixTransport,
+  session: { readonly userId: string },
+  locale: LocaleId,
+): Promise<void> {
+  setAccount(session.userId);
+  const gate = await transport.keyStatus();
+  setGate(gate);
+  transport.dispose();
+  navigate(destination(gate, locale));
+}
+
+function loginError(c: Catalog, error: unknown): string {
+  const code = error instanceof Error ? error.message : "";
+  if (code === "network") return t(c, "auth.login.network");
+  if (code === "unavailable") return t(c, "auth.login.unavailable");
+  return t(c, "auth.login.failed");
+}
+
 function initLogin(c: Catalog, locale: LocaleId): void {
+  const passwordField = input("password");
   const loginForm = form("login");
   if (loginForm !== null) {
     const username = input("username");
-    const password = input("password");
     username?.addEventListener("input", () => username.setCustomValidity(""));
-    password?.addEventListener("input", () => password.setCustomValidity(""));
+    passwordField?.addEventListener("input", () => passwordField.setCustomValidity(""));
     loginForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (username === null || password === null || !loginForm.reportValidity()) return;
-      password.setCustomValidity("");
+      if (username === null || passwordField === null || !loginForm.reportValidity()) return;
+      passwordField.setCustomValidity("");
       const submit = loginForm.querySelector<HTMLButtonElement>('button[type="submit"]');
       if (submit !== null) submit.disabled = true;
-
-      const workerUrl = document.querySelector<HTMLMetaElement>('meta[name="matrix-worker"]')?.content;
-      const wasmUrl = document.querySelector<HTMLMetaElement>('meta[name="crypto-wasm"]')?.content;
-      if (workerUrl === undefined || wasmUrl === undefined || workerUrl === "" || wasmUrl === "") {
-        password.setCustomValidity(t(c, "auth.login.failed"));
-        password.reportValidity();
+      const transport = keyTransport();
+      if (transport === null) {
+        passwordField.setCustomValidity(t(c, "auth.login.unavailable"));
+        passwordField.reportValidity();
         if (submit !== null) submit.disabled = false;
         return;
       }
-
-      const transport = new MatrixTransport(workerUrl, wasmUrl);
       void transport
         .start()
         .then(() =>
           transport.login({
             homeserver: mockSession().server ?? config.homeserver.default,
             username: username.value.trim(),
-            password: password.value,
+            password: passwordField.value,
           }),
         )
-        .then(async (session) => {
-          setAccount(session.userId);
-          const gate = await transport.keyStatus();
-          setGate(gate);
-          transport.dispose();
-          navigate(gate === "ready" || gate === "unknown" ? localeRoot(locale) : `${localeRoot(locale)}key/`);
-        })
+        .then((session) => finishLogin(transport, session, locale))
         .catch((error: unknown) => {
           transport.dispose();
-          const code = error instanceof Error ? error.message : "";
-          const message =
-            code === "network"
-              ? t(c, "auth.login.network")
-              : code === "unavailable"
-                ? t(c, "auth.login.unavailable")
-                : t(c, "auth.login.failed");
-          password.setCustomValidity(message);
-          password.reportValidity();
+          passwordField.setCustomValidity(loginError(c, error));
+          passwordField.reportValidity();
           if (submit !== null) submit.disabled = false;
         });
     });
   }
 
+  const token = new URL(location.href).searchParams.get("loginToken");
+  if (token !== null) {
+    const clean = new URL(location.href);
+    clean.searchParams.delete("loginToken");
+    history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
+    const transport = keyTransport();
+    if (transport === null) {
+      if (passwordField !== null) {
+        passwordField.setCustomValidity(t(c, "auth.login.unavailable"));
+        passwordField.reportValidity();
+      }
+    } else {
+      void transport
+        .start()
+        .then(() =>
+          transport.loginToken({
+            homeserver: mockSession().server ?? config.homeserver.default,
+            token,
+          }),
+        )
+        .then((session) => finishLogin(transport, session, locale))
+        .catch((error: unknown) => {
+          transport.dispose();
+          if (passwordField !== null) {
+            passwordField.setCustomValidity(loginError(c, error));
+            passwordField.reportValidity();
+          }
+        });
+    }
+  }
+
   const sso = document.querySelector<HTMLButtonElement>("[data-sso]");
   sso?.addEventListener("click", () => {
-    const password = input("password");
-    if (password === null) return;
-    password.setCustomValidity(t(c, "auth.login.ssoUnavailable"));
-    password.reportValidity();
+    const transport = keyTransport();
+    if (transport === null) {
+      if (passwordField !== null) {
+        passwordField.setCustomValidity(t(c, "auth.login.unavailable"));
+        passwordField.reportValidity();
+      }
+      return;
+    }
+    sso.disabled = true;
+    void transport
+      .start()
+      .then(() =>
+        transport.ssoUrl({
+          homeserver: mockSession().server ?? config.homeserver.default,
+          redirectUrl: `${location.origin}${localeRoot(locale)}login/`,
+        }),
+      )
+      .then((url) => location.assign(url))
+      .catch(() => {
+        transport.dispose();
+        sso.disabled = false;
+        if (passwordField !== null) {
+          passwordField.setCustomValidity(t(c, "auth.login.ssoFailed"));
+          passwordField.reportValidity();
+        }
+      });
+  });
+}
+
+function initRegister(c: Catalog, locale: LocaleId): void {
+  const registerForm = form("register");
+  if (registerForm === null) return;
+  const username = input("username");
+  const password = input("password");
+  const confirm = input("confirm");
+  const dialog = document.querySelector<HTMLDialogElement>("#register-key-dialog");
+  const keyValue = document.querySelector<HTMLElement>("[data-register-key]");
+  let currentKey: string | null = null;
+  let gate: string = "unknown";
+  for (const field of [username, password, confirm]) {
+    field?.addEventListener("input", () => field.setCustomValidity(""));
+  }
+  dialog?.addEventListener("cancel", (event) => event.preventDefault());
+  dialog?.querySelector("[data-register-copy]")?.addEventListener("click", () => {
+    if (currentKey !== null) void navigator.clipboard.writeText(currentKey).catch(() => undefined);
+  });
+  dialog?.querySelector("[data-register-download]")?.addEventListener("click", () => {
+    if (currentKey === null) return;
+    const url = URL.createObjectURL(new Blob([currentKey], { type: "text/plain" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "maski-recovery-key.txt";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+  dialog?.addEventListener("close", () => {
+    if (currentKey !== null) navigate(destination(gate, locale));
+  });
+  dialog?.querySelector("[data-register-continue]")?.addEventListener("click", () => {
+    dialog.close();
+  });
+
+  registerForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (username === null || password === null || confirm === null || !registerForm.reportValidity()) return;
+    if (password.value !== confirm.value) {
+      confirm.setCustomValidity(t(c, "auth.register.mismatch"));
+      confirm.reportValidity();
+      return;
+    }
+    confirm.setCustomValidity("");
+    const submit = registerForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit !== null) submit.disabled = true;
+    const transport = keyTransport();
+    if (transport === null) {
+      confirm.setCustomValidity(t(c, "auth.register.failed"));
+      confirm.reportValidity();
+      if (submit !== null) submit.disabled = false;
+      return;
+    }
+    void transport
+      .start()
+      .then(() =>
+        transport.register({
+          homeserver: mockSession().server ?? config.homeserver.default,
+          username: username.value.trim(),
+          password: password.value,
+        }),
+      )
+      .then((result) => {
+        setAccount(result.session.userId);
+        setGate(result.key);
+        gate = result.key;
+        if (result.recoveryKey === null || dialog === null || keyValue === null) {
+          transport.dispose();
+          navigate(destination(result.key, locale));
+          return;
+        }
+        currentKey = result.recoveryKey;
+        keyValue.textContent = result.recoveryKey;
+        dialog.showModal();
+      })
+      .catch((error: unknown) => {
+        transport.dispose();
+        confirm.setCustomValidity(
+          error instanceof Error && error.message === "network"
+            ? t(c, "auth.login.network")
+            : t(c, "auth.register.failed"),
+        );
+        confirm.reportValidity();
+        if (submit !== null) submit.disabled = false;
+      });
   });
 }
 
@@ -211,10 +356,64 @@ function initKey(c: Catalog, locale: LocaleId): void {
         if (submit !== null) submit.disabled = false;
       });
   });
+
+  const reset = form("reset");
+  const keyDialog = document.querySelector<HTMLDialogElement>("#key-reset-dialog");
+  const keyValue = document.querySelector<HTMLElement>("[data-key-reset-value]");
+  let currentKey: string | null = null;
+  keyDialog?.addEventListener("cancel", (event) => event.preventDefault());
+  keyDialog?.addEventListener("close", () => {
+    if (currentKey === null) return;
+    transport.dispose();
+    navigate(localeRoot(locale));
+  });
+  keyDialog?.querySelector("[data-key-reset-copy]")?.addEventListener("click", () => {
+    if (currentKey !== null) void navigator.clipboard.writeText(currentKey).catch(() => undefined);
+  });
+  keyDialog?.querySelector("[data-key-reset-download]")?.addEventListener("click", () => {
+    if (currentKey === null) return;
+    const url = URL.createObjectURL(new Blob([currentKey], { type: "text/plain" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "maski-recovery-key.txt";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+  keyDialog?.querySelector("[data-key-reset-continue]")?.addEventListener("click", () => {
+    keyDialog.close();
+  });
+  reset?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const password = input("reset-password");
+    if (password === null || !reset.reportValidity()) return;
+    password.setCustomValidity("");
+    const submit = reset.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit !== null) submit.disabled = true;
+    void transport
+      .resetIdentity(password.value)
+      .then((key) => {
+        if (key === null || keyDialog === null || keyValue === null) {
+          showStatus(t(c, "auth.key.invalid"));
+          return;
+        }
+        currentKey = key;
+        keyValue.textContent = key;
+        keyDialog.showModal();
+      })
+      .catch(() => {
+        showStatus(t(c, "auth.key.invalid"));
+        password.setCustomValidity(t(c, "auth.key.invalid"));
+        password.reportValidity();
+      })
+      .finally(() => {
+        if (submit !== null) submit.disabled = false;
+      });
+  });
 }
 
 export function initAuth(page: string, c: Catalog, locale: LocaleId): void {
   if (page === "server") initServer(c, locale);
   else if (page === "login") initLogin(c, locale);
+  else if (page === "register") initRegister(c, locale);
   else if (page === "key") initKey(c, locale);
 }

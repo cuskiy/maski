@@ -17,6 +17,7 @@ import {
   RoomEvent,
   RoomMemberEvent,
   RoomStateEvent,
+  SSOAction,
   SyncState,
   Visibility,
   type MatrixClient,
@@ -36,7 +37,7 @@ import type {
   RoomSummary,
   SessionSummary,
 } from "../core/types.ts";
-import type { CommandMap, Event, KeyStatus, MediaReply, StartData } from "../protocol/index.ts";
+import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
 import { AccountDatabase, type RoomRecord } from "./accountDb.ts";
 import { createOutbox, type Outbox, type OutboxEvent, type OutboxRecord, type UploadedMedia } from "./outbox.ts";
@@ -59,6 +60,7 @@ import {
 import {
   directRooms,
   forwardableEvent,
+  projectInvites,
   projectMediaSource,
   projectMediaSources,
   projectMembers,
@@ -372,21 +374,85 @@ export class MatrixSession implements SessionPort {
       throw new WorkerFailure("auth");
     }
 
-    const stored: StoredSession = {
-      baseUrl,
-      userId: response.user_id,
-      deviceId: response.device_id,
-      accessToken: response.access_token,
-      refreshToken: response.refresh_token ?? null,
+    return this.beginSession(baseUrl, response);
+  }
+
+  async loginToken(input: CommandMap["loginToken"]): Promise<SessionSummary> {
+    if (this.wasmUrl === null) throw new WorkerFailure("unavailable");
+    const baseUrl = await discoverHomeserver(input.homeserver);
+    if (baseUrl === null) throw new WorkerFailure("auth");
+    let response;
+    try {
+      const provisional = createClient({ baseUrl, logger: silentLogger });
+      response = await provisional.loginRequest({
+        type: "m.login.token",
+        token: input.token,
+        initial_device_display_name: "maski",
+      });
+    } catch {
+      throw new WorkerFailure("auth");
+    }
+    return this.beginSession(baseUrl, response);
+  }
+
+  async ssoUrl(input: CommandMap["ssoUrl"]): Promise<string> {
+    const baseUrl = await discoverHomeserver(input.homeserver);
+    if (baseUrl === null) throw new WorkerFailure("auth");
+    try {
+      const provisional = createClient({ baseUrl, logger: silentLogger });
+      return provisional.getSsoLoginUrl(input.redirectUrl, "sso", undefined, SSOAction.LOGIN);
+    } catch {
+      throw new WorkerFailure("auth");
+    }
+  }
+
+  async register(input: CommandMap["register"]): Promise<RegisterResult> {
+    if (this.wasmUrl === null) throw new WorkerFailure("unavailable");
+    const baseUrl = await discoverHomeserver(input.homeserver);
+    if (baseUrl === null) throw new WorkerFailure("auth");
+    let response;
+    const request = {
+      username: input.username,
+      password: input.password,
+      inhibit_login: false,
+      refresh_token: true,
+      initial_device_display_name: "maski",
     };
-    await writeSession(stored);
-    this.stored = stored;
-    await this.acquireLock(stored.userId);
-    const account = await AccountDatabase.open(stored.userId);
-    this.account = account;
-    this.outbox = this.createOutbox(account);
-    this.openMedia(account);
-    return this.startClient(stored);
+    try {
+      const provisional = createClient({ baseUrl, logger: silentLogger });
+      try {
+        response = await provisional.registerRequest(request);
+      } catch (error) {
+        const data = isRecord(error) ? error["data"] : undefined;
+        const sessionId = isRecord(data) ? data["session"] : undefined;
+        const flows = isRecord(data) ? data["flows"] : undefined;
+        const dummy =
+          typeof sessionId === "string" &&
+          Array.isArray(flows) &&
+          flows.some(
+            (flow: unknown) =>
+              isRecord(flow) &&
+              Array.isArray(flow["stages"]) &&
+              flow["stages"].length === 1 &&
+              flow["stages"][0] === "m.login.dummy",
+          );
+        if (!dummy) throw error;
+        response = await provisional.registerRequest({
+          ...request,
+          auth: { type: "m.login.dummy", session: sessionId },
+        });
+      }
+    } catch {
+      throw new WorkerFailure("auth");
+    }
+    const session = await this.beginSession(baseUrl, response);
+    let recoveryKey: string | null = null;
+    try {
+      recoveryKey = await this.resetIdentity(input.password);
+    } catch {
+      // Registration succeeded; the key page still has to explain a manual reset.
+    }
+    return { session, recoveryKey, key: this.keyReady };
   }
 
   async logout(): Promise<null> {
@@ -856,6 +922,7 @@ export class MatrixSession implements SessionPort {
     this.directoryPublished.delete(roomId);
     if (this.activeRoomId === roomId) this.activeRoomId = null;
     await this.emitRooms();
+    this.emitInvites();
     return null;
   }
 
@@ -997,6 +1064,7 @@ export class MatrixSession implements SessionPort {
       const room = await client.joinRoom(roomIdOrAlias);
       this.leftRooms.delete(room.roomId);
       await this.emitRooms();
+      this.emitInvites();
       return room.roomId;
     } catch (error) {
       throw this.transportFailure(error);
@@ -1386,6 +1454,12 @@ export class MatrixSession implements SessionPort {
     });
   }
 
+  private emitInvites(): void {
+    const client = this.client;
+    if (client === null) return;
+    this.emit({ type: "invites", payload: projectInvites(client) });
+  }
+
   private async emitStoredWindow(roomId: string): Promise<void> {
     const window = await this.windowState(roomId);
     if (window.messages.length === 0) return;
@@ -1703,6 +1777,7 @@ export class MatrixSession implements SessionPort {
           this.emit({ type: "keys", payload: gate });
         });
         void this.devices().catch(() => undefined);
+        this.emitInvites();
       }
     });
     client.on(RoomEvent.Timeline, (event: MatrixEvent, room: Room | undefined, toStart?: boolean) => {
@@ -1725,6 +1800,7 @@ export class MatrixSession implements SessionPort {
     client.on(RoomEvent.MyMembership, (room: Room) => {
       if (room.getMyMembership() === "join") this.leftRooms.delete(room.roomId);
       this.scheduleRooms();
+      this.emitInvites();
     });
     client.on(RoomEvent.Redaction, (event: MatrixEvent, room: Room) => {
       const targetId = event.getAssociatedId();
@@ -1756,6 +1832,35 @@ export class MatrixSession implements SessionPort {
       .map((member) => member.userId)
       .toSorted();
     this.emit({ type: "typing", payload: { roomId, userIds } });
+  }
+
+  private async beginSession(
+    baseUrl: string,
+    response: {
+      readonly user_id: string;
+      readonly device_id?: string;
+      readonly access_token?: string;
+      readonly refresh_token?: string;
+    },
+  ): Promise<SessionSummary> {
+    if (response.device_id === undefined || response.access_token === undefined) {
+      throw new WorkerFailure("auth");
+    }
+    const stored: StoredSession = {
+      baseUrl,
+      userId: response.user_id,
+      deviceId: response.device_id,
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token ?? null,
+    };
+    await writeSession(stored);
+    this.stored = stored;
+    await this.acquireLock(stored.userId);
+    const account = await AccountDatabase.open(stored.userId);
+    this.account = account;
+    this.outbox = this.createOutbox(account);
+    this.openMedia(account);
+    return this.startClient(stored);
   }
 
   private async startClient(stored: StoredSession): Promise<SessionSummary> {
@@ -1812,6 +1917,7 @@ export class MatrixSession implements SessionPort {
     this.emit({ type: "keys", payload: this.keyReady });
     this.emit({ type: "connection", payload: "connecting" });
     void this.devices().catch(() => undefined);
+    this.emitInvites();
     const account = this.account;
     if (account !== null) {
       for (const room of client.getRooms()) await this.syncMarker(room);

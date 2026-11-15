@@ -793,7 +793,10 @@ none is a secret or message history. The split is deliberate: drafts and message
 | command | reply | notes |
 |---|---|---|
 | `start` | cached session + gate + cached rooms | returns before crypto; sync follows |
-| `login` | session | credentials arrive once and never stay on the main thread |
+| `login` | session | password login; credentials arrive once and never stay on the main thread |
+| `loginToken` | session | one-time SSO `loginToken`; the URL query is stripped immediately |
+| `ssoUrl` | URL | worker builds the homeserver SSO redirect, never holds the token |
+| `register` | session + one-time key | password + dummy stage; the worker installs one session and attempts key setup |
 | `logout` | empty | clears SDK/crypto/session; the account projection survives only until an explicit reset |
 | `keyStatus` | typed gate | verified device + ready secret storage, not a boolean guess |
 | `recover` | typed gate | recovery key/passphrase → secret storage → cross-signing signing |
@@ -823,8 +826,8 @@ none is a secret or message history. The split is deliberate: drafts and message
 | `forward` | empty | decrypted content re-sent without relations or mentions |
 | `memberAction` | empty | `kick`/`ban`/`unban` with a worker power-level guard |
 
-Events: `session`, `keys`, `rooms`, `window` (`patch` or page), `members`, `devices`, `typing`,
-`connection`, `outbox`, `media` (blob URL or revocation).
+Events: `session`, `keys`, `rooms`, `window` (`patch` or page), `members`, `devices`, `invites`,
+`typing`, `connection`, `outbox`, `media` (blob URL or revocation).
 Payloads are bounded; a lost event costs one window, not a rebuild. Every inbound command and event
 crosses a parser; a malformed command keeps its valid id and returns `invalid`. A reply that matches no
 pending id is ignored and does not leak.
@@ -1253,17 +1256,18 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 Measured on 2026-11-15 after baseline commit `33ccbb5`. This is the only current-status section;
 counts and claims in `advice.md`, `past/`, browser history and old commits are evidence, not status.
 
-- `npm run check` is green: **164 tests**, 11 generated pages, 317 catalog keys, 2 languages.
-- Build sizes: stylesheet 85.7 KB, client 302.9 KB, matrix worker 1.30 MB, crypto wasm 7.79 MB,
+- `npm run check` is green: **164 tests**, 11 generated pages, 320 catalog keys, 2 languages.
+- Build sizes: stylesheet 85.7 KB, client 307.8 KB, matrix worker 1.302 MB, crypto wasm 7.79 MB,
   watermark 69.9 KB (was 263 KB), generated service worker 2.8 KB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
   non-retryable failed send. Media tests cover MIME sniffing/scriptable rejection, unencrypted/encrypted/
   sticker content shapes, AES-CTR round-trip and hash mismatch, thumbnail dimensions, no-mxc projection,
   object URL revocation and upload-once/retry-send. A real server and browser worker protocol were not run.
-- The production command set includes react (add and own-reaction redaction), edit with `m.new_content`
-  and `m.replace`, redact, typing, worker search, leave, room tag, room mute, room state, invite, join,
-  answer-invite, room/DM create, forward, member actions, `sendMedia`, `media` and read-only `devices`.
+- The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
+  registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
+  typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM
+  create, forward, member actions, `sendMedia`, `media` and read-only `devices`.
   Pure tests cover protocol shapes, reaction aggregation/removal, edit/redaction projection, search,
   the mock patch path and the dispatcher.
 - `PRODUCTION_CAPABILITIES` is true for media, search, react, edit, redact, forward, typing, memberAction,
@@ -1308,13 +1312,16 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Next: run recovery against a real server; then add SAS, device sign-out with UIA, backup state/setup
      and reset-key display with typed failures and a browser run. Do not re-add a gate that cannot decide.
 
-2. **Registration and SSO are unavailable.**
-   - Symptom: `/register/` says registration is unavailable; SSO says it is unavailable.
-   - Known: password login, `.well-known` discovery and `/versions` checks are implemented; no worker
-     registration, interactive-auth or SSO callback command exists.
-   - Ruled out: creating a local account or navigating into chat without a homeserver session.
-   - Next: implement registration including interactive auth and the SSO callback, or take an explicit
-     product scope cut from the user; keep the current page honest until then.
+2. **Registration and SSO are partial.**
+   - Symptom: registration works only for password + `m.login.dummy`; terms/recaptcha/email/SSO stages
+     fail; SSO login is implemented but not tested against an IdP.
+   - Known: `/register/` sends one register request, auto-completes a dummy-only flow, installs the one
+     session, attempts recovery-key setup and displays the key once. `ssoUrl` + `loginToken` implement the
+     redirect/callback and strip the one-time query token.
+   - Ruled out: creating a local account, keeping a token in the main thread, or a second session writer.
+   - Next: drive the full `InteractiveAuth` state machine for advertised stages, test SSO against a real
+     homeserver/IdP, and show the registration key even when recovery setup fails (the gate reset form is
+     the current fallback).
 
 3. **Auth lifecycle is incomplete.**
    - Symptom: some failures still collapse into one generic message; start/login/logout can overlap.
@@ -1336,17 +1343,16 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
      enable sticker sending only with an image-backed picker, and exercise encrypted/unencrypted upload,
      download, cancel and real-server thumbnails in Chromium.
 
-5. **Invites, spaces and global notifications remain partial.**
-   - Symptom: the invite inbox is empty in production, a space cannot be created and the global
-     notification level is local only.
-   - Known: room settings, member moderation, invites sent, join/leave, DM creation (`m.direct`), tags,
-     mute push rules and local search are worker commands; `answerInvite` joins or leaves but no invites
-     projection feeds the inbox; space creation and `SpaceChild` are absent; `saveNotifications` is false.
+5. **Spaces and global notifications remain partial.**
+   - Symptom: a space cannot be created or have children; the global notification level is local only.
+   - Known: membership invites are projected into `invites`; room settings, member moderation,
+     send-invite, join/leave, DM creation (`m.direct`), tags, mute push rules and local search are worker
+     commands; `saveNotifications` is false.
    - Ruled out: enabling a no-op control, a fake notification mapping for `all`/`mentions`, or keeping a
      mock response in the production source.
-   - Next: project membership invites into `invites`, add space creation with `SpaceChild`, and implement
-     the notification preferences the product actually stores; each needs a record, command, projection
-     and test before its control returns.
+   - Next: add space creation and `SpaceChild`/`SpaceParent`, then implement the notification preferences
+     the product actually stores; each needs a record, command, projection and test before its control
+     returns.
 
 6. **CSP is broad.**
    - Symptom: `connect-src https: wss:` permits every origin.
@@ -1393,12 +1399,15 @@ Do not pull a later UI surface forward to make the product look complete.
    sticker sending, cancel/progress, and real-server encrypted/unencrypted upload/download/thumbnail.
 7. **Search in the worker.** Done: `search` reads the account projection plus the outbox, dedupes, filters
    redacted/system/undecryptable rows and uses one matcher. No search of the current window only.
-8. **Auth lifecycle and registration.** Typed `M_*` mapping, `/login` flow discovery, serialized
-   start/login/logout, then registration with interactive auth and the SSO callback.
-9. **Settings/invites/spaces/notifications.** Done for room settings, member moderation, send-invite,
-   join/leave, DM creation, tags, room mute and local search. Remaining: an invites projection, space
-   creation with `SpaceChild`, and global notification prefs. Only after each has a record in `types.ts`,
-   a command, a projection and a test; delete mock-only surfaces until then.
+8. **Auth lifecycle and registration.** Done: password login, one-time SSO token exchange, SSO URL,
+   password+dummy registration, one session installer and the registration key display. Remaining: typed
+   `M_*` mapping, `/login` flow discovery, serialized start/login/logout and the full interactive-auth
+   stages.
+9. **Settings/invites/spaces/notifications.** Done for room settings, member moderation, send/accept/
+   decline invite with an `invites` projection, join/leave, DM creation, tags, room mute and local search.
+   Remaining: space creation with `SpaceChild`/`SpaceParent`, and global notification prefs. Only after
+   each has a record in `types.ts`, a command, a projection and a test; delete mock-only surfaces until
+   then.
 10. **CSP and field-level surfaces.** The user chooses the arbitrary-homeserver policy in 2.10; generate
     the exact response header and replace whole-body surface replacement with field-level patches.
 11. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,

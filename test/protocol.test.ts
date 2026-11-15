@@ -92,6 +92,29 @@ void test("the protocol parses the command set and rejects malformed input", () 
 
 void test("the protocol parses the daily-use command shapes and rejects bad fields", () => {
   const roomId = "!a:example.org";
+  assert.deepEqual(
+    parseCommand({ id: 18, type: "loginToken", payload: { homeserver: "https://example.org", token: "t" } }),
+    { id: 18, type: "loginToken", payload: { homeserver: "https://example.org", token: "t" } },
+  );
+  assert.equal(parseCommand({ id: 18, type: "loginToken", payload: { homeserver: "https://example.org" } }), null);
+  assert.equal(
+    parseCommand({ id: 19, type: "ssoUrl", payload: { homeserver: "https://example.org", redirectUrl: "https://a/b" } })
+      ?.type,
+    "ssoUrl",
+  );
+  assert.deepEqual(
+    parseCommand({
+      id: 19,
+      type: "register",
+      payload: { homeserver: "https://example.org", username: "alice", password: "secret" },
+    }),
+    {
+      id: 19,
+      type: "register",
+      payload: { homeserver: "https://example.org", username: "alice", password: "secret" },
+    },
+  );
+  assert.equal(parseCommand({ id: 19, type: "register", payload: { username: "alice", password: "secret" } }), null);
   assert.deepEqual(parseCommand({ id: 20, type: "react", payload: { roomId, eventId: "$e", key: "👍" } }), {
     id: 20,
     type: "react",

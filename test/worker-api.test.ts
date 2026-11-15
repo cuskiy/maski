@@ -40,6 +40,18 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("login");
       return session;
     },
+    async loginToken(_input: CommandMap["loginToken"]) {
+      calls.push("loginToken");
+      return session;
+    },
+    async ssoUrl(_input: CommandMap["ssoUrl"]) {
+      calls.push("ssoUrl");
+      return "https://example.org/sso";
+    },
+    async register(_input: CommandMap["register"]) {
+      calls.push("register");
+      return { session, recoveryKey: null, key: "needs-recovery" };
+    },
     async logout() {
       calls.push("logout");
       return null;

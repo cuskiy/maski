@@ -71,6 +71,5 @@ void test("the key gate has one worker owner and no local fake", () => {
     const source = readFileSync(file, "utf8");
     assert.doesNotMatch(source, /maski\.(?:key|registered)\b/u, file.pathname);
     assert.doesNotMatch(source, /\bsetKeyReady\b/u, file.pathname);
-    assert.doesNotMatch(source, /data-flow=["']reset["']/u, file.pathname);
   }
 });
