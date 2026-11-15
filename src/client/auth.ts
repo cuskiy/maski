@@ -8,6 +8,7 @@ import { config } from "../config.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { replaceHtml } from "./dom.ts";
 import { mockSession, setAccount, setGate, setServer } from "./session.ts";
+import { keepStorage } from "./persist.ts";
 
 function navigate(path: string): void {
   location.assign(path);
@@ -61,6 +62,7 @@ async function finishLogin(
   locale: LocaleId,
 ): Promise<void> {
   setAccount(session.userId);
+  void keepStorage();
   const gate = await transport.keyStatus();
   setGate(gate);
   transport.dispose();

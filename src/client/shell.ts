@@ -10,11 +10,6 @@ export function isProductionOrigin(protocol: string, hostname: string): boolean 
   return protocol === "https:" && DEV_HOSTS[hostname] !== true;
 }
 
-function requestPersistence(): void {
-  if (navigator.storage === undefined || typeof navigator.storage.persist !== "function") return;
-  void navigator.storage.persist().catch(() => undefined);
-}
-
 function afterLoad(task: () => void): void {
   if (document.readyState === "complete") {
     setTimeout(task, 0);
@@ -39,6 +34,5 @@ export function registerShell(): void {
 
   afterLoad(() => {
     void navigator.serviceWorker.register(url, { updateViaCache: "none" }).catch(() => undefined);
-    requestPersistence();
   });
 }

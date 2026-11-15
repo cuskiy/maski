@@ -7,6 +7,7 @@ import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { localeForPath, localeRoot } from "../core/locales.ts";
 import { clearAccount, mockSession, setGate } from "./session.ts";
+import { keepStorage } from "./persist.ts";
 
 function loginPath(): string {
   const locale = localeForPath(location.pathname) ?? "en";
@@ -77,6 +78,7 @@ export class WorkerSource implements ChatSource {
           return;
         }
         this.emit("session", data.session);
+        void keepStorage();
         this.emit("connection", data.connection);
         if (data.key !== "unknown") setGate(data.key);
         const phase = startPhase(data.key, mockSession().gate);

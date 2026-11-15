@@ -13,10 +13,13 @@ interface HeaderInput {
 }
 
 function setAvatar(target: HTMLElement, room: RoomSummary | null): void {
+  const source = room === null ? null : safeAvatarUrl(room.avatar);
+  const key = room === null ? "" : `${room.roomId}\n${source ?? ""}`;
+  if (target.dataset["avatarKey"] === key) return;
+  target.dataset["avatarKey"] = key;
   target.replaceChildren();
   target.hidden = room === null;
   if (room === null) return;
-  const source = safeAvatarUrl(room.avatar);
   if (source === null) {
     target.textContent = room.name.slice(0, 1);
     return;
@@ -51,12 +54,14 @@ export function mountHeader({ store, actions, c }: HeaderInput): () => void {
     if (avatar !== null) setAvatar(avatar, room);
     if (title !== null) {
       title.hidden = room === null;
-      title.textContent = room?.name ?? "";
+      const value = room?.name ?? "";
+      if (title.textContent !== value) title.textContent = value;
     }
     if (topic !== null) {
       topic.hidden = room === null;
       const typing = actions.capabilities.typing ? store.read("typing") : [];
-      topic.textContent = typing.length > 0 ? t(c, "chat.typing", { names: typing.join(", ") }) : (room?.topic ?? "");
+      const value = typing.length > 0 ? t(c, "chat.typing", { names: typing.join(", ") }) : (room?.topic ?? "");
+      if (topic.textContent !== value) topic.textContent = value;
     }
     if (menu !== null) {
       menu.hidden = room === null;

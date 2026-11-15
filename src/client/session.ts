@@ -50,6 +50,7 @@ export function setServer(server: string): void {
 }
 
 export function setAccount(account: string): void {
+  if (storage.read(storage.STORAGE.account) !== account) storage.write(storage.STORAGE.gate, null);
   storage.write(storage.STORAGE.account, account);
 }
 
