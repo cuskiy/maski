@@ -85,7 +85,7 @@
     inset-block: 0;
     inset-inline-start: 0;
     inline-size: 10rem;
-    background: var(--card-bg);
+    background: var(--settings-sidebar-bg);
     content: "";
   }
 
@@ -146,16 +146,30 @@
     align-self: stretch;
     overflow-y: auto;
     padding: var(--space-4) var(--space-2);
-    background: var(--card-bg);
+    background: var(--settings-sidebar-bg);
     color: var(--card-ink);
   }
 
   .settings-tabs a {
+    position: relative;
     flex: none;
     padding: var(--space-2);
     border-radius: var(--radius-sm);
     color: var(--card-muted);
     white-space: nowrap;
+    --settings-tab-active: 0;
+  }
+
+  .settings-tabs a::before {
+    position: absolute;
+    inset-block: 25%;
+    inset-inline-start: 0;
+    inline-size: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--card-ink);
+    content: "";
+    opacity: var(--settings-tab-active);
+    transition: opacity var(--duration) var(--ease);
   }
 
   .settings-tabs a[aria-current="true"],
@@ -188,9 +202,10 @@
     .settings-tabs
     a[href="#room-settings-notifications"],
   :root:not(:has(.settings-tabs a[aria-current="true"]), :has(.surface-section:target)) .settings-tabs a:first-child {
-    background: var(--card-active-bg);
+    background: var(--settings-active-bg);
     color: var(--card-ink);
     font-weight: var(--weight-strong);
+    --settings-tab-active: 1;
   }
 
   .settings-tabs a:not([aria-current="true"]):hover,
