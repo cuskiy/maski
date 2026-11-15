@@ -1257,8 +1257,8 @@ Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and 
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **180 tests**, 11 generated pages, 337 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 309.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **180 tests**, 11 generated pages, 339 catalog keys, 2 languages.
+- Build sizes: stylesheet 83.8 KiB, client 310.0 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1267,7 +1267,8 @@ old commits are evidence, not status.
   object URL revocation and upload-once/retry-send. SAS tests exercise the worker state machine's
   projection, ready/started transition, confirm, mismatch, user cancel, unknown id, incoming request and
   restart adoption; no real device or homeserver completed a SAS handshake. A real server and browser
-  worker protocol were not run.
+  worker were run for password login, sync, key reset and chat load; the reset key dialog and a real
+  send were not re-run after the latest UI changes.
 - The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
   registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM

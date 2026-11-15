@@ -363,6 +363,7 @@ export class MatrixSession implements SessionPort {
   private keyReady: KeyStatus = "unknown";
   private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
+  private readonly secretStorageKeys = new Map<string, Uint8Array<ArrayBuffer>>();
   private releaseLock: (() => void) | null = null;
   private roomsQueued = false;
   private readonly directoryPublished = new Map<string, boolean>();
@@ -687,7 +688,7 @@ export class MatrixSession implements SessionPort {
         if (typeof session !== "string") throw error;
         await makeRequest({
           type: "m.login.password",
-          identifier: { type: "m.id.user", user: userId.replace(/^@/u, "").split(":")[0] ?? userId },
+          identifier: { type: "m.id.user", user: userId },
           password,
           session,
         });
@@ -699,6 +700,7 @@ export class MatrixSession implements SessionPort {
       const key = await crypto.createRecoveryKeyFromPassphrase();
       await crypto.bootstrapSecretStorage({
         setupNewSecretStorage: true,
+        setupNewKeyBackup: true,
         createSecretStorageKey: () => Promise.resolve(key),
       });
       this.keyReady = await this.refreshGate();
@@ -1408,10 +1410,12 @@ export class MatrixSession implements SessionPort {
       }
     >,
   ): Promise<[string, Uint8Array<ArrayBuffer>] | null> {
-    const pending = this.pendingSecret;
-    if (pending === null) return null;
     const [keyId] = Object.keys(keys);
     if (keyId === undefined) return null;
+    const cached = this.secretStorageKeys.get(keyId);
+    if (cached !== undefined) return [keyId, cached];
+    const pending = this.pendingSecret;
+    if (pending === null) return null;
     if (pending.key !== null) return [keyId, pending.key];
     const derivation = keys[keyId]?.passphrase;
     if (derivation === undefined) return null;
@@ -2033,6 +2037,9 @@ export class MatrixSession implements SessionPort {
       disableVoip: true,
       cryptoCallbacks: {
         getSecretStorageKey: async ({ keys }) => this.secretStorageKey(keys),
+        cacheSecretStorageKey: (keyId, _keyInfo, privateKey) => {
+          this.secretStorageKeys.set(keyId, privateKey);
+        },
       },
       ...(stored.refreshToken === null
         ? {}
@@ -2139,6 +2146,7 @@ export class MatrixSession implements SessionPort {
     this.stored = null;
     this.keyReady = "unknown";
     this.pendingSecret = null;
+    this.secretStorageKeys.clear();
     if (client === null) {
       if (account !== null) await account.destroy().catch(() => undefined);
       return;

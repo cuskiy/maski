@@ -52,7 +52,7 @@ function initServer(c: Catalog, locale: LocaleId): void {
 }
 
 function destination(gate: string, locale: LocaleId): string {
-  return gate === "ready" || gate === "unknown" ? localeRoot(locale) : `${localeRoot(locale)}key/`;
+  return gate === "ready" ? localeRoot(locale) : `${localeRoot(locale)}key/`;
 }
 
 async function finishLogin(
@@ -269,7 +269,7 @@ function keyTransport(): MatrixTransport | null {
 }
 
 function keyStatusText(c: Catalog, gate: string): string | null {
-  if (gate === "needs-recovery") return t(c, "auth.key.invalid");
+  if (gate === "needs-recovery") return t(c, "auth.key.recoveryNeeded");
   if (gate === "needs-verification") return t(c, "auth.key.verification");
   if (gate === "unknown") return t(c, "auth.key.waiting");
   return null;
@@ -288,6 +288,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
     return;
   }
 
+  let resetPending = false;
   const verifyButton = document.querySelector<HTMLButtonElement>("[data-key-verify]");
   const sasDialog = document.querySelector<HTMLDialogElement>("#key-sas-dialog");
   const sasRegion = document.querySelector<HTMLElement>('[data-region="key-sas-dialog-body"]');
@@ -346,6 +347,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
     if (verifyButton !== null) verifyButton.disabled = false;
     revealVerify(event.payload);
     if (event.payload === "ready") {
+      if (resetPending) return;
       transport.dispose();
       navigate(localeRoot(locale));
       return;
@@ -460,6 +462,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
   keyDialog?.addEventListener("cancel", (event) => event.preventDefault());
   keyDialog?.addEventListener("close", () => {
     if (currentKey === null) return;
+    resetPending = false;
     transport.dispose();
     navigate(localeRoot(locale));
   });
@@ -485,11 +488,13 @@ function initKey(c: Catalog, locale: LocaleId): void {
     password.setCustomValidity("");
     const submit = reset.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (submit !== null) submit.disabled = true;
+    resetPending = true;
     void transport
       .resetIdentity(password.value)
       .then((key) => {
         if (key === null || keyDialog === null || keyValue === null) {
-          showStatus(t(c, "auth.key.invalid"));
+          resetPending = false;
+          showStatus(t(c, "auth.key.resetFailed"));
           return;
         }
         currentKey = key;
@@ -497,8 +502,9 @@ function initKey(c: Catalog, locale: LocaleId): void {
         keyDialog.showModal();
       })
       .catch(() => {
-        showStatus(t(c, "auth.key.invalid"));
-        password.setCustomValidity(t(c, "auth.key.invalid"));
+        resetPending = false;
+        showStatus(t(c, "auth.key.resetFailed"));
+        password.setCustomValidity(t(c, "auth.key.resetFailed"));
         password.reportValidity();
       })
       .finally(() => {
