@@ -50,8 +50,8 @@ void test("an unknown or incomplete gate never opens chat", () => {
   assert.equal(phaseFor("needs-verification"), "locked");
 });
 
-void test("only a cached ready gate may paint before the worker verifies it", () => {
-  assert.equal(startPhase("unknown", "ready"), "ready");
+void test("a cached ready gate paints but stays non-interactive until verified", () => {
+  assert.equal(startPhase("unknown", "ready"), "verifying");
   assert.equal(startPhase("unknown", "needs-recovery"), null);
   assert.equal(startPhase("unknown", "missing"), null);
   assert.equal(startPhase("ready", "needs-recovery"), "ready");

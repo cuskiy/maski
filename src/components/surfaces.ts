@@ -21,7 +21,7 @@ import { emptyChatState } from "../core/state.ts";
 import { SURFACE } from "../core/regions.ts";
 import { field, selectField, submit } from "../components/form.ts";
 import { surfaceHead } from "./surface.ts";
-import { stickerPickerBody } from "../components/stickers.ts";
+import { STICKER_PACKS, stickerPickerBody } from "../components/stickers.ts";
 import { icons } from "../components/icons.ts";
 import { ATTRIBUTIONS, LICENSES } from "../core/licenses.ts";
 import { sasBody } from "./sas.ts";
@@ -672,6 +672,22 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
     </section>`
         : html``
     }
+    <section class="surface-section" id="settings-stickers">
+      <h3>${t(c, "settings.stickers")}</h3>
+      <label class="setting-row"
+        ><span>${t(c, "settings.stickersEnabled")}</span><input type="checkbox" data-setting="stickers"
+          ${checked(state.stickersEnabled)} /></label
+      >
+      <p class="field-hint">${t(c, "settings.stickersHint")}</p>
+      <ul class="device-list" role="list">
+        ${STICKER_PACKS.map(
+          (pack) => html`<li class="device-row">
+            <div class="device-main"><strong>${t(c, pack.key)}</strong></div>
+            <span class="note">${t(c, "settings.stickersCount", { count: String(pack.stickers.length) })}</span>
+          </li>`,
+        )}
+      </ul>
+    </section>
     ${
       hasSecurity
         ? html`<section class="surface-section" id="settings-security">

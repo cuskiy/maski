@@ -17,6 +17,11 @@ import { watchMediaLoads } from "./mediaLoads.ts";
 import { wireComposerInteractions } from "./interactions.ts";
 import { hydrateDrafts } from "./uiDb.ts";
 import * as prefs from "./prefs.ts";
+import { ROOM_HASH, roomHash, roomIdFromHash } from "./roomRoute.ts";
+
+function pageUrl(): string {
+  return `${location.pathname}${location.search}`;
+}
 
 export function initChat(c: Catalog, locale: LocaleId): void {
   mountChat(c, locale, new WorkerSource(), emptyChatState(), mockSession().account ?? "local");
@@ -39,6 +44,7 @@ export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base
     recentEmoji: prefs.readRecentEmoji(account) ?? base.recentEmoji,
     recentReactions: prefs.readRecentReactions(account) ?? base.recentReactions,
     recentStickers: prefs.readRecentStickers(account) ?? base.recentStickers,
+    stickersEnabled: prefs.readStickers(account) ?? base.stickersEnabled,
   };
 
   const store = createStore(initial);
@@ -48,6 +54,47 @@ export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base
   const unwatchGate = store.watch(["phase"], () => {
     if (store.read("phase") === "locked") location.assign(`${localeRoot(locale)}key/`);
   });
+
+  const routing = document.documentElement.dataset["page"] === "chat";
+  let roomsSeen = false;
+  const selectFromHash = (): void => {
+    if (!routing || !roomsSeen) return;
+    const wanted = roomIdFromHash(location.hash);
+    if (wanted === null) return;
+    const state = store.snapshot();
+    if (state.rooms.some((room) => room.roomId === wanted)) {
+      if (state.roomId !== wanted) actions.selectRoom(wanted);
+    } else {
+      history.replaceState(null, "", pageUrl());
+    }
+  };
+  const unwatchRoomsHash = store.watch(["rooms"], () => {
+    roomsSeen = true;
+    selectFromHash();
+  });
+  const unwatchRoomUrl = store.watch(["roomId"], () => {
+    if (!routing) return;
+    const roomId = store.read("roomId");
+    if (roomId === null) {
+      if (location.hash.startsWith(ROOM_HASH)) history.replaceState(null, "", pageUrl());
+      return;
+    }
+    const next = roomHash(roomId);
+    if (location.hash !== next) history.pushState(null, "", `${pageUrl()}${next}`);
+  });
+  const onHashChange = (): void => {
+    if (!routing) return;
+    if (location.hash === "" && store.read("roomId") !== null) {
+      actions.back();
+      return;
+    }
+    if (location.hash.startsWith(ROOM_HASH) && roomIdFromHash(location.hash) === null) {
+      history.replaceState(null, "", pageUrl());
+      return;
+    }
+    selectFromHash();
+  };
+  window.addEventListener("hashchange", onHashChange);
 
   source.start();
   if (initial.roomId !== null) {
@@ -91,6 +138,9 @@ export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base
       unwatchTitle();
       unwatchMedia();
       unwatchGate();
+      unwatchRoomsHash();
+      unwatchRoomUrl();
+      window.removeEventListener("hashchange", onHashChange);
       unwireInteractions?.();
       composer?.dispose();
       unwireSurfaces?.();

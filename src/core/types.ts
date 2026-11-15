@@ -4,7 +4,7 @@ export type MessageKind = "text" | "notice" | "emote" | "image" | "sticker" | "f
 
 export type MessageStatus = "sent" | "queued" | "sending" | "failed";
 
-export type Phase = "boot" | "signedOut" | "locked" | "ready";
+export type Phase = "boot" | "signedOut" | "locked" | "verifying" | "ready";
 
 export type KeyGate = "ready" | "missing" | "unknown" | "needs-recovery" | "needs-verification";
 
@@ -206,8 +206,7 @@ export const REVIEW_CAPABILITIES: SourceCapabilities = {
 /** The worker conversation: only the commands the worker protocol implements. */
 export const PRODUCTION_CAPABILITIES: SourceCapabilities = {
   media: true,
-  // The sticker picker sends emoji text, not an image; `m.sticker` has no image source yet.
-  stickers: false,
+  stickers: true,
   search: true,
   react: true,
   edit: true,
@@ -329,6 +328,7 @@ export interface ChatState {
   readonly recentEmoji: readonly string[];
   readonly recentReactions: readonly string[];
   readonly recentStickers: readonly string[];
+  readonly stickersEnabled: boolean;
   readonly openSpaces: readonly string[];
   readonly sections: Readonly<Record<SectionId, SectionState>>;
   readonly notifications: NotificationPrefs;

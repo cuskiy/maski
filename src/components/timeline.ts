@@ -45,7 +45,7 @@ export function timeline(
   const time = new Intl.DateTimeFormat(locale, { timeStyle: "short" });
   const day = new Intl.DateTimeFormat(locale, { dateStyle: "full" });
   const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
-  const ready = state.phase === "ready" && room !== null;
+  const ready = (state.phase === "ready" || state.phase === "verifying") && room !== null;
   const positions = messagePositions(state.messages);
   return html`<section class="timeline-region" data-region="${REGION.timeline}" data-read-receipt="${room?.readReceipt ?? ""}" aria-label="${t(c, "chat.title")}">
     <div
@@ -132,6 +132,7 @@ export function timeline(
 function stateNote(state: ChatState, c: Catalog): Html {
   if (state.phase === "signedOut") return html`<p class="note">${t(c, "chat.signedOut")}</p>`;
   if (state.phase === "locked") return html`<p class="note">${t(c, "chat.locked")}</p>`;
+  if (state.phase === "verifying") return html`<p class="note" role="status">${t(c, "chat.verifying")}</p>`;
   return html``;
 }
 

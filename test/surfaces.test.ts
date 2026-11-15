@@ -313,3 +313,10 @@ void test("a device-list failure is not rendered as an empty session list", () =
   assert.match(markup, /Could not load sessions/u);
   assert.doesNotMatch(markup, /No devices/u);
 });
+
+void test("settings exposes the sticker pack toggle", () => {
+  const markup = surfaceBodyFor(en, SURFACE.settings, mockChatState()).value;
+  assert.match(markup, /data-setting="stickers"/u);
+  assert.match(markup, /Stickers and emoji packs/u);
+  assert.match(markup, /Sticker pack 1/u);
+});

@@ -757,7 +757,8 @@ export class MatrixSession implements SessionPort {
     this.activeRoomId = roomId;
     const window = await this.windowState(roomId);
     if (window.messages.length === 0) await this.ingestRoom(roomId);
-    const current = window.messages.length === 0 ? await this.windowState(roomId) : window;
+    await this.persistBackfill(roomId);
+    const current = await this.windowState(roomId);
     this.emit({
       type: "window",
       payload: {
@@ -1686,6 +1687,27 @@ export class MatrixSession implements SessionPort {
     await account.writeMediaSources(projectMediaSources(room));
   }
 
+  /**
+   * The SDK pagination token is the only proof that older history exists. Persist it whenever the
+   * live timeline is available so a cached window can expose its load-older control immediately.
+   */
+  private async persistBackfill(roomId: string): Promise<void> {
+    const room = this.client?.getRoom(roomId);
+    if (room === undefined || room === null) return;
+    const account = this.requireAccount();
+    const previous = await account.readSegment(roomId);
+    const oldest = await account.readOldest(roomId);
+    const latest = await account.readLatest(roomId, 1);
+    const token = room.getLiveTimeline().getPaginationToken(EventTimeline.BACKWARDS);
+    await account.writeSegment({
+      roomId,
+      beforeEventId: oldest === null ? (previous?.beforeEventId ?? null) : rowCursor(oldest),
+      token,
+      readable: previous?.readable === true || latest.length > 0,
+      gapped: previous?.gapped === true,
+    });
+  }
+
   private roomSummary(roomId: string): RoomSummary | null {
     const client = this.client;
     if (client === null) return null;
@@ -2178,6 +2200,7 @@ export class MatrixSession implements SessionPort {
     this.scheduleRooms();
     if (this.activeRoomId !== null) {
       await this.ingestRoom(this.activeRoomId);
+      await this.persistBackfill(this.activeRoomId);
       await this.emitStoredWindow(this.activeRoomId);
     }
     return session;

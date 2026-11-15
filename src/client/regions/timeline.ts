@@ -185,6 +185,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     const room = stateRoom(store.snapshot());
     if (
       room !== null &&
+      store.read("phase") === "ready" &&
       room.latestEventId !== null &&
       room.readReceipt !== room.latestEventId &&
       readRequest !== room.latestEventId &&

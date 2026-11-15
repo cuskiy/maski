@@ -139,6 +139,22 @@ function escapeHtmlText(value: string): string {
   });
 }
 
+async function stickerFile(emoji: string): Promise<File> {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("no canvas");
+  context.clearRect(0, 0, 512, 512);
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = '400px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+  context.fillText(emoji, 256, 276);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (blob === null) throw new Error("no sticker image");
+  return new File([blob], `${emoji}.png`, { type: "image/png" });
+}
+
 const markdownParser = new Marked({
   renderer: {
     html({ text }) {
@@ -197,7 +213,9 @@ export class Composer {
     this.errorRegion = document.querySelector<HTMLElement>("[data-composer-error]");
     this.roomId = store.read("roomId");
     this.mount();
-    this.unsubscribe = store.watch(["roomId", "rooms", "phase", "members"], () => this.render(store.snapshot()));
+    this.unsubscribe = store.watch(["roomId", "rooms", "phase", "members", "stickersEnabled"], () =>
+      this.render(store.snapshot()),
+    );
     this.render(store.snapshot());
   }
 
@@ -582,6 +600,10 @@ export class Composer {
     )) {
       button.disabled = disabled;
     }
+    const stickerButton = document.querySelector<HTMLButtonElement>(".composer-sticker");
+    if (stickerButton !== null) {
+      stickerButton.hidden = !state.stickersEnabled || !this.actions.capabilities.stickers;
+    }
   }
 
   private clearDraftTimer(): void {
@@ -775,18 +797,22 @@ export class Composer {
     this.hide(SURFACE.sticker);
   }
 
-  sendSticker(sticker: string): void {
-    if (!this.actions.capabilities.stickers) return;
+  async sendSticker(sticker: string): Promise<void> {
+    if (!this.actions.capabilities.stickers || !this.store.read("stickersEnabled")) return;
     const roomId = this.roomId;
-    if (sticker === "" || roomId === null) return;
-    this.actions.recordSticker(sticker);
-    this.actions.appendRows(roomId, [
-      this.actions.createRow(roomId, sticker, {
-        kind: "sticker",
-        media: { kind: "sticker", name: sticker, width: null, height: null, size: null, url: null },
-      }),
-    ]);
+    if (sticker === "" || roomId === null || this.sending) return;
     this.hide(SURFACE.sticker);
+    this.setBusy(true);
+    this.clearError();
+    try {
+      const file = await stickerFile(sticker);
+      await this.actions.sendMedia(roomId, file, "sticker", sticker, null, null);
+      if (this.roomId === roomId) this.actions.recordSticker(sticker);
+    } catch {
+      this.showMediaError();
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   openSendMenu(focusFirst = false): void {
@@ -988,12 +1014,14 @@ export class Composer {
     }
     const emoji = target.closest<HTMLElement>("[data-emoji]");
     if (emoji !== null && emoji.closest(`#${SURFACE.reaction}`) === null) {
-      this.insertEmoji(emoji.dataset["emoji"] ?? "");
+      const value = emoji.dataset["emoji"] ?? "";
+      if (emoji.closest(`#${SURFACE.sticker}`) !== null) void this.sendSticker(value);
+      else this.insertEmoji(value);
       return true;
     }
     const sticker = target.closest<HTMLElement>("[data-sticker]");
     if (sticker !== null) {
-      this.sendSticker(sticker.dataset["sticker"] ?? "");
+      void this.sendSticker(sticker.dataset["sticker"] ?? "");
       return true;
     }
     const send = target.closest<HTMLElement>("[data-send]");

@@ -94,6 +94,7 @@ export interface Actions {
   acceptInvite(roomId: string): void;
   declineInvite(roomId: string): void;
   setPref(key: "badge" | "titleTotal" | "desktop" | "preview", value: boolean): void;
+  setStickers(enabled: boolean): void;
   backupSetup(): void;
   resetRecoveryKey(): void;
   clearRecoveryKey(): void;
@@ -589,6 +590,10 @@ export function createActions({ store, source, c, account }: Context): Actions {
       store.write("notifications", next);
       prefs.saveNotifications(account, next);
       source.saveNotifications?.(next);
+    },
+    setStickers(enabled) {
+      store.write("stickersEnabled", enabled);
+      prefs.saveStickers(account, enabled);
     },
     backupSetup() {
       if (!caps.backupSetup || source.backupSetup === undefined) return;

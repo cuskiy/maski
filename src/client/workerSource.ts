@@ -20,10 +20,10 @@ export function phaseFor(gate: KeyGate): Phase {
   return "locked";
 }
 
-/** A cached ready gate may paint chat until the worker verifies it; no other cached gate does. */
+/** A cached ready gate may paint cached data, but never makes the room interactive. */
 export function startPhase(gate: KeyGate, cached: KeyGate): Phase | null {
   if (gate !== "unknown") return phaseFor(gate);
-  return cached === "ready" ? "ready" : null;
+  return cached === "ready" ? "verifying" : null;
 }
 
 const MESSAGE_KINDS: ReadonlySet<string> = new Set<MessageKind>([

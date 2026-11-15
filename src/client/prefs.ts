@@ -103,3 +103,13 @@ export function readRecentStickers(account: string): readonly string[] | null {
 export function saveRecentStickers(account: string, stickers: readonly string[]): void {
   storage.writeJson(storage.STORAGE.recentStickers(account), stickers.slice(0, 6));
 }
+
+export function readStickers(account: string): boolean | null {
+  const stored = storage.read(storage.STORAGE.stickers(account));
+  if (stored === null) return null;
+  return stored !== "false";
+}
+
+export function saveStickers(account: string, enabled: boolean): void {
+  storage.write(storage.STORAGE.stickers(account), String(enabled));
+}

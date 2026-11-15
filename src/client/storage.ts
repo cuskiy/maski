@@ -11,6 +11,7 @@ export const STORAGE = {
   recentEmoji: (account: string) => `maski.recent-emoji.${account}`,
   recentReactions: (account: string) => `maski.recent-reactions.${account}`,
   recentStickers: (account: string) => `maski.recent-stickers.${account}`,
+  stickers: (account: string) => `maski.stickers.${account}`,
   legacySections: "maski.sections",
   legacySpaces: "maski.spaces",
 } as const;

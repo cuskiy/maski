@@ -285,3 +285,9 @@ void test("the room projection takes unread, preview and latest from projected r
   assert.equal(projected.readReceipt, marker?.eventId);
   assert.equal(projected.preview?.body, rows.at(-1)?.body);
 });
+
+void test("a server backfill token keeps the older control available for a full local window", () => {
+  const rows = events(WINDOW_LIMIT);
+  const segment: Segment = { ...EMPTY_SEGMENT, token: "backfill-token", readable: true };
+  assert.equal(windowSlice(rows, [], segment).hasOlder, true);
+});

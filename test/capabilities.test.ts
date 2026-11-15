@@ -60,7 +60,7 @@ void test("the production source advertises only the commands it implements", ()
       assert.equal(typeof method(WorkerSource.prototype, "joinRoom"), "function");
       continue;
     }
-    if (name === "media") {
+    if (name === "media" || name === "stickers") {
       assert.equal(typeof method(WorkerSource.prototype, "media"), "function");
       assert.equal(typeof method(WorkerSource.prototype, "sendMedia"), "function");
       continue;
@@ -85,7 +85,6 @@ void test("the production source advertises only the commands it implements", ()
 
 void test("the worker source leaves every unimplemented command absent", () => {
   const absent = [
-    "stickers",
     "resetRecoveryKey",
     "signOutDevice",
     "signOutOthers",

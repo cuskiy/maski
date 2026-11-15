@@ -25,6 +25,7 @@ export function emptyChatState(): ChatState {
     recentEmoji: [],
     recentReactions: [],
     recentStickers: [],
+    stickersEnabled: true,
     openSpaces: [],
     sections: {
       favorites: { open: false },

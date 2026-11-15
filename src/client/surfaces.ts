@@ -1517,6 +1517,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       }
       if (key === "badge" || key === "titleTotal" || key === "preview") {
         actions.setPref(key, target.checked);
+      } else if (key === "stickers") {
+        actions.setStickers(target.checked);
       }
       return;
     }
