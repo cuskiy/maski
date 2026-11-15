@@ -40,6 +40,8 @@ const ALLOWED_ATTR = ["href", "title", "dir", "lang", "colspan", "rowspan", "sta
 const CONFIG = {
   ALLOWED_TAGS,
   ALLOWED_ATTR,
+  // Explicitly allow only absolute http(s)/mailto links plus relative hrefs; never javascript/data.
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/iu,
   ALLOW_DATA_ATTR: false,
   FORBID_ATTR: ["id", "style", "class", "src", "srcset", "poster"],
   FORBID_TAGS: [
