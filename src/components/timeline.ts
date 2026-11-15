@@ -131,6 +131,7 @@ function messageRow(
         <button
           class="message-sender-button"
           type="button"
+          dir="auto"
           commandfor="${SURFACE.profile}"
           command="show-modal"
           data-profile="${message.senderName}"
@@ -160,7 +161,7 @@ function messageRow(
   const reply =
     message.reply === null
       ? html``
-      : html`<a class="quote" href="#${message.reply.messageId}">
+      : html`<a class="quote" href="#${message.reply.messageId}" dir="auto">
           <strong>${message.reply.senderName}</strong><span>${message.reply.body}</span>
         </a>`;
   const pending = message.status !== "sent";
@@ -211,7 +212,7 @@ function messageRow(
 
 function messageText(message: MessageRow): Html {
   // Fixture HTML is controlled; the client sanitizes incoming HTML before it reaches this field.
-  return html`<div class="message-text${message.html === null ? "" : " is-rich"}">${message.html === null ? message.body : raw(message.html)}</div>`;
+  return html`<div class="message-text${message.html === null ? "" : " is-rich"}" dir="auto">${message.html === null ? message.body : raw(message.html)}</div>`;
 }
 
 function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat, status: Html): Html {
@@ -268,7 +269,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   if (media.kind === "file" || media.kind === "audio") {
     const details = html`${MEDIA_ICONS[media.kind]}
       <span class="attachment-text">
-        <span class="attachment-name">${media.name}</span>
+        <span class="attachment-name" dir="auto">${media.name}</span>
         <span class="attachment-meta"
           >${label}${media.size === null ? html`` : html`<span class="attachment-size">${formatBytes(media.size)}</span>`}</span
         >

@@ -1314,6 +1314,10 @@
     position-try-fallbacks: flip-block, flip-inline;
   }
 
+  :dir(rtl) .search-scope {
+    position-area: bottom span-left;
+  }
+
   .search-scope-option {
     display: block;
     inline-size: 100%;
@@ -1518,5 +1522,21 @@
     .surface.floating.is-context:popover-open {
       opacity: 1;
     }
+  }
+
+  :dir(rtl) .surface.floating {
+    position-area: bottom span-right;
+  }
+
+  :dir(rtl) #surface-nav-menu,
+  :dir(rtl) body:has(.app) #surface-language,
+  :dir(rtl) #surface-attach,
+  :dir(rtl) #surface-sticker {
+    position-area: top span-left;
+  }
+
+  :dir(rtl) #surface-emoji,
+  :dir(rtl) #surface-send-menu {
+    position-area: top span-right;
   }
 }

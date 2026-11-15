@@ -38,3 +38,11 @@ anchor positioning and `anchor-size()` are recorded from MDN.
 | `:user-invalid` | — | 119 / 88 / 16.5 | form errors |
 | async clipboard | 2024-06 | 76 / 127 / 13.1 | copy text and links |
 | `crypto.randomUUID` | — | 92 / 95 / 15.4 | local mock message ids |
+
+## Text direction
+
+| feature | Baseline | Chrome / Firefox / Safari | use |
+|---|---|---|---|
+| `bdi` | 2020-01 | 16 / 10 / 6 | isolate searched message text |
+| `dir` (`auto`) | 2015-07 | 1 / 1 / 3 | direction of user content and fields |
+| `:dir()` | 2023-12 | 120 / 49 / 16.4 | RTL anchor and icon overrides |

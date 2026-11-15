@@ -251,8 +251,8 @@ export class Composer {
       file,
       kind: source === "paste" && file.type.startsWith("image/") ? "image" : "file",
     }));
-    for (const { file, kind } of entries) {
-      if (kind === "image" && !this.previews.has(file)) {
+    for (const { file } of entries) {
+      if (!this.previews.has(file) && file.type.startsWith("image/")) {
         this.previews.set(file, URL.createObjectURL(file));
       }
     }

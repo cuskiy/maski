@@ -544,8 +544,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
               data-search-room="${entry.roomId}"
               data-search-message="${entry.id}"
             >
-              <span class="search-result-room">${room(entry.roomId)?.name ?? ""}</span
-              ><span>${entry.body === "" ? (entry.media?.name ?? "") : entry.body}</span>
+              <span class="search-result-room" dir="auto">${room(entry.roomId)?.name ?? ""}</span
+              ><bdi dir="auto">${entry.body === "" ? (entry.media?.name ?? "") : entry.body}</bdi>
             </button>`,
           )}`.value;
   }

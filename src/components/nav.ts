@@ -58,8 +58,8 @@ export function nav(state: ChatState, c: Catalog): Html {
         >${session === null ? "" : session.displayName.slice(0, 1)}</span
       >
       <span class="nav-account-text">
-        <span class="nav-account-name" data-field="name">${session?.displayName ?? ""}</span>
-        <span class="nav-account-id" data-field="userId">${session?.userId ?? ""}</span>
+        <span class="nav-account-name" data-field="name" dir="auto">${session?.displayName ?? ""}</span>
+        <span class="nav-account-id" data-field="userId" dir="ltr">${session?.userId ?? ""}</span>
       </span>
     </button>
   </aside>`;
@@ -131,8 +131,8 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
     >
       <span class="room-avatar" aria-hidden="true">${room.name.slice(0, 1)}</span>
       <span class="room-text">
-        <span class="room-name" data-field="name">${room.name}</span>
-        <span class="room-preview" data-field="preview">${room.preview?.body ?? ""}</span>
+        <span class="room-name" data-field="name" dir="auto">${room.name}</span>
+        <span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>
       </span>
       <span class="room-side">
         ${badge(room, c)}
@@ -159,8 +159,8 @@ function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
         >${room.avatar === null ? room.name.slice(0, 1) : html`<img src="${room.avatar}" alt="" />`}</span
       >
       <span class="room-text">
-        <span class="room-name" data-field="name">${room.name}</span>
-        <span class="room-preview" data-field="preview">${room.preview?.body ?? ""}</span>
+        <span class="room-name" data-field="name" dir="auto">${room.name}</span>
+        <span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>
       </span>
       <span class="room-side">
         ${badge(room, c)}${room.muted ? muted(c) : html``}

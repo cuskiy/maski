@@ -44,6 +44,7 @@ export function composer(state: ChatState, c: Catalog): Html {
           id="composer-input"
           class="composer-input"
           rows="1"
+          dir="auto"
           placeholder="${placeholder}"
           enterkeyhint="enter"
           ${room === null ? html` disabled` : html``}

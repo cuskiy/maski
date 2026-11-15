@@ -104,7 +104,7 @@ export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Htm
                   command="show-modal"
                 >
                   ${message.media?.kind === "audio" ? icons.audio : icons.file}
-                  <span class="media-file-name">${message.media?.name ?? ""}</span>
+                  <span class="media-file-name" dir="auto">${message.media?.name ?? ""}</span>
                   <span class="media-file-meta"
                     >${t(c, message.media?.kind === "audio" ? "chat.media.audio" : "chat.media.file")}
                     ${mediaSize(message.media?.size ?? null)}</span
@@ -145,6 +145,7 @@ function searchBody(c: Catalog, state: ChatState): Html {
         class="input search-input"
         name="search-field"
         type="search"
+        dir="auto"
         autocomplete="off"
         spellcheck="false"
         placeholder="${t(c, "surface.search.label")}"
@@ -153,6 +154,7 @@ function searchBody(c: Catalog, state: ChatState): Html {
         id="search-scope-button"
         class="search-scope-button"
         type="button"
+        dir="auto"
         popovertarget="search-scope"
         data-search-scope-button
         aria-label="${t(c, "surface.search.scope", { room: label })}"
@@ -173,6 +175,7 @@ function searchBody(c: Catalog, state: ChatState): Html {
         (room) => html`<button
           class="search-scope-option"
           type="button"
+          dir="auto"
           data-search-scope-option="${room.roomId}"
           aria-current="${scope === room.roomId ? "true" : "false"}"
         >
@@ -253,8 +256,8 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
                 >${room.avatar === null ? room.name.slice(0, 1) : html`<img src="${room.avatar}" alt="" />`}</span
               >
               <span class="forward-copy">
-                <span class="forward-name">${room.name}</span>
-                <span class="forward-topic">${room.topic}</span>
+                <span class="forward-name" dir="auto">${room.name}</span>
+                <span class="forward-topic" dir="auto">${room.topic}</span>
               </span>
             </button>`,
           )}

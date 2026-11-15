@@ -291,18 +291,19 @@ Raising one is a change to this file with the reason.
 - 账号弹出的菜单在暗色模式使用与账号卡 hover 相同的纸面值，但用独立 token 书写；浅色模式不变。
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
-- 多选勾选按钮出现在左侧头像空隙、消息底部，绝对定位，不改变任何元素位置；点击整行或复选框都切换选中，选中背景圆角很小、颜色很浅。
+- 多选勾选按钮出现在头像对侧的空隙、消息底部，绝对定位，不改变任何元素位置：对方消息在右，自己的消息在左；点击整行或复选框都切换选中，选中背景圆角很小、颜色很浅。
 - 媒体与文件弹窗中的媒体按钮不显示文件名，像 emoji tile 一样带独立背景并缩小为六列小方块。
 - 图片预览窗口再缩到 30rem 高约 20rem；放大在窗口内部滚动，不再撑大窗口。
 - 账号弹出菜单使用与账号卡 hover 相同的独立纸面值，但两者不共享变量。
-- 消息右键菜单提供多选；多选后顶栏下方出现独立按钮：左取消，中计数，右全选、删除、分享，分享最右。按钮不再共用一条有颜色的栏；删除先弹确认，顶栏房间菜单仍在最上层。
+- 消息右键菜单提供多选；多选后顶栏下方出现固定的独立按钮：左取消，中计数，右全选、删除、分享，分享最右，与输入区左右对齐并留一个小间距。按钮不再共用一条有颜色的栏；删除先弹确认，顶栏房间菜单仍在最上层。
 - 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。
-- 粘贴图片作为图片类型进入缓冲区；只有通过附件按钮选择的图片才是文件类型。附件缓冲区与输入框的间距略大。
+- 粘贴图片作为图片类型进入缓冲区；只有通过附件按钮选择的图片才是文件类型，但仍保留缩略图和预览。附件缓冲区与输入框的间距略大。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
 - 聊天区域的头像要完整圆形，并与昵称中心对齐；其他区域的圆形头像保持现状。
 - 图片、视频、贴纸等媒体消息的时间显示在媒体内部右下角，像一个 span；文本消息的时间保持在文本内。
+- 消息、房间名、主题、搜索、输入和文件名使用 `dir="auto"`；布局使用逻辑属性，无法用逻辑值的锚点用 `:dir(rtl)` 覆盖，方向性图标在 RTL 镜像。
 - `Load older` 与 `Copy link` 保留为 mock 评审演示，不当作真实功能。
 - 浏览器存储不可用时显式说明并停止重定向，不进入循环。
 
@@ -439,12 +440,12 @@ A sticker places its time at the bottom-right in the same small translucent wate
 media, with no blur. An opened image or video is a compact
 30rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
 button floats on the window, image previews shrink to the image and zoom inside the fixed box, and video uses its native controls. Selection starts
-from the message menu or a left swipe; the toolbar sits directly below the topbar as separate controls: cancel on
-the left, count in the middle, and select all, delete, share on the right, with share last. The topbar room menu
+from the message menu or a left swipe; the toolbar is fixed below the topbar with a small gap and aligned edge to edge with the composer: cancel at the
+inline start, count in the middle, and select all, delete, share at the inline end, with share last. The topbar room menu
 stays above it, delete opens the confirm dialog, and share writes the selected rows into the chosen room; escape,
-a room switch, or an action leaves selection. A selection check appears in the left gutter at the row bottom,
-absolutely positioned so no element moves; the full row toggles it, the selected message body gets a small
-radius and a five percent ink wash, and the check stays outside that wash. Media tiles in the media dialog
+a room switch, or an action leaves selection. A selection check appears in the gutter opposite the avatar at the row bottom,
+absolutely positioned so no element moves: incoming messages on the right, own messages on the left. The full row toggles it, the selected message body gets a small
+radius and a four percent ink wash, and the check stays outside that wash. Media tiles in the media dialog
 hide names, use the emoji tile paper, and sit in six small columns.
 Room rows swipe right to mark read and
 left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
@@ -590,7 +591,9 @@ Rules for future CSS:
 4. Hover and active reuse the paper's state roles. A new state color needs a new named role and a check.
 5. One stylesheet entry, one layer order: tokens, reset, base, layout, components, surfaces, motion. The
    entry imports modules by layer; navigation, timeline and composer are separate files inside the
-   components layer. Local custom properties are for geometry or motion, never for a color.
+   components layer. Local custom properties are for geometry or motion, never for a color. Text direction
+   follows the content: user-generated text carries `dir="auto"`, layout uses logical properties, and a
+   physical anchor side gets a `:dir(rtl)` override; direction-bearing icons mirror in RTL.
 6. No width media query. Layout is fluid with `clamp()`, `minmax()`, `auto-fit` and container queries;
    every control gets `appearance: none` before styling and a visible focus outline.
 7. Every new rule must pass `test/style.test.ts`: all declared properties used, no numbered color tokens,
@@ -639,7 +642,8 @@ dismisses them, with no fallback; anchor positioning (`position-area`, `position
 anchor, `anchor-size`) places and sizes popovers without JS; `backdrop-filter` blurs the backdrop, the
 topbar, the navigation and dialogs; `@starting-style` and `transition-behavior` handle entrances;
 `field-sizing`, `scrollbar-gutter` and container queries serve the layout; `:user-invalid` serves forms;
-`crypto.randomUUID` and async clipboard serve local actions. `content-visibility`, `::details-content`,
+`crypto.randomUUID` and async clipboard serve local actions. `dir` and `bdi` carry content direction, and
+`:dir()` selects the physical anchor or icon override needed under RTL. `content-visibility`, `::details-content`,
 `@scope` and nesting are not used and are not claimed.
 
 Rejected for this floor: scroll-driven animations, `interpolate-size`, `text-box`, cross-document view
@@ -801,8 +805,14 @@ Every layout refactor re-checks these against the before crop. They have regress
 | bubble | content fit to `--bubble-max`, message spacing, faint reaction chip |
 | page | watermark tile under the chat, unchanged opacity and placement |
 | chrome | topbar/navigation glass, account card, popover and context-menu glass |
+| selection | check opposite the avatar at the row bottom; fixed toolbar below the topbar, aligned with the composer |
 | composer | action alignment, tray height, send button and input growth |
 
 - **2026-11-14, `/review/` message row.** The chat refactor moved Alice's grouped avatar from the last
   group row to the first line and dropped the inner corner chain. Resolved: the avatar is on the group end,
   the bubble chain uses `--bubble-inner`, and C13 guards both. The before crop stays the reference.
+- **2026-11-15, `/review/` selection.** The check sat in one gutter for both alignments, the toolbar scrolled
+  with the timeline and clipped under the chrome, and attachment-picker images lost their preview. Resolved:
+  the check sits opposite the avatar (incoming right, own left), the toolbar is fixed below the topbar and
+  aligned with the composer, the wash is four percent, and picker images keep a thumbnail and preview while
+  remaining files. Verified at 390 and 1280, and under a simulated `dir="rtl"`.

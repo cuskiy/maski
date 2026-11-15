@@ -494,4 +494,10 @@
       display: none;
     }
   }
+
+  :dir(rtl) .room-back .icon,
+  :dir(rtl) .section-chevron .icon,
+  :dir(rtl) .space-chevron .icon {
+    scale: -1 1;
+  }
 }
