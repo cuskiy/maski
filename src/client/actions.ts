@@ -241,6 +241,10 @@ export function createActions({ store, source, c, account }: Context): Actions {
     selectRoom(roomId) {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);
       if (room === undefined) return;
+      if (store.read("roomId") === roomId && (store.read("windowLoading") || store.read("messages").length > 0)) {
+        setRootView(true);
+        return;
+      }
       store.batch(() => {
         store.write("roomId", roomId);
         store.write("messages", []);
