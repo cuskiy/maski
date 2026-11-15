@@ -71,12 +71,35 @@
     inline-size: min(100% - 2 * var(--space-4), 64rem);
   }
 
-  #surface-settings {
-    background: var(--card-bg);
+  #surface-settings .surface-head,
+  #surface-room-settings .surface-head {
+    position: relative;
+    isolation: isolate;
+    background: var(--dialog-bg);
   }
 
-  #surface-settings .surface-body {
-    background: var(--dialog-bg);
+  #surface-settings .surface-head::before,
+  #surface-room-settings .surface-head::before {
+    position: absolute;
+    z-index: -1;
+    inset-block: 0;
+    inset-inline-start: 0;
+    inline-size: 10rem;
+    background: var(--card-bg);
+    content: "";
+  }
+
+  #surface-settings .surface-head > *,
+  #surface-room-settings .surface-head > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  @container (inline-size < 32rem) {
+    #surface-settings .surface-head::before,
+    #surface-room-settings .surface-head::before {
+      display: none;
+    }
   }
 
   #surface-settings,
@@ -144,7 +167,7 @@
   :root:has(#room-settings-members:target) .settings-tabs a[href="#room-settings-members"],
   :root:has(#room-settings-notifications:target) .settings-tabs a[href="#room-settings-notifications"],
   :root:not(:has(.surface-section:target)) .settings-tabs a:first-child {
-    background: var(--dialog-bg);
+    background: var(--card-active-bg);
     color: var(--card-ink);
     font-weight: var(--weight-strong);
   }

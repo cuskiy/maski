@@ -83,7 +83,7 @@
     --card-ink: var(--ink);
     --card-muted: var(--ink-3);
     --card-hover-bg: var(--surface-hover);
-    --card-active-bg: var(--surface-active);
+    --card-active-bg: color-mix(in srgb, var(--card-bg) 82%, var(--ink) 18%);
 
     --font:
       system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
