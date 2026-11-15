@@ -102,6 +102,7 @@ const roomSeeds: ReadonlyArray<Omit<RoomSummary, "notification" | "encryption" |
     isDirect: false,
     isSpace: false,
     favorite: false,
+    lowPriority: true,
     spaceId: "product",
   },
   {

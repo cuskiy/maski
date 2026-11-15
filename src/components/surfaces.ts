@@ -1,7 +1,7 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
-import type { ChatState } from "../core/types.ts";
+import type { ChatState, MessageRow } from "../core/types.ts";
 import { config } from "../config.ts";
 import { SURFACE } from "../core/regions.ts";
 import { field, submit } from "../components/form.ts";
@@ -22,7 +22,11 @@ const MENU_ICONS = {
   "roomMenu.favorite": icons.star,
   "roomMenu.mute": icons.mute,
   "roomMenu.leave": icons.exit,
-  "roomMenu.copyLink": icons.link,
+  "roomMenu.mediaFiles": icons.image,
+  "roomMenu.search": icons.search,
+  "roomMenu.invite": icons.invite,
+  "spaceMenu.settings": icons.settings,
+  "spaceMenu.leave": icons.exit,
   "messageMenu.reply": icons.reply,
   "messageMenu.react": icons.emoji,
   "messageMenu.edit": icons.compose,
@@ -36,6 +40,91 @@ const MENU_ICONS = {
 
 type MenuKey = keyof typeof MENU_ICONS;
 
+export function mediaFilesBody(c: Catalog, messages: readonly MessageRow[]): Html {
+  const media = messages.filter(
+    (message) => message.media !== null && (message.media.kind === "image" || message.media.kind === "video"),
+  );
+  const files = messages.filter(
+    (message) => message.media !== null && (message.media.kind === "file" || message.media.kind === "audio"),
+  );
+  return html`<div class="media-files" data-media-files>
+    <div class="media-files-tabs" role="tablist" aria-label="${t(c, "surface.mediaFiles")}">
+      <button class="media-files-tab" type="button" role="tab" data-media-files-tab="media" aria-current="true">
+        ${t(c, "surface.mediaFiles.medias")}
+      </button>
+      <button class="media-files-tab" type="button" role="tab" data-media-files-tab="files" aria-current="false">
+        ${t(c, "surface.mediaFiles.files")}
+      </button>
+    </div>
+    <div class="media-files-panel" data-media-files-panel="media">
+      ${
+        media.length === 0
+          ? html`<p class="note">${t(c, "surface.mediaFiles.empty")}</p>`
+          : html`<div class="media-files-grid">
+              ${media.map(
+                (message) =>
+                  html`<button
+                    class="media-file is-${message.media?.kind ?? "image"}"
+                    type="button"
+                    data-media-open="${message.media?.name ?? ""}"
+                    data-media-kind="${message.media?.kind ?? "image"}"
+                    ${
+                      message.media?.url === null || message.media?.url === undefined
+                        ? html``
+                        : html` data-media-url="${message.media.url}"`
+                    }
+                    commandfor="${SURFACE.viewer}"
+                    command="show-modal"
+                    aria-label="${message.media?.name ?? ""}"
+                  >
+                    ${
+                      message.media?.kind === "image" && message.media.url !== null
+                        ? html`<img src="${message.media.url}" alt="" loading="lazy" decoding="async" />`
+                        : message.media?.kind === "video"
+                          ? icons.video
+                          : icons.image
+                    }
+                    <span>${message.media?.name ?? ""}</span>
+                  </button>`,
+              )}
+            </div>`
+      }
+    </div>
+    <div class="media-files-panel" data-media-files-panel="files" hidden>
+      ${
+        files.length === 0
+          ? html`<p class="note">${t(c, "surface.mediaFiles.empty")}</p>`
+          : html`<div class="media-files-list">
+              ${files.map(
+                (message) => html`<button
+                  class="media-file-row"
+                  type="button"
+                  data-media-open="${message.media?.name ?? ""}"
+                  data-media-kind="${message.media?.kind ?? "file"}"
+                  commandfor="${SURFACE.viewer}"
+                  command="show-modal"
+                >
+                  ${message.media?.kind === "audio" ? icons.audio : icons.file}
+                  <span class="media-file-name">${message.media?.name ?? ""}</span>
+                  <span class="media-file-meta"
+                    >${t(c, message.media?.kind === "audio" ? "chat.media.audio" : "chat.media.file")}
+                    ${mediaSize(message.media?.size ?? null)}</span
+                  >
+                </button>`,
+              )}
+            </div>`
+      }
+    </div>
+  </div>`;
+}
+
+function mediaSize(size: number | null): string {
+  if (size === null) return "";
+  if (size < 1000) return `${String(size)} B`;
+  if (size >= 1_000_000) return `${Math.round(size / 100_000) / 10} MB`;
+  return `${Math.round(size / 1000)} kB`;
+}
+
 function checked(value: boolean): Html {
   return value ? html` checked` : html``;
 }
@@ -44,11 +133,63 @@ function disabled(value: boolean): Html {
   return value ? html` disabled` : html``;
 }
 
+function searchBody(c: Catalog, state: ChatState): Html {
+  const current = state.rooms.find((room) => room.roomId === state.roomId && !room.isSpace) ?? null;
+  const scope = current?.roomId ?? "all";
+  const label = current?.name ?? t(c, "surface.search.all");
+  const rooms = state.rooms.filter((room) => !room.isSpace);
+  return html`<form class="search-form" method="post" data-surface="search" data-search-scope="${scope}">
+    <div class="search-head">
+      <label class="visually-hidden" for="search-field">${t(c, "surface.search.label")}</label>
+      <input
+        id="search-field"
+        class="input search-input"
+        name="search-field"
+        type="search"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="${t(c, "surface.search.label")}"
+      />
+      <button
+        id="search-scope-button"
+        class="search-scope-button"
+        type="button"
+        popovertarget="search-scope"
+        data-search-scope-button
+        aria-label="${t(c, "surface.search.scope", { room: label })}"
+      >
+        ${label}
+      </button>
+    </div>
+    <div id="search-scope" class="search-scope" popover data-search-scope-menu>
+      <button
+        class="search-scope-option"
+        type="button"
+        data-search-scope-option="all"
+        aria-current="${scope === "all" ? "true" : "false"}"
+      >
+        ${t(c, "surface.search.all")}
+      </button>
+      ${rooms.map(
+        (room) => html`<button
+          class="search-scope-option"
+          type="button"
+          data-search-scope-option="${room.roomId}"
+          aria-current="${scope === room.roomId ? "true" : "false"}"
+        >
+          ${room.name}
+        </button>`,
+      )}
+    </div>
+    <button class="visually-hidden" type="submit">${t(c, "surface.search.submit")}</button>
+    <div class="search-results" data-search-results aria-live="polite"></div>
+  </form>`;
+}
+
 export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
   switch (id) {
     case SURFACE.search:
-      return html`${textForm(c, "search", "surface.search.label", "surface.search.submit")}
-        <div class="search-results" data-search-results aria-live="polite"></div>`;
+      return searchBody(c, state);
     case SURFACE.newMessage:
       return textForm(c, "new-message", "surface.newMessage.label", "surface.newMessage.submit");
     case SURFACE.join:
@@ -71,8 +212,12 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
         "roomMenu.markRead",
         "roomMenu.favorite",
         "roomMenu.mute",
+        "roomMenu.mediaFiles",
+        "roomMenu.search",
+        "roomMenu.invite",
         "roomMenu.leave",
-        "roomMenu.copyLink",
+        "spaceMenu.settings",
+        "spaceMenu.leave",
       ]);
     case SURFACE.messageMenu:
       return menu(c, [
@@ -96,6 +241,8 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
         </div>`;
     case SURFACE.viewer:
       return html`<p class="note">${t(c, "surface.viewer.empty")}</p>`;
+    case SURFACE.mediaFiles:
+      return mediaFilesBody(c, state.messages);
     case SURFACE.forward: {
       const rooms = state.rooms.filter((room) => !room.isSpace);
       if (rooms.length === 0) return html`<p class="note">${t(c, "surface.forward.empty")}</p>`;
@@ -186,6 +333,7 @@ function settingsBody(c: Catalog, state: ChatState): Html {
       { href: "#settings-account", key: "settings.account" },
       { href: "#settings-notifications", key: "settings.notifications" },
       { href: "#settings-security", key: "settings.security" },
+      { href: "#settings-low-priority", key: "settings.lowPriority" },
       { href: "#settings-about", key: "settings.about" },
     ])}
     <div class="settings-panels">
@@ -321,6 +469,25 @@ function settingsBody(c: Catalog, state: ChatState): Html {
           : html``
       }
     </section>
+    <section class="surface-section" id="settings-low-priority">
+      <h3>${t(c, "settings.lowPriority")}</h3>
+      ${
+        state.rooms.filter((room) => room.lowPriority === true && !room.isSpace).length === 0
+          ? html`<p class="note">${t(c, "settings.lowPriorityEmpty")}</p>`
+          : html`${state.rooms
+              .filter((room) => room.lowPriority === true && !room.isSpace)
+              .map(
+                (room) => html`<button
+                  class="profile-line"
+                  type="button"
+                  data-low-priority-room="${room.roomId}"
+                >
+                  <span class="profile-avatar" aria-hidden="true">${room.name.slice(0, 1)}</span>
+                  <span class="profile-text"><strong>${room.name}</strong><span class="note">${room.topic}</span></span>
+                </button>`,
+              )}`
+      }
+    </section>
     <section class="surface-section" id="settings-about">
       <h3>${t(c, "settings.about")}</h3>
       <p class="setting-line"><span>${t(c, "settings.version")}</span><span>${config.app.version}</span></p>
@@ -364,7 +531,7 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
       ${
         capabilities?.leave === true
           ? html`<button class="button-quiet is-danger" type="button" data-action="roomSettings.leave">
-            ${t(c, "roomSettings.leave")}
+            ${t(c, room?.isSpace ? "spaceMenu.leave" : "roomSettings.leave")}
           </button>`
           : html``
       }
@@ -462,7 +629,7 @@ function menu(c: Catalog, keys: ReadonlyArray<MenuKey>): Html {
       const action = declarative
         ? html` commandfor="${SURFACE.roomSettings}" command="show-modal"`
         : html` data-action="${key}"`;
-      return html`<button class="surface-item" type="button" ${action}>
+      return html`<button class="surface-item" type="button" data-menu-key="${key}" ${action}>
         ${MENU_ICONS[key]}<span>${t(c, key)}</span>
       </button>`;
     })}

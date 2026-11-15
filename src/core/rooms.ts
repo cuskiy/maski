@@ -18,6 +18,7 @@ export interface RoomInput {
   readonly isSpace?: boolean;
   readonly spaceId?: string | null;
   readonly favorite?: boolean;
+  readonly lowPriority?: boolean;
   readonly muted?: boolean;
   readonly encryption?: RoomEncryption;
   readonly readReceipt?: string | null;
@@ -41,6 +42,7 @@ export function createRoom(input: RoomInput): RoomSummary {
     isDirect: input.direct ?? false,
     isSpace: input.isSpace ?? false,
     favorite: input.favorite ?? false,
+    lowPriority: input.lowPriority ?? false,
     spaceId: input.spaceId ?? null,
     notification: muted ? "mute" : "all",
     encryption: input.encryption ?? "encrypted",

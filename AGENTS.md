@@ -230,7 +230,9 @@ Raising one is a change to this file with the reason.
 
 ## 2.5 聊天
 
-- **左导航**：菜单区是一张 raised surface 卡片（搜索、新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、频道四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。频道是 space，点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
+- **左导航**：菜单区是一张 raised surface 卡片（新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、空间四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。空间点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间菜单包含房间设置、标记已读、收藏、静音、媒体与文件、搜索、邀请、离开房间；空间菜单只有空间设置和离开空间。低优先级房间不进入导航，只在设置的“低优先级”页列出并可进入。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
+- **搜索**：只从房间菜单进入，不搜索已退出或未知房间。左侧关键词，右侧范围；范围弹窗固定以全部房间开头，其余顺序一致，默认当前房间。媒体与文件弹窗用两个选项：媒体只列图片和视频，文件列其余附件。
+- **离开与登出**：离开房间、离开空间和登出（含单台/其他会话）都走同一个确认弹窗。
 - **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
 - **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
 - **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。图片进入视口附近才加载；视频显示为较小的预览卡片，点击后在居中弹窗播放；图片点击后居中显示，可缩放，点击背景或关闭按钮退出。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。向上翻自动加载旧消息后保留当前位置，可以继续向上。当前房间在下方出现新未读消息且视口不在底部时，显示带计数的跳转按钮；到达底部或点击后标记已读。其他房间用导航未读徽章，不额外弹 toast。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
@@ -401,14 +403,17 @@ The composer and any open surface own their state and are never re-rendered by a
 what keeps the caret and the selection.
 
 **Navigation** is built once. Its header is one account button: the avatar on the left, the display name
-over the MXID beside it. The whole header opens a floating menu of the six labeled actions below it, and
+over the MXID beside it. The whole header opens a floating menu of the labeled actions below it, and
 each action opens its own dialog. The room sections follow. Section labels are bold. Rows are keyed by
 room id and moved only when order changes, so a sync, a repaint or a reload never rebuilds the list under
 the pointer. Section state is per account, with the old global map as the migration base; the default is
 rooms open, the rest closed. A room row has no visible menu button and no time; right-click, long-press or
 the keyboard context-menu key opens the room menu. The account card at the bottom has its own surface.
 Room cards use `space-2` left padding. Active is a deeper step than hover; a room nested in a space must
-still read as selected.
+still read as selected. Low priority rooms are absent from the list and appear in Settings instead. A room
+menu carries settings, read/favorite/mute, media and files, search, invite and leave; a space menu carries
+only space settings and leave. Search is room-scoped from that menu, with the scope chooser listing all
+rooms first and the current room selected. Leave, space leave and every sign-out share the confirm surface.
 
 **Topbar** has four cells: back (narrow only), room avatar, title over topic, room menu. The title and
 topic truncate, never wrap. The bar stays when no room is selected. It shares the navigation's translucent

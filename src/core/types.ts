@@ -67,6 +67,7 @@ export interface RoomSummary {
   readonly isDirect: boolean;
   readonly isSpace: boolean;
   readonly favorite: boolean;
+  readonly lowPriority?: boolean;
   readonly spaceId: string | null;
   readonly notification: "all" | "mentions" | "mute";
   readonly encryption: RoomEncryption;

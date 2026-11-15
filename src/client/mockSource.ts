@@ -118,6 +118,17 @@ export class MockSource implements ChatSource {
   react(_roomId: string, _messageId: string, _key: string): void {}
   edit(_roomId: string, _messageId: string, _body: string, _html: string | null): void {}
   redact(_roomId: string, _messageId: string): void {}
+  search(roomIds: readonly string[], query: string): readonly MessageRow[] {
+    if (!this.withData) return [];
+    const needle = query.trim().toLowerCase();
+    return roomIds
+      .flatMap((roomId) => [...mockMessagesFor(roomId), ...(this.forwarded.get(roomId) ?? [])])
+      .filter((row) => {
+        if (needle === "") return true;
+        const body = row.body === "" ? (row.media?.name ?? "") : row.body;
+        return body.toLowerCase().includes(needle);
+      });
+  }
   forward(roomId: string, rows: readonly MessageRow[]): void {
     this.forwarded.set(roomId, [...(this.forwarded.get(roomId) ?? []), ...rows]);
   }

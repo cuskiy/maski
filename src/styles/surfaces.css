@@ -67,6 +67,119 @@
     inline-size: min(100% - 2 * var(--space-4), var(--sas-width));
   }
 
+  #surface-media-files {
+    inline-size: min(100% - 2 * var(--space-4), 34rem);
+    block-size: min(70dvh, 38rem);
+  }
+
+  #surface-media-files .surface-body {
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .media-files-tabs {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .media-files-tab {
+    padding: var(--space-2) 0;
+    color: var(--dialog-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .media-files-tab[aria-current="true"] {
+    color: var(--dialog-ink);
+  }
+
+  .media-files-panel {
+    padding-block-start: var(--space-3);
+  }
+
+  .media-files-panel[hidden] {
+    display: none;
+  }
+
+  .media-files-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+
+  .media-file {
+    display: grid;
+    gap: 4px;
+    min-inline-size: 0;
+    padding: 0;
+    color: var(--dialog-muted);
+    text-align: start;
+  }
+
+  .media-file img,
+  .media-file > .icon {
+    inline-size: 100%;
+    block-size: auto;
+    aspect-ratio: 1;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    background: var(--field-bg);
+    object-fit: cover;
+  }
+
+  .media-file > .icon {
+    box-sizing: border-box;
+    padding: 28%;
+    color: var(--dialog-muted);
+  }
+
+  .media-file span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-xs);
+  }
+
+  .media-files-list {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .media-file-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 2.5rem;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--dialog-ink);
+    text-align: start;
+  }
+
+  .media-file-row:hover {
+    background: var(--dialog-hover-bg);
+  }
+
+  .media-file-row .icon {
+    inline-size: 1.25rem;
+    block-size: 1.25rem;
+    color: var(--dialog-muted);
+  }
+
+  .media-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-sm);
+  }
+
+  .media-file-meta {
+    color: var(--dialog-muted);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+  }
+
   #surface-forward {
     inline-size: min(100% - 2 * var(--space-4), 26rem);
     block-size: fit-content;
@@ -1146,6 +1259,76 @@
 
   .pack-item:hover {
     background: var(--card-hover-bg);
+  }
+
+  .search-form {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .search-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .search-input {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .search-scope-button {
+    flex: none;
+    max-inline-size: 9rem;
+    min-block-size: var(--field-height);
+    overflow: hidden;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--field-bg);
+    color: var(--dialog-ink);
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    anchor-name: --search-scope-button;
+  }
+
+  .search-scope-button:hover {
+    background: var(--dialog-hover-bg);
+  }
+
+  .search-scope {
+    position: fixed;
+    inset: auto;
+    margin: var(--space-1) 0 0;
+    min-inline-size: 10rem;
+    max-block-size: 18rem;
+    overflow-y: auto;
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--menu-bg);
+    color: var(--menu-ink);
+    backdrop-filter: blur(var(--float-blur));
+    position-anchor: --search-scope-button;
+    position-area: bottom span-right;
+    position-try-fallbacks: flip-block, flip-inline;
+  }
+
+  .search-scope-option {
+    display: block;
+    inline-size: 100%;
+    min-block-size: 2rem;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--menu-ink);
+    font-size: var(--text-sm);
+    text-align: start;
+    white-space: nowrap;
+  }
+
+  .search-scope-option:hover,
+  .search-scope-option[aria-current="true"] {
+    background: var(--menu-hover-bg);
   }
 
   .search-results {

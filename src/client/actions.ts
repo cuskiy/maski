@@ -43,6 +43,7 @@ export interface Actions {
   react(messageId: string, key: string): void;
   edit(messageId: string, body: string, html: string | null): void;
   redact(messageId: string): void;
+  search(roomIds: readonly string[], query: string): readonly MessageRow[];
   forward(messageIds: readonly string[], targetRoomId: string): void;
   discardMessage(messageId: string): void;
   retryMessage(messageId: string): void;
@@ -269,6 +270,9 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.read("messages").filter((entry) => entry.id !== messageId),
       );
       source.redact(message.roomId, messageId);
+    },
+    search(roomIds, query) {
+      return source.search(roomIds, query);
     },
     forward(messageIds, targetRoomId) {
       if (messageIds.length === 0) return;

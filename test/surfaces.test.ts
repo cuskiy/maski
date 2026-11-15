@@ -62,3 +62,18 @@ void test("the message menu supports selection and forwarding offers rooms", () 
   const forward = surfaceBodyFor(en, SURFACE.forward, state).value;
   assert.match(forward, /data-forward-room="design"/u);
 });
+
+void test("room menus, scoped search, and media files expose the new controls", () => {
+  const state = mockChatState();
+  const roomMenu = surfaceBodyFor(en, SURFACE.roomMenu, state).value;
+  assert.match(roomMenu, /data-menu-key="roomMenu.mediaFiles"/u);
+  assert.match(roomMenu, /data-menu-key="roomMenu.search"/u);
+  assert.match(roomMenu, /data-menu-key="roomMenu.invite"/u);
+  const search = surfaceBodyFor(en, SURFACE.search, state).value;
+  assert.match(search, /data-search-scope-option="all"/u);
+  assert.match(search, /data-search-scope-option="design"/u);
+  assert.ok(search.indexOf('data-search-scope-option="all"') < search.indexOf('data-search-scope-option="design"'));
+  const media = surfaceBodyFor(en, SURFACE.mediaFiles, state).value;
+  assert.match(media, /data-media-files-tab="media"/u);
+  assert.match(media, /data-media-files-tab="files"/u);
+});

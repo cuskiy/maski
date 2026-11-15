@@ -4,6 +4,7 @@ import { html } from "../lib/html.ts";
 import type { ChatState, MessageRow, RoomSummary } from "../core/types.ts";
 import { SURFACE } from "../core/regions.ts";
 import { surfaceBodyFor } from "../components/surfaces.ts";
+import { mediaFilesBody } from "../components/surfaces.ts";
 import { emojiPickerBody } from "../components/emoji.ts";
 import { icons } from "../components/icons.ts";
 import { CHAT_SURFACES } from "../core/surfaces.ts";
@@ -265,15 +266,22 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       const target = room(activeRoomId ?? state().roomId);
       const allowed = new Set<string>();
       if (target !== null) {
-        allowed.add("roomMenu.settings");
-        if (target.capabilities.markRead) allowed.add("roomMenu.markRead");
-        if (target.capabilities.favorite) allowed.add("roomMenu.favorite");
-        if (target.capabilities.mute) allowed.add("roomMenu.mute");
-        if (target.capabilities.leave) allowed.add("roomMenu.leave");
-        allowed.add("roomMenu.copyLink");
+        if (target.isSpace) {
+          allowed.add("spaceMenu.settings");
+          if (target.capabilities.leave) allowed.add("spaceMenu.leave");
+        } else {
+          allowed.add("roomMenu.settings");
+          if (target.capabilities.markRead) allowed.add("roomMenu.markRead");
+          if (target.capabilities.favorite) allowed.add("roomMenu.favorite");
+          if (target.capabilities.mute) allowed.add("roomMenu.mute");
+          if (target.capabilities.leave) allowed.add("roomMenu.leave");
+          if (target.capabilities.invite) allowed.add("roomMenu.invite");
+          allowed.add("roomMenu.mediaFiles");
+          allowed.add("roomMenu.search");
+        }
       }
-      for (const item of body.querySelectorAll<HTMLElement>("[data-action]")) {
-        item.hidden = !allowed.has(item.dataset["action"] ?? "");
+      for (const item of body.querySelectorAll<HTMLElement>("[data-menu-key]")) {
+        item.hidden = !allowed.has(item.dataset["menuKey"] ?? "");
       }
       return;
     }
@@ -403,14 +411,45 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       downloadRecovery();
       return;
     } else if (action === "verify-device") actions.verifyDevice(element.dataset["deviceId"] ?? "");
-    else if (action === "sign-out-device") actions.signOutDevice(element.dataset["deviceId"] ?? "");
-    else if (action === "sign-out-others") actions.signOutOthers();
-    else if (action === "backup") {
+    else if (action === "sign-out-device") {
+      const deviceId = element.dataset["deviceId"] ?? "";
+      askConfirm(t(c, "settings.signOutDeviceConfirm"), () => {
+        actions.signOutDevice(deviceId);
+        queueMicrotask(() => refreshBody(SURFACE.settings));
+      });
+    } else if (action === "sign-out-others") {
+      askConfirm(t(c, "settings.signOutOthersConfirm"), () => {
+        actions.signOutOthers();
+        queueMicrotask(() => refreshBody(SURFACE.settings));
+      });
+    } else if (action === "backup") {
       const value = element.closest(".surface-section")?.querySelector<HTMLElement>('[data-setting-value="backup"]');
       if (value !== null && value !== undefined) value.textContent = t(c, "settings.ready");
       return;
     }
     queueMicrotask(() => refreshBody(SURFACE.settings));
+  }
+
+  function setDialogTitle(id: string, key: Parameters<typeof t>[1]): void {
+    const title = document.getElementById(id)?.querySelector<HTMLElement>("h2");
+    if (title !== null && title !== undefined) title.textContent = t(c, key);
+  }
+
+  function openMediaFiles(roomId: string): void {
+    const dialog = document.getElementById(SURFACE.mediaFiles);
+    const body = dialog?.querySelector<HTMLElement>(`[data-region="${SURFACE.mediaFiles}-body"]`);
+    if (!(dialog instanceof HTMLDialogElement) || body === null || body === undefined) return;
+    body.innerHTML = mediaFilesBody(c, actions.search([roomId], "")).value;
+    body.scrollTop = 0;
+    dialog.showModal();
+  }
+
+  function openSearch(roomId: string): void {
+    const dialog = document.getElementById(SURFACE.search);
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    refreshBody(SURFACE.search, roomId);
+    dialog.showModal();
+    dialog.querySelector<HTMLInputElement>("#search-field")?.focus();
   }
 
   function handleRoomAction(action: string): void {
@@ -419,8 +458,38 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (action === "roomMenu.markRead") actions.markRead(id);
     else if (action === "roomMenu.favorite") actions.toggleFavorite(id);
     else if (action === "roomMenu.mute") actions.toggleMute(id);
-    else if (action === "roomMenu.leave") actions.leaveRoom(id);
-    else if (action === "roomMenu.copyLink") copy(`${location.origin}${location.pathname}#${id}`);
+    else if (action === "roomMenu.leave") {
+      hide(SURFACE.roomMenu);
+      askConfirm(t(c, "roomMenu.leaveConfirm"), () => actions.leaveRoom(id));
+      return;
+    } else if (action === "roomMenu.mediaFiles") {
+      hide(SURFACE.roomMenu);
+      openMediaFiles(id);
+      return;
+    } else if (action === "roomMenu.search") {
+      hide(SURFACE.roomMenu);
+      openSearch(id);
+      return;
+    } else if (action === "roomMenu.invite") {
+      hide(SURFACE.roomMenu);
+      refreshBody(SURFACE.invite);
+      const inviteDialog = document.getElementById(SURFACE.invite);
+      if (inviteDialog instanceof HTMLDialogElement) inviteDialog.showModal();
+      return;
+    } else if (action === "spaceMenu.settings") {
+      hide(SURFACE.roomMenu);
+      const dialog = document.getElementById(SURFACE.roomSettings);
+      if (dialog instanceof HTMLDialogElement) {
+        setDialogTitle(SURFACE.roomSettings, "spaceMenu.settings");
+        refreshBody(SURFACE.roomSettings, id);
+        dialog.showModal();
+      }
+      return;
+    } else if (action === "spaceMenu.leave") {
+      hide(SURFACE.roomMenu);
+      askConfirm(t(c, "spaceMenu.leaveConfirm"), () => actions.leaveRoom(id));
+      return;
+    }
     hide(SURFACE.roomMenu);
   }
 
@@ -452,14 +521,19 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const input = form.querySelector<HTMLInputElement>("#search-field");
     const results = document.querySelector<HTMLElement>("[data-search-results]");
     if (input === null || results === null) return;
-    const query = input.value.trim().toLowerCase();
+    const query = input.value.trim();
     if (query === "") {
       results.replaceChildren();
       return;
     }
-    const matches = state()
-      .messages.filter((entry) => entry.body.toLowerCase().includes(query))
-      .slice(0, 8);
+    const scope = form.dataset["searchScope"] ?? state().roomId ?? "all";
+    const roomIds =
+      scope === "all"
+        ? state()
+            .rooms.filter((entry) => !entry.isSpace && entry.membership === "join")
+            .map((entry) => entry.roomId)
+        : [scope];
+    const matches = actions.search(roomIds, query).slice(0, 40);
     results.innerHTML =
       matches.length === 0
         ? `<p class="note">${t(c, "surface.search.empty")}</p>`
@@ -470,7 +544,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
               data-search-room="${entry.roomId}"
               data-search-message="${entry.id}"
             >
-              <span class="search-result-room">${room(entry.roomId)?.name ?? ""}</span><span>${entry.body}</span>
+              <span class="search-result-room">${room(entry.roomId)?.name ?? ""}</span
+              ><span>${entry.body === "" ? (entry.media?.name ?? "") : entry.body}</span>
             </button>`,
           )}`.value;
   }
@@ -505,6 +580,38 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const stickerTab = target.closest<HTMLElement>("[data-sticker-tab]");
     if (stickerTab !== null) {
       selectStickerTab(stickerTab);
+      return;
+    }
+
+    const mediaTab = target.closest<HTMLElement>("[data-media-files-tab]");
+    if (mediaTab !== null) {
+      const root = mediaTab.closest<HTMLElement>("[data-media-files]");
+      const key = mediaTab.dataset["mediaFilesTab"];
+      if (root !== null && key !== undefined) {
+        for (const tab of root.querySelectorAll<HTMLElement>("[data-media-files-tab]")) {
+          tab.setAttribute("aria-current", String(tab === mediaTab));
+        }
+        for (const panel of root.querySelectorAll<HTMLElement>("[data-media-files-panel]")) {
+          panel.hidden = panel.dataset["mediaFilesPanel"] !== key;
+        }
+      }
+      return;
+    }
+
+    const scopeOption = target.closest<HTMLElement>("[data-search-scope-option]");
+    if (scopeOption !== null) {
+      const form = scopeOption.closest<HTMLFormElement>(".search-form");
+      const button = form?.querySelector<HTMLElement>("[data-search-scope-button]");
+      const value = scopeOption.dataset["searchScopeOption"];
+      if (form !== null && form !== undefined && button !== null && button !== undefined && value !== undefined) {
+        form.dataset["searchScope"] = value;
+        button.textContent = scopeOption.textContent ?? "";
+        button.setAttribute("aria-label", t(c, "surface.search.scope", { room: scopeOption.textContent ?? "" }));
+        for (const option of form.querySelectorAll<HTMLElement>("[data-search-scope-option]")) {
+          option.setAttribute("aria-current", String(option === scopeOption));
+        }
+      }
+      scopeOption.closest<HTMLElement>("[popover]")?.hidePopover();
       return;
     }
 
@@ -548,6 +655,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       } else if (id === SURFACE.invite) refreshBody(id);
       else if (id === SURFACE.roomSettings) {
         hide(SURFACE.roomMenu);
+        setDialogTitle(id, "roomMenu.settings");
         refreshBody(id, activeRoomId ?? state().roomId);
       }
     }
@@ -556,6 +664,15 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (settings !== null) {
       event.preventDefault();
       handleSettingsAction(settings.dataset["settingsAction"] ?? "", settings);
+      return;
+    }
+
+    const lowPriorityRoom = target.closest<HTMLElement>("[data-low-priority-room]");
+    if (lowPriorityRoom !== null) {
+      event.preventDefault();
+      const roomId = lowPriorityRoom.dataset["lowPriorityRoom"] ?? "";
+      hide(SURFACE.settings);
+      if (roomId !== "") actions.selectRoom(roomId);
       return;
     }
 
@@ -627,8 +744,12 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       if (surface?.id === SURFACE.roomMenu) handleRoomAction(action.dataset["action"] ?? "");
       else if (surface?.id === SURFACE.messageMenu) handleMessageAction(action.dataset["action"] ?? "");
       else if (surface?.id === SURFACE.roomSettings && action.dataset["action"] === "roomSettings.leave") {
-        actions.leaveRoom(activeRoomId ?? state().roomId ?? "");
-        hide(SURFACE.roomSettings);
+        const roomId = activeRoomId ?? state().roomId ?? "";
+        const leavingSpace = room(roomId)?.isSpace === true;
+        askConfirm(t(c, leavingSpace ? "spaceMenu.leaveConfirm" : "roomMenu.leaveConfirm"), () => {
+          actions.leaveRoom(roomId);
+          hide(SURFACE.roomSettings);
+        });
       }
       return;
     }

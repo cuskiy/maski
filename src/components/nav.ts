@@ -8,7 +8,6 @@ import { languageTrigger } from "./language.ts";
 import { surface, surfaceTrigger } from "./surface.ts";
 
 const ACTIONS = [
-  { surface: SURFACE.search, key: "nav.search", icon: icons.search },
   { surface: SURFACE.newMessage, key: "nav.newMessage", icon: icons.compose },
   { surface: SURFACE.invite, key: "nav.invite", icon: icons.invite },
   { surface: SURFACE.join, key: "nav.join", icon: icons.join },
@@ -94,6 +93,7 @@ function skeletonRows(): Html {
 }
 
 function belongs(room: RoomSummary, section: SectionId): boolean {
+  if (room.lowPriority === true) return false;
   if (room.spaceId !== null) return false;
   if (section === "favorites") return room.favorite;
   if (section === "direct") return room.isDirect && !room.favorite;
@@ -121,7 +121,7 @@ function muted(c: Catalog): Html {
 
 function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
   const open = state.openSpaces.includes(room.roomId);
-  const children = state.rooms.filter((child) => child.spaceId === room.roomId);
+  const children = state.rooms.filter((child) => child.spaceId === room.roomId && child.lowPriority !== true);
   return html`<li class="room is-space${open ? " is-open" : ""}" data-space="${room.roomId}">
     <button
       class="room-main"
