@@ -73,13 +73,23 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   const selectionCount = selectionBar?.querySelector<HTMLElement>("[data-selection-count]") ?? null;
   const selected = new Set<string>();
   let selecting = false;
-  let ignoreSelectionClick = false;
 
   const selectedIds = (): readonly string[] =>
     store
       .snapshot()
       .messages.map((message) => message.id)
       .filter((id) => selected.has(id));
+
+  const visibleMessageIds = (): readonly string[] => {
+    const viewport = wrap.getBoundingClientRect();
+    return Array.from(list.querySelectorAll<HTMLElement>("li.message"))
+      .filter((row) => {
+        const rect = row.getBoundingClientRect();
+        return rect.bottom > viewport.top && rect.top < viewport.bottom;
+      })
+      .map((row) => row.dataset["id"])
+      .filter((id): id is string => id !== undefined);
+  };
 
   const paintSelection = (): void => {
     region.classList.toggle("is-selecting", selecting);
@@ -88,7 +98,9 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       selectionCount.textContent = t(c, "selection.count", { count: String(selected.size) });
     }
     for (const row of list.querySelectorAll<HTMLElement>("li.message")) {
-      row.classList.toggle("is-selected", selected.has(row.dataset["id"] ?? ""));
+      const isSelected = selected.has(row.dataset["id"] ?? "");
+      row.classList.toggle("is-selected", isSelected);
+      row.querySelector<HTMLElement>(".message-select-mark")?.setAttribute("aria-pressed", String(isSelected));
     }
   };
 
@@ -120,30 +132,26 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       stopSelection();
       return;
     }
-    const state = store.snapshot();
     if (action === "all") {
-      selected.clear();
-      for (const message of state.messages) selected.add(message.id);
+      for (const id of visibleMessageIds()) selected.add(id);
       paintSelection();
       return;
     }
-    if (action === "share") {
-      const ids = selectedIds();
-      if (ids.length > 0) {
-        document.dispatchEvent(new CustomEvent("maski:forward-open", { detail: { ids } }));
-      }
-      return;
-    }
     if (action === "delete") {
-      const ids = selectedIds();
+      const rows = store.snapshot().messages;
+      const ids = selectedIds().filter((id) => rows.find((message) => message.id === id)?.capabilities.redact === true);
       if (ids.length === 0) return;
       document.dispatchEvent(
         new CustomEvent("maski:confirm", {
           detail: {
             message: t(c, "selection.deleteConfirm", { count: String(ids.length) }),
             action: () => {
-              stopSelection();
-              for (const id of ids) actions.redact(id);
+              for (const id of ids) {
+                selected.delete(id);
+                actions.redact(id);
+              }
+              if (selected.size === 0) stopSelection();
+              else paintSelection();
             },
           },
         }),
@@ -249,6 +257,17 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     else if (currentJump === null) region.append(nextJump.cloneNode(true));
   };
 
+  const fitReactionWidths = (): void => {
+    for (const reactions of list.querySelectorAll<HTMLElement>(".reactions")) {
+      const line = reactions.closest<HTMLElement>(".message-inner")?.querySelector<HTMLElement>(".message-line");
+      if (line === null || line === undefined) continue;
+      const width = line.getBoundingClientRect().width;
+      reactions.style.maxInlineSize = width > 0 ? `${String(width)}px` : "";
+    }
+  };
+
+  const lineObserver = new ResizeObserver(() => fitReactionWidths());
+
   const render = (): void => {
     const state = store.snapshot();
     const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
@@ -267,6 +286,12 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       .querySelector<HTMLElement>(`[data-region="${REGION.timeline}"]`);
     if (next !== null) reconcile(next);
     markMultilineBubbles(list);
+    lineObserver.disconnect();
+    for (const reactions of list.querySelectorAll<HTMLElement>(".reactions")) {
+      const line = reactions.closest<HTMLElement>(".message-inner")?.querySelector<HTMLElement>(".message-line");
+      if (line !== null && line !== undefined) lineObserver.observe(line);
+    }
+    fitReactionWidths();
 
     if (pendingRoomId !== null && state.messages.length > 0 && state.messages[0]?.roomId === pendingRoomId) {
       const roomId = pendingRoomId;
@@ -335,12 +360,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
 
   const onSelectionClick = (event: MouseEvent): void => {
     if (!selecting) return;
-    if (ignoreSelectionClick) {
-      ignoreSelectionClick = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
     const target = event.target;
     if (!(target instanceof Element)) return;
     const action = target.closest<HTMLElement>("[data-selection-action]");
@@ -350,6 +369,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       runSelectionAction(action.dataset["selectionAction"] ?? "");
       return;
     }
+    if (target.closest("[data-reaction-more]") !== null) return;
     const row = target.closest<HTMLElement>("li.message");
     if (row === null) return;
     const id = row.dataset["id"];
@@ -366,6 +386,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
 
   const onSelectionClear = (): void => stopSelection();
 
+  const onSelectionDelete = (): void => runSelectionAction("delete");
+
   const onSelectionKey = (event: KeyboardEvent): void => {
     if (!selecting || event.key !== "Escape") return;
     event.preventDefault();
@@ -378,6 +400,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   region.addEventListener("click", onSelectionClick, true);
   document.addEventListener("maski:select-message", onSelectMessage);
   document.addEventListener("maski:selection-clear", onSelectionClear);
+  document.addEventListener("maski:selection-delete", onSelectionDelete);
   document.addEventListener("keydown", onSelectionKey, true);
   const unbindSwipe = bindSwipe(region, {
     target: ".message-inner",
@@ -397,7 +420,6 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       if (direction === "right") {
         document.dispatchEvent(new CustomEvent("maski:reply-message", { detail: { id } }));
       } else {
-        ignoreSelectionClick = true;
         document.dispatchEvent(new CustomEvent("maski:select-message", { detail: { id } }));
       }
     },
@@ -411,11 +433,13 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   return () => {
     unsubscribe();
     resizeObserver.disconnect();
+    lineObserver.disconnect();
     wrap.removeEventListener("scroll", onScroll);
     region.removeEventListener("click", onClick);
     region.removeEventListener("click", onSelectionClick, true);
     document.removeEventListener("maski:select-message", onSelectMessage);
     document.removeEventListener("maski:selection-clear", onSelectionClear);
+    document.removeEventListener("maski:selection-delete", onSelectionDelete);
     document.removeEventListener("keydown", onSelectionKey, true);
     unbindSwipe();
   };

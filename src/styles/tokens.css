@@ -15,22 +15,29 @@
     --bubble-ink: light-dark(rgb(20 20 20), rgb(222 218 210));
     --menu-hover: light-dark(rgb(238 238 238), rgb(41 39 37));
     --menu-active: light-dark(rgb(228 228 228), rgb(49 47 44));
-    --float: light-dark(rgb(253 253 253 / 88%), rgb(32 31 29 / 88%));
+    --float: light-dark(rgb(248 248 247 / 92%), rgb(32 31 29 / 88%));
     --chrome: light-dark(rgb(251 251 251 / 82%), rgb(29 28 26 / 82%));
-    --nav: light-dark(rgb(241 241 241 / 94%), rgb(30 29 27 / 94%));
-    --focus: light-dark(rgb(102 102 102), rgb(137 134 129));
+    --nav: light-dark(rgb(245 245 245 / 94%), rgb(30 29 27 / 94%));
+    --focus: light-dark(rgb(153 153 153), rgb(85 85 85));
     --danger: light-dark(rgb(150 97 92), rgb(217 167 161));
     --danger-soft: light-dark(rgb(150 97 92 / 10%), rgb(217 167 161 / 14%));
     --mark: light-dark(rgb(232 232 232), rgb(64 62 59));
     --selection: light-dark(rgb(20 20 20 / 14%), rgb(228 225 220 / 16%));
+    --selection-control-bg: light-dark(
+      color-mix(in srgb, var(--surface) 65%, transparent),
+      color-mix(in srgb, var(--surface-hover) 82%, transparent)
+    );
+    --selection-control-hover-bg: color-mix(in srgb, var(--surface-active) 90%, transparent);
+    --selection-control-active-bg: var(--surface-active);
+    --selection-control-ink: var(--ink);
+    --selection-mark-bg: color-mix(in srgb, var(--surface-hover) 82%, transparent);
     --scrim: rgb(0 0 0 / 46%);
     --scrollbar: light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%));
     --code: light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%));
-    --media-ink: rgb(255 255 255);
-    --media-bg: light-dark(rgb(78 78 78 / 62%), rgb(88 87 84 / 62%));
-    --media-ambient: color-mix(in srgb, var(--ink) 5%, var(--card-bg));
-    --media-watermark-bg: color-mix(in srgb, var(--page) 68%, transparent);
-    --media-watermark-ink: color-mix(in srgb, var(--ink) 68%, transparent);
+    --media-symbol-ink: color-mix(in srgb, var(--ink) 50%, transparent);
+    --media-card-bg: color-mix(in srgb, var(--bubble-bg) 96%, var(--ink) 4%);
+    --media-watermark-bg: light-dark(var(--card-bg), color-mix(in srgb, var(--page) 68%, transparent));
+    --media-watermark-ink: light-dark(var(--card-ink), color-mix(in srgb, var(--ink) 68%, transparent));
     --overlay-control-bg: color-mix(in srgb, var(--ink) 8%, var(--card-bg));
     --overlay-control-ink: var(--dialog-ink);
 
@@ -41,15 +48,17 @@
     --nav-active-bg: var(--surface-active);
     --nav-active-ink: var(--ink);
     --nav-active-muted: color-mix(in srgb, var(--ink) 74%, var(--nav) 26%);
-    --nav-avatar-bg: var(--surface-active);
+
+    --nav-avatar-bg: light-dark(var(--surface-hover), var(--surface-active));
     --nav-avatar-ink: var(--ink-2);
+    --avatar-bg: light-dark(var(--surface), var(--card-bg));
     --nav-badge-bg: color-mix(in srgb, var(--ink) 70%, var(--nav) 30%);
     --nav-badge-ink: var(--page);
 
-    --account-bg: color-mix(in srgb, var(--surface) 93%, var(--ink) 7%);
+    --account-bg: light-dark(rgb(232 232 232), color-mix(in srgb, var(--surface) 93%, var(--ink) 7%));
     --account-ink: var(--ink);
     --account-muted: var(--ink-3);
-    --account-hover-bg: var(--surface-hover);
+    --account-hover-bg: light-dark(rgb(240 240 240), var(--surface-hover));
     --account-active-bg: var(--surface-active);
 
     --topbar-title-ink: var(--ink);
@@ -63,7 +72,7 @@
     --bubble-meta-ink: color-mix(in srgb, var(--bubble-ink) 58%, var(--bubble) 42%);
 
     --menu-bg: var(--float);
-    --nav-menu-bg: light-dark(rgb(253 253 253 / 88%), color-mix(in srgb, var(--surface) 93%, var(--ink) 7%));
+    --nav-menu-bg: light-dark(rgb(232 232 232), color-mix(in srgb, var(--surface) 93%, var(--ink) 7%));
     --menu-ink: var(--ink);
     --menu-muted: var(--ink-3);
     --menu-hover-bg: var(--menu-hover);
@@ -79,20 +88,31 @@
     --field-ink: var(--ink);
     --field-placeholder: var(--ink-3);
     --field-focus: var(--ink-4);
+    --dialog-field-bg: var(--surface-active);
+    --dialog-field-ink: var(--dialog-ink);
+    --dialog-field-placeholder: var(--dialog-muted);
     --dialog-blur: 4px;
     --composer-ink: var(--ink);
     --composer-muted: var(--ink-2);
     --composer-hover-bg: var(--surface-hover);
     --composer-active-bg: var(--surface-active);
+    --composer-focus: var(--focus);
+    --composer-tray-bg: light-dark(color-mix(in srgb, var(--card-bg) 55%, var(--page)), var(--card-bg));
+    --composer-tray-ink: var(--card-ink);
+    --composer-tray-muted: var(--card-muted);
 
     --card-bg: color-mix(in srgb, var(--surface) 92%, var(--ink) 8%);
     --card-ink: var(--ink);
     --card-muted: var(--ink-3);
     --card-hover-bg: var(--surface-hover);
     --card-active-bg: color-mix(in srgb, var(--card-bg) 82%, var(--ink) 18%);
+    --reaction-bg: light-dark(color-mix(in srgb, var(--card-bg) 18%, var(--page)), var(--card-bg));
+    --reaction-active-bg: light-dark(var(--surface-hover), var(--card-active-bg));
+    --load-older-bg: light-dark(var(--surface-hover), var(--card-bg));
+    --load-older-hover-bg: light-dark(var(--surface-active), var(--card-hover-bg));
     --settings-sidebar-bg: color-mix(in srgb, var(--dialog-bg) 96%, var(--card-ink) 4%);
-    --settings-hover-bg: color-mix(in srgb, var(--card-ink) 4%, transparent);
-    --settings-active-bg: color-mix(in srgb, var(--card-ink) 8%, transparent);
+    --settings-hover-bg: color-mix(in srgb, var(--card-ink) 3%, transparent);
+    --settings-active-bg: color-mix(in srgb, var(--card-ink) 6%, transparent);
 
     --font:
       system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
@@ -159,6 +179,7 @@
     --context-x: 0px;
     --context-y: 0px;
     --float-blur: 8px;
+    --context-blur: 10px;
     --scrim-blur: 6px;
     --spin-duration: 800ms;
 

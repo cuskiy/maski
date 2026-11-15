@@ -6,12 +6,14 @@ import type {
   Media,
   MessageKind,
   MessageRow,
-  NotificationPrefs,
+  NotificationLevel,
   ReplyRef,
   RoomSummary,
   SectionId,
 } from "../core/types.ts";
 import { createRoom, roomFromInvite } from "../core/rooms.ts";
+import { messageMatches } from "../core/search.ts";
+import { toggledReactions } from "../core/reactions.ts";
 import type { Store } from "./store.ts";
 import * as prefs from "./prefs.ts";
 import { clearSession } from "./session.ts";
@@ -39,24 +41,34 @@ export interface Actions {
   toggleMute(roomId: string): void;
   leaveRoom(roomId: string): void;
   addRoom(name: string, topic: string, direct: boolean): void;
+  updateRoomDetails(roomId: string, patch: { readonly name?: string; readonly topic?: string }): void;
+  addRoomAddress(roomId: string, address: string): void;
+  removeRoomAddress(roomId: string, address: string): void;
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
+  inviteUser(roomId: string, userId: string): "ok" | "invalid" | "exists";
   setNotification(roomId: string, mode: RoomSummary["notification"]): void;
+  setNotificationLevel(level: NotificationLevel): void;
   react(messageId: string, key: string): void;
   edit(messageId: string, body: string, html: string | null): void;
   redact(messageId: string): void;
-  search(roomIds: readonly string[], query: string): readonly MessageRow[];
+  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[];
   forward(messageIds: readonly string[], targetRoomId: string): void;
   discardMessage(messageId: string): void;
   retryMessage(messageId: string): void;
   recordEmoji(emoji: string): void;
+  recordReaction(emoji: string): void;
   recordSticker(sticker: string): void;
   acceptInvite(roomId: string): void;
   declineInvite(roomId: string): void;
-  setPref(key: keyof NotificationPrefs, value: boolean): void;
+  setPref(key: "badge" | "titleTotal" | "desktop" | "preview", value: boolean): void;
+  setBackupReady(): void;
   revealRecoveryKey(): void;
   clearRecoveryKey(): void;
+  resetIdentity(): void;
   verifyDevice(deviceId: string): void;
   signOutDevice(deviceId: string): void;
   signOutOthers(): void;
+  signOutAll(): void;
   logout(): void;
 }
 
@@ -191,9 +203,9 @@ export function createActions({ store, source, c, account }: Context): Actions {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);
       if (room === undefined || !room.capabilities.mute) return;
       const muted = !room.muted;
-      const notification = room.notification === "mute" ? (muted ? "mute" : "all") : room.notification;
+      const notification = muted ? "mute" : "default";
       updateRoom(roomId, { muted, notification });
-      source.setNotification(roomId, muted ? "mute" : notification);
+      source.setNotification(roomId, notification);
     },
     leaveRoom(roomId) {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);
@@ -222,29 +234,75 @@ export function createActions({ store, source, c, account }: Context): Actions {
       setRootView(true);
       source.open(roomId);
     },
+    updateRoomDetails(roomId, patch) {
+      const room = store.read("rooms").find((entry) => entry.roomId === roomId);
+      if (room === undefined || !room.capabilities.manage) return;
+      const next: { name?: string; topic?: string } = {};
+      if (patch.name !== undefined && patch.name.trim() !== "") next.name = patch.name.trim();
+      if (patch.topic !== undefined) next.topic = patch.topic.trim();
+      if (Object.keys(next).length > 0) updateRoom(roomId, next);
+    },
+    addRoomAddress(roomId, address) {
+      const room = store.read("rooms").find((entry) => entry.roomId === roomId);
+      if (room === undefined || !room.capabilities.manage || room.aliases.includes(address)) return;
+      updateRoom(roomId, { aliases: [...room.aliases, address] });
+    },
+    removeRoomAddress(roomId, address) {
+      const room = store.read("rooms").find((entry) => entry.roomId === roomId);
+      if (room === undefined || !room.capabilities.manage) return;
+      updateRoom(roomId, { aliases: room.aliases.filter((entry) => entry !== address) });
+    },
+    memberAction(roomId, userId, action) {
+      const room = store.read("rooms").find((entry) => entry.roomId === roomId);
+      const session = store.read("session");
+      if (room === undefined || !room.capabilities.manage || userId === session?.userId) return;
+      const members = store.read("members");
+      if (action === "ban" || action === "unban") {
+        store.write(
+          "members",
+          members.map((member) =>
+            member.userId === userId ? { ...member, membership: action === "ban" ? "ban" : "join" } : member,
+          ),
+        );
+        return;
+      }
+      store.write(
+        "members",
+        members.filter((member) => member.userId !== userId),
+      );
+    },
+    inviteUser(roomId, userId) {
+      const room = store.read("rooms").find((entry) => entry.roomId === roomId);
+      if (room === undefined || !room.capabilities.invite) return "invalid";
+      if (!/^@[^:\s]+:[^:\s]+$/u.test(userId) || userId === store.read("session")?.userId) return "invalid";
+      if (store.read("members").some((member) => member.userId === userId)) return "exists";
+      const localpart = userId.slice(1).split(":")[0] ?? userId;
+      store.write("members", [
+        ...store.read("members"),
+        {
+          userId,
+          displayName: localpart,
+          avatar: null,
+          profile: true,
+          membership: "invite",
+        },
+      ]);
+      return "ok";
+    },
     setNotification(roomId, mode) {
       updateRoom(roomId, { notification: mode, muted: mode === "mute" });
       source.setNotification(roomId, mode);
     },
+    setNotificationLevel(level) {
+      const next = { ...store.read("notifications"), level };
+      store.write("notifications", next);
+      prefs.saveNotifications(account, next);
+      source.saveNotifications(next);
+    },
     react(messageId, key) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
       if (message === undefined || !message.capabilities.react) return;
-      const reactions = [];
-      let found = false;
-      for (const reaction of message.reactions) {
-        if (reaction.key !== key) {
-          reactions.push(reaction);
-          continue;
-        }
-        found = true;
-        if (reaction.mine) {
-          if (reaction.count > 1) reactions.push({ ...reaction, count: reaction.count - 1, mine: false });
-        } else {
-          reactions.push({ ...reaction, count: reaction.count + 1, mine: true });
-        }
-      }
-      if (!found) reactions.push({ key, count: 1, mine: true });
-      const updated = { ...message, reactions };
+      const updated = { ...message, reactions: toggledReactions(message.reactions, key) };
       store.write(
         "messages",
         store.read("messages").map((entry) => (entry.id === messageId ? updated : entry)),
@@ -271,8 +329,12 @@ export function createActions({ store, source, c, account }: Context): Actions {
       );
       source.redact(message.roomId, messageId);
     },
-    search(roomIds, query) {
-      return source.search(roomIds, query);
+    search(roomIds, query, mediaKinds) {
+      const remote = source.search(roomIds, query, mediaKinds);
+      const local = store
+        .read("messages")
+        .filter((message) => roomIds.includes(message.roomId) && messageMatches(message, query, mediaKinds));
+      return [...new Map([...remote, ...local].map((message) => [message.id, message])).values()];
     },
     forward(messageIds, targetRoomId) {
       if (messageIds.length === 0) return;
@@ -308,10 +370,12 @@ export function createActions({ store, source, c, account }: Context): Actions {
       }
     },
     discardMessage(messageId) {
+      const message = store.read("messages").find((entry) => entry.id === messageId);
       store.write(
         "messages",
-        store.read("messages").filter((message) => message.id !== messageId),
+        store.read("messages").filter((entry) => entry.id !== messageId),
       );
+      if (message !== undefined) source.redact(message.roomId, messageId);
     },
     retryMessage(messageId) {
       const message = store.read("messages").find((entry) => entry.id === messageId);
@@ -328,6 +392,12 @@ export function createActions({ store, source, c, account }: Context): Actions {
       const next = [emoji, ...store.read("recentEmoji").filter((entry) => entry !== emoji)].slice(0, 18);
       store.write("recentEmoji", next);
       prefs.saveRecentEmoji(account, next);
+    },
+    recordReaction(emoji) {
+      if (emoji === "") return;
+      const next = [emoji, ...store.read("recentReactions").filter((entry) => entry !== emoji)].slice(0, 18);
+      store.write("recentReactions", next);
+      prefs.saveRecentReactions(account, next);
     },
     recordSticker(sticker) {
       if (sticker === "") return;
@@ -367,11 +437,18 @@ export function createActions({ store, source, c, account }: Context): Actions {
       prefs.saveNotifications(account, next);
       source.saveNotifications(next);
     },
+    setBackupReady() {
+      store.write("backupReady", true);
+      prefs.saveBackup(account, true);
+    },
     revealRecoveryKey() {
       source.revealRecoveryKey();
     },
     clearRecoveryKey() {
       store.write("recoveryKey", null);
+    },
+    resetIdentity() {
+      source.resetIdentity();
     },
     verifyDevice(deviceId) {
       source.verifyDevice(deviceId);
@@ -381,6 +458,11 @@ export function createActions({ store, source, c, account }: Context): Actions {
     },
     signOutOthers() {
       source.signOutOthers();
+    },
+    signOutAll() {
+      source.signOutAll();
+      clearSession();
+      location.assign("/");
     },
     logout() {
       source.logout();

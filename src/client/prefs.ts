@@ -63,11 +63,22 @@ export function readNotifications(account: string): NotificationPrefs | null {
     titleTotal: value.titleTotal === true,
     desktop: value.desktop,
     preview: value.preview === true,
+    level: value.level === "mentions" || value.level === "mute" ? value.level : "all",
   };
 }
 
 export function saveNotifications(account: string, prefs: NotificationPrefs): void {
   storage.writeJson(storage.STORAGE.notifications(account), prefs);
+}
+
+export function readBackup(account: string): boolean | null {
+  const stored = storage.read(storage.STORAGE.backup(account));
+  if (stored === null) return null;
+  return stored === "true";
+}
+
+export function saveBackup(account: string, ready: boolean): void {
+  storage.write(storage.STORAGE.backup(account), ready ? "true" : null);
 }
 
 export function readRecentEmoji(account: string): readonly string[] | null {
@@ -78,6 +89,16 @@ export function readRecentEmoji(account: string): readonly string[] | null {
 
 export function saveRecentEmoji(account: string, emoji: readonly string[]): void {
   storage.writeJson(storage.STORAGE.recentEmoji(account), emoji.slice(0, 18));
+}
+
+export function readRecentReactions(account: string): readonly string[] | null {
+  const stored = storage.readJson(storage.STORAGE.recentReactions(account));
+  if (!Array.isArray(stored)) return null;
+  return stored.filter((value): value is string => typeof value === "string" && value !== "").slice(0, 18);
+}
+
+export function saveRecentReactions(account: string, emoji: readonly string[]): void {
+  storage.writeJson(storage.STORAGE.recentReactions(account), emoji.slice(0, 18));
 }
 
 export function readRecentStickers(account: string): readonly string[] | null {

@@ -146,7 +146,7 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
     },
   });
   const unsubscribe = store.watch(
-    ["rooms", "roomsLoading", "roomId", "sections", "openSpaces", "session", "phase"],
+    ["rooms", "roomsLoading", "roomId", "sections", "openSpaces", "session", "phase", "notifications"],
     render,
   );
   render();

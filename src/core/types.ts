@@ -9,6 +9,10 @@ export type Phase = "boot" | "signedOut" | "locked" | "ready";
 export type Connection = "connecting" | "online" | "offline" | "degraded";
 
 export type RoomEncryption = "none" | "encrypted" | "unknown";
+export type NotificationLevel = "all" | "mentions" | "mute";
+export type RoomJoinRule = "public" | "invite" | "knock" | "restricted";
+export type RoomHistoryVisibility = "world_readable" | "shared" | "invited" | "joined";
+export type MemberMembership = "join" | "invite" | "ban";
 
 export type UndecryptableReason = "missing-key" | "corrupt";
 
@@ -69,7 +73,14 @@ export interface RoomSummary {
   readonly favorite: boolean;
   readonly lowPriority?: boolean;
   readonly spaceId: string | null;
-  readonly notification: "all" | "mentions" | "mute";
+  readonly aliases: readonly string[];
+  readonly joinRule: RoomJoinRule;
+  readonly guestAccess: boolean;
+  readonly historyVisibility: RoomHistoryVisibility;
+  readonly directoryPublished: boolean;
+  readonly roomVersion: string;
+  readonly federated: boolean;
+  readonly notification: NotificationLevel | "default";
   readonly encryption: RoomEncryption;
   readonly capabilities: RoomCapabilities;
 }
@@ -147,6 +158,7 @@ export interface Invite {
   readonly name: string;
   readonly topic: string;
   readonly inviter: string;
+  readonly inviterId: string;
   readonly capabilities: InviteCapabilities;
 }
 
@@ -155,6 +167,7 @@ export interface NotificationPrefs {
   readonly titleTotal: boolean;
   readonly desktop: boolean;
   readonly preview: boolean;
+  readonly level: NotificationLevel;
 }
 
 export interface RecoveryKey {
@@ -168,6 +181,7 @@ export interface Member {
   readonly displayName: string;
   readonly avatar: string | null;
   readonly profile: boolean;
+  readonly membership: MemberMembership;
 }
 
 export interface ChatState {
@@ -182,6 +196,7 @@ export interface ChatState {
   readonly olderLoading: boolean;
   readonly typing: readonly string[];
   readonly recentEmoji: readonly string[];
+  readonly recentReactions: readonly string[];
   readonly recentStickers: readonly string[];
   readonly openSpaces: readonly string[];
   readonly sections: Readonly<Record<SectionId, SectionState>>;
@@ -190,4 +205,5 @@ export interface ChatState {
   readonly invites: readonly Invite[];
   readonly members: readonly Member[];
   readonly recoveryKey: RecoveryKey | null;
+  readonly backupReady: boolean;
 }

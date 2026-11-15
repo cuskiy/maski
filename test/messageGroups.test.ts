@@ -21,7 +21,7 @@ function row(
   };
 }
 
-void test("a sender group keeps the name on the first text and the avatar position on the end", () => {
+void test("a sender group keeps the name on the first row and the avatar position on the end", () => {
   const messages = [row("alice", DAY), row("alice", DAY + 1), row("bob", DAY + 2)];
   assert.deepEqual(messagePosition(messages, 0), {
     dayStart: true,
@@ -38,12 +38,13 @@ void test("a sender group keeps the name on the first text and the avatar positi
   assert.equal(messagePosition(messages, 2).showSender, true);
 });
 
-void test("media never receives the sender name and the first text receives it", () => {
+void test("a media-led group still receives the sender name on its first row", () => {
   const messages = [row("alice", DAY, { media: image }), row("alice", DAY + 1)];
   assert.equal(messagePosition(messages, 0).groupStart, true);
   assert.equal(messagePosition(messages, 0).groupEnd, false);
+  assert.equal(messagePosition(messages, 0).showSender, true);
   assert.equal(messagePosition(messages, 1).groupEnd, true);
-  assert.equal(messagePosition(messages, 1).showSender, true);
+  assert.equal(messagePosition(messages, 1).showSender, false);
 });
 
 void test("own and system messages never receive the sender name", () => {

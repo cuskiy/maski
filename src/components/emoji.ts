@@ -78,14 +78,16 @@ export const EMOJI_GROUPS: readonly EmojiGroup[] = [
 
 export const ALL_EMOJI: readonly string[] = [...new Set(EMOJI_GROUPS.flatMap((group) => group.glyphs))];
 
-export function emojiButtons(glyphsInGroup: readonly string[]): Html {
+export function emojiButtons(glyphsInGroup: readonly string[], mode: "emoji" | "reaction" = "emoji"): Html {
   return html`${glyphsInGroup.map(
     (emoji) =>
-      html`<button class="pack-item" type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`,
+      html`<button class="pack-item" type="button" data-emoji="${emoji}" ${
+        mode === "reaction" ? html` data-react-choice="${emoji}"` : html``
+      } aria-label="${emoji}">${emoji}</button>`,
   )}`;
 }
 
-export function emojiPickerBody(c: Catalog, recent: readonly string[]): Html {
+export function emojiPickerBody(c: Catalog, recent: readonly string[], mode: "emoji" | "reaction" = "emoji"): Html {
   const recents = recent.filter(Boolean).slice(0, 18);
   const recentJump =
     recents.length === 0
@@ -99,20 +101,20 @@ export function emojiPickerBody(c: Catalog, recent: readonly string[]): Html {
         >
           ${icons.clock}
         </button>`;
-  return html`<div class="emoji-picker" data-emoji-picker>
+  return html`<div class="emoji-picker" data-emoji-picker data-emoji-mode="${mode}">
     <div class="emoji-scroll" data-emoji-scroll>
       ${
         recents.length === 0
           ? html``
           : html`<section class="pack-section" data-emoji-section="recent">
               <p class="pack-head">${t(c, "surface.emoji.recent")}</p>
-              <div class="pack-grid">${emojiButtons(recents)}</div>
+              <div class="pack-grid">${emojiButtons(recents, mode)}</div>
             </section>`
       }
       ${EMOJI_GROUPS.map(
         (group) => html`<section class="pack-section" data-emoji-section="${group.key}">
           <p class="pack-head">${t(c, group.key)}</p>
-          <div class="pack-grid">${emojiButtons(group.glyphs)}</div>
+          <div class="pack-grid">${emojiButtons(group.glyphs, mode)}</div>
         </section>`,
       )}
     </div>

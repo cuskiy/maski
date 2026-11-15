@@ -35,6 +35,7 @@ export function bindSwipe(root: HTMLElement, options: SwipeOptions): () => void 
 
   const onPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     const element = target.closest<HTMLElement>(options.target);

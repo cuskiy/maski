@@ -1,8 +1,9 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
+import type { SurfaceKind } from "../core/surfaces.ts";
 
-export type SurfaceKind = "modal" | "floating";
+export type { SurfaceKind } from "../core/surfaces.ts";
 
 export interface SurfaceInput {
   readonly c: Catalog;
@@ -33,7 +34,7 @@ export function surface({ c, id, titleKey, kind, manual = false, body }: Surface
 
 export function surfaceTrigger(id: string, label: string, icon: Html, kind: SurfaceKind): Html {
   const action = kind === "modal" ? html` commandfor="${id}" command="show-modal"` : html` popovertarget="${id}"`;
-  return html`<button class="surface-item" type="button" ${action}>
+  return html`<button class="surface-item" type="button" role="menuitem" ${action}>
     ${icon}<span>${label}</span>
   </button>`;
 }

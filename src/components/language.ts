@@ -27,12 +27,13 @@ export function languageMenu(c: Catalog, path: string, current: string): Html {
     aria-label="${t(c, "language.label")}"
   >
     <div class="surface-body">
-      <div class="surface-menu">
+      <div class="surface-menu" role="menu" aria-label="${t(c, "language.label")}">
         ${LOCALE_DEFS.map(
           (locale) => html`<a
             class="surface-item"
             href="${target(path, locale.id)}"
             hreflang="${locale.id}"
+            role="menuitem"
             ${locale.id === current ? html` aria-current="true"` : html``}
           >
             ${t(c, LOCALE_KEYS[locale.id])}
@@ -49,6 +50,7 @@ export function languageTrigger(c: Catalog, kind: "action" | "quiet"): Html {
     return html`<button
       class="surface-item"
       type="button"
+      role="menuitem"
       popovertarget="${SURFACE.language}"
     >
       ${icons.globe}<span>${label}</span>

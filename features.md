@@ -46,3 +46,9 @@ anchor positioning and `anchor-size()` are recorded from MDN.
 | `bdi` | 2020-01 | 16 / 10 / 6 | isolate searched message text |
 | `dir` (`auto`) | 2015-07 | 1 / 1 / 3 | direction of user content and fields |
 | `:dir()` | 2023-12 | 120 / 49 / 16.4 | RTL anchor and icon overrides |
+
+## Scripting
+
+| feature | Baseline | Chrome / Firefox / Safari | use |
+|---|---|---|---|
+| `scripting` media feature | 2023-12 | 120 / 113 / 17 | hide the router spinner when JavaScript is off |

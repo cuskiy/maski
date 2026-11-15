@@ -15,10 +15,6 @@ export const STICKER_PACKS: readonly StickerPack[] = [
   },
 ];
 
-function hidden(value: boolean): Html {
-  return value ? html` hidden` : html``;
-}
-
 function stickerButtons(stickers: readonly string[]): Html {
   return html`${stickers.map(
     (sticker) =>
@@ -30,7 +26,6 @@ function stickerButtons(stickers: readonly string[]): Html {
 
 export function stickerPickerBody(c: Catalog, recent: readonly string[]): Html {
   const recents = recent.filter(Boolean).slice(0, 6);
-  const activeKey = STICKER_PACKS[0]?.key ?? "emoji";
   return html`<div class="sticker-picker" data-sticker-picker>
     ${
       recents.length === 0
@@ -40,12 +35,15 @@ export function stickerPickerBody(c: Catalog, recent: readonly string[]): Html {
             <div class="pack-grid sticker-recent-grid">${stickerButtons(recents)}</div>
           </section>`
     }
-    <nav class="sticker-tabs" aria-label="${t(c, "surface.sticker.packs")}">
+    <nav class="sticker-tabs" role="tablist" aria-label="${t(c, "surface.sticker.packs")}">
       <button
         class="sticker-tab"
         type="button"
+        role="tab"
+        id="sticker-tab-emoji"
+        aria-controls="sticker-panel-emoji"
+        aria-selected="true"
         data-sticker-tab="emoji"
-        aria-current="${activeKey === "emoji" ? "true" : "false"}"
       >
         ${t(c, "surface.emoji")}
       </button>
@@ -53,22 +51,35 @@ export function stickerPickerBody(c: Catalog, recent: readonly string[]): Html {
         (pack) => html`<button
           class="sticker-tab"
           type="button"
+          role="tab"
+          id="sticker-tab-${pack.key}"
+          aria-controls="sticker-panel-${pack.key}"
+          aria-selected="false"
+          tabindex="-1"
           data-sticker-tab="${pack.key}"
-          aria-current="${activeKey === pack.key ? "true" : "false"}"
         >
           ${t(c, pack.key)}
         </button>`,
       )}
     </nav>
     <div class="sticker-scroll" data-sticker-scroll>
-      <section class="sticker-panel" data-sticker-panel="emoji"${hidden(activeKey !== "emoji")}>
+      <section
+        class="sticker-panel"
+        id="sticker-panel-emoji"
+        role="tabpanel"
+        aria-labelledby="sticker-tab-emoji"
+        data-sticker-panel="emoji"
+      >
         <div class="pack-grid">${emojiButtons(ALL_EMOJI)}</div>
       </section>
       ${STICKER_PACKS.map(
         (pack) => html`<section
           class="sticker-panel"
+          id="sticker-panel-${pack.key}"
+          role="tabpanel"
+          aria-labelledby="sticker-tab-${pack.key}"
           data-sticker-panel="${pack.key}"
-          ${hidden(activeKey !== pack.key)}
+          hidden
         >
           <div class="pack-grid">${stickerButtons(pack.stickers)}</div>
         </section>`,

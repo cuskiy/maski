@@ -28,13 +28,13 @@ const SECTIONS: ReadonlyArray<{
 export function nav(state: ChatState, c: Catalog): Html {
   const session = state.session;
   return html`<aside class="nav" data-region="${REGION.nav}" aria-label="${t(c, "nav.label")}">
-    <noscript><p class="note">${t(c, "noscript.chat")}</p></noscript>
     <nav
       class="nav-sections"
       data-region="${REGION.sections}"
       aria-label="${t(c, "nav.roomsLabel")}"
       ${state.roomsLoading ? html` aria-busy="true"` : html``}
     >
+      <noscript><p class="note">${t(c, "noscript.chat")}</p></noscript>
       ${SECTIONS.map((section) => sectionView(state, c, section.id, section.key))}
     </nav>
     ${surface({
@@ -42,7 +42,7 @@ export function nav(state: ChatState, c: Catalog): Html {
       id: SURFACE.navMenu,
       titleKey: "nav.menu",
       kind: "floating",
-      body: html`<div class="surface-menu">
+      body: html`<div class="surface-menu" role="menu" aria-label="${t(c, "nav.menu")}">
         ${ACTIONS.map((action) => surfaceTrigger(action.surface, t(c, action.key), action.icon, "modal"))}
         ${languageTrigger(c, "action")}
       </div>`,
@@ -101,7 +101,8 @@ function belongs(room: RoomSummary, section: SectionId): boolean {
   return !room.isDirect && !room.isSpace && !room.favorite;
 }
 
-function badge(room: RoomSummary, c: Catalog): Html {
+function badge(room: RoomSummary, c: Catalog, visible: boolean): Html {
+  if (!visible) return html``;
   if (room.highlight > 0)
     return html`<span
       class="room-badge is-mention"
@@ -132,10 +133,10 @@ function spaceRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       <span class="room-avatar" aria-hidden="true">${room.name.slice(0, 1)}</span>
       <span class="room-text">
         <span class="room-name" data-field="name" dir="auto">${room.name}</span>
-        <span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>
+        ${state.notifications.preview ? html`<span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>` : html``}
       </span>
       <span class="room-side">
-        ${badge(room, c)}
+        ${badge(room, c, state.notifications.badge)}
         ${room.muted ? muted(c) : html``}
         <span class="space-chevron" aria-hidden="true">${icons.chevron}</span>
       </span>
@@ -160,10 +161,10 @@ function roomRow(state: ChatState, c: Catalog, room: RoomSummary): Html {
       >
       <span class="room-text">
         <span class="room-name" data-field="name" dir="auto">${room.name}</span>
-        <span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>
+        ${state.notifications.preview ? html`<span class="room-preview" data-field="preview" dir="auto">${room.preview?.body ?? ""}</span>` : html``}
       </span>
       <span class="room-side">
-        ${badge(room, c)}${room.muted ? muted(c) : html``}
+        ${badge(room, c, state.notifications.badge)}${room.muted ? muted(c) : html``}
       </span>
     </button>
     <span class="room-swipe-hint is-start" aria-hidden="true">${icons.check}</span>

@@ -46,14 +46,16 @@ export interface ChatSource {
   react(roomId: string, messageId: string, key: string): void;
   edit(roomId: string, messageId: string, body: string, html: string | null): void;
   redact(roomId: string, messageId: string): void;
-  search(roomIds: readonly string[], query: string): readonly MessageRow[];
+  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[];
   forward(roomId: string, rows: readonly MessageRow[]): void;
   typing(roomId: string): void;
   setNotification(roomId: string, mode: RoomSummary["notification"]): void;
   revealRecoveryKey(): void;
+  resetIdentity(): void;
   verifyDevice(deviceId: string): void;
   signOutDevice(deviceId: string): void;
   signOutOthers(): void;
+  signOutAll(): void;
   answerInvite(roomId: string, accept: boolean): void;
   saveNotifications(prefs: NotificationPrefs): void;
   logout(): void;

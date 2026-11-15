@@ -29,7 +29,9 @@ export function initChat(c: Catalog, locale: LocaleId, review = false): void {
     sections,
     openSpaces: prefs.readSpaces(account) ?? base.openSpaces,
     notifications: prefs.readNotifications(account) ?? base.notifications,
+    backupReady: prefs.readBackup(account) ?? base.backupReady,
     recentEmoji: prefs.readRecentEmoji(account) ?? base.recentEmoji,
+    recentReactions: prefs.readRecentReactions(account) ?? base.recentReactions,
     recentStickers: prefs.readRecentStickers(account) ?? base.recentStickers,
   };
 

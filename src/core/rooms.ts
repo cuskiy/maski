@@ -44,8 +44,15 @@ export function createRoom(input: RoomInput): RoomSummary {
     favorite: input.favorite ?? false,
     lowPriority: input.lowPriority ?? false,
     spaceId: input.spaceId ?? null,
-    notification: muted ? "mute" : "all",
+    notification: muted ? "mute" : "default",
     encryption: input.encryption ?? "encrypted",
+    aliases: [],
+    joinRule: input.isSpace === true ? "invite" : "public",
+    guestAccess: false,
+    historyVisibility: input.isSpace === true ? "invited" : "shared",
+    directoryPublished: false,
+    roomVersion: "12",
+    federated: true,
     capabilities: { ...ALL_CAPABILITIES, ...input.capabilities },
   };
 }

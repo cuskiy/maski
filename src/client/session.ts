@@ -5,6 +5,7 @@ import * as storage from "./storage.ts";
 export interface MockSession {
   readonly server: string | null;
   readonly account: string | null;
+  readonly registered: boolean;
   readonly key: boolean;
 }
 
@@ -27,6 +28,7 @@ export function mockSession(): MockSession {
   return {
     server: storage.read(storage.STORAGE.server),
     account: storage.read(storage.STORAGE.account),
+    registered: storage.read(storage.STORAGE.registered) === "true",
     key: storage.read(storage.STORAGE.key) === "ready",
   };
 }
@@ -35,8 +37,9 @@ export function setServer(server: string): void {
   storage.write(storage.STORAGE.server, server);
 }
 
-export function setAccount(account: string): void {
+export function setAccount(account: string, registered = false): void {
   storage.write(storage.STORAGE.account, account);
+  storage.write(storage.STORAGE.registered, registered ? "true" : null);
 }
 
 export function setKeyReady(): void {
@@ -46,5 +49,6 @@ export function setKeyReady(): void {
 export function clearSession(): void {
   storage.write(storage.STORAGE.server, null);
   storage.write(storage.STORAGE.account, null);
+  storage.write(storage.STORAGE.registered, null);
   storage.write(storage.STORAGE.key, null);
 }

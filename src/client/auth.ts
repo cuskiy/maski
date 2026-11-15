@@ -2,7 +2,7 @@ import type { Catalog } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
 import type { LocaleId } from "../core/locales.ts";
 import { localeRoot } from "../core/locales.ts";
-import { setAccount, setKeyReady, setServer } from "./session.ts";
+import { mockSession, setAccount, setKeyReady, setServer } from "./session.ts";
 
 function navigate(path: string): void {
   location.assign(path);
@@ -69,12 +69,18 @@ function initRegister(c: Catalog, locale: LocaleId): void {
       return;
     }
     confirm.setCustomValidity("");
-    setAccount(accountId(username.value.trim()));
+    setAccount(accountId(username.value.trim()), true);
     navigate(`${localeRoot(locale)}key/`);
   });
 }
 
 function initKey(locale: LocaleId): void {
+  if (mockSession().registered) {
+    document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
+    const note = document.querySelector<HTMLElement>("[data-key-new]");
+    if (note !== null) note.hidden = false;
+  }
+
   const unlock = form("unlock");
   unlock?.addEventListener("submit", (event) => {
     event.preventDefault();

@@ -212,7 +212,7 @@ Raising one is a change to this file with the reason.
 ## 2.3 界面
 
 - **骨架交给 HTML，外观交给 CSS，业务逻辑才交给 JS。** HTML 不含内联 CSS/JS；样式表与脚本外部引入。
-- 没有 JS 时页面是完整的：导航、顶栏、时间线区域、输入框都在，只是没有数据。窄屏无 JS 时导航与内容上下排列，导航仍可展开；需要 JS 的能力必须是 `<button>`，由面板说明缺少 JavaScript；不用 `<a>` 假装能点。
+- 没有 JS 时页面是完整的：导航、顶栏、时间线区域、输入框都在，只是没有数据。窄屏无 JS 时导航与内容上下排列，导航仍可展开；需要 JS 的能力必须是 `<button>`，由面板说明缺少 JavaScript；不用 `<a>` 假装能点。路由器无 JS 时只显示说明与语言链接，不显示加载圈。
 - 两墨一纸：表面声明墨的比例并据此推出文字色；浅色与深色各一套，用 `light-dark()`。所有颜色、字体、字号、间距、圆角、时长都是 token；规则只用 token。选中文本的灰蓝色是唯一获准的非 ink/page 色令牌。
 - 流体布局：`clamp()`、`minmax()`、`auto-fit`、容器查询；不用宽度媒体查询。窄屏与宽屏是同一套布局的两种状态。
 - 不用阴影、渐变、卡片化仪表盘、大厂范式。顶栏、导航和所有弹窗可以共享一层克制的半透明 + 高斯模糊；这是唯一获准的“玻璃”用法，不做第二套。
@@ -230,14 +230,14 @@ Raising one is a change to this file with the reason.
 
 ## 2.5 聊天
 
-- **左导航**：菜单区是一张 raised surface 卡片（新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、空间四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。空间点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间菜单包含房间设置、标记已读、收藏、静音、媒体与文件、搜索、邀请、离开房间；空间菜单只有空间设置和离开空间。低优先级房间不进入导航，只在设置的“低优先级”页列出并可进入。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。
-- **搜索**：只从房间菜单进入，不搜索已退出或未知房间。左侧关键词，右侧范围；范围弹窗固定以全部房间开头，其余顺序一致，默认当前房间。媒体与文件弹窗用两个选项：媒体只列图片和视频，文件列其余附件。
+- **左导航**：菜单区是一张 raised surface 卡片（新消息、邀请、加入、创建、设置）+ 房间区（收藏、房间、私聊、空间四个分区，默认只展开房间，状态按账户记忆，空区保留折叠头）。折叠标题加粗。空间点击就地展开子房间，不改变右侧内容。房间行有头像、名称、预览、未读/提及、静音、当前高亮；不显示时间和 `...` 按钮，房间菜单由右键、长按或键盘上下文键打开。房间菜单只有标记已读、静音/取消静音、收藏、离开房间；空间菜单只有空间设置和离开空间。低优先级房间不进入导航，只在设置的“低优先级”页列出并可进入。房间卡片左 padding 用 `space-2`。底部账号是一张有背景的卡片。顶栏房间菜单只有房间设置、媒体与文件、搜索、邀请。
+- **搜索**：只从房间菜单进入，不搜索已退出或未知房间。左侧关键词，右侧范围，输入框和范围之间留出明确间距；范围按钮右侧带箭头，点击后箭头向下并在下方打开弹窗，再次点击按钮关闭。范围弹窗固定以全部房间开头，其余顺序一致，默认当前房间，并按内容收缩宽度。媒体与文件弹窗用两个选项：媒体只列图片和视频，文件列其余附件。
 - **离开与登出**：离开房间、离开空间和登出（含单台/其他会话）都走同一个确认弹窗。
 - **右顶栏**：窄屏返回、头像、标题在上描述在下、房间菜单。没有选中房间时 bar 仍在。
 - **右内容**：没有房间时不渲染房间内容；有房间时顶栏、时间线、输入框。未登录在时间线位置说明；密钥门未完成说明密钥未设置；这两种状态由 JS 在知道会话之后画，静态页不预置。
-- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片/视频/贴纸没有气泡底色，时间作为 span 落在媒体内部的右下角；文件/音频的时间落在卡片内部的右下角。图片进入视口附近才加载；视频显示为较小的预览卡片，点击后在居中弹窗播放；图片点击后居中显示，可缩放，点击背景或关闭按钮退出。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。向上翻自动加载旧消息后保留当前位置，可以继续向上。当前房间在下方出现新未读消息且视口不在底部时，显示带计数的跳转按钮；到达底部或点击后标记已读。其他房间用导航未读徽章，不额外弹 toast。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
-- **输入框**：附件、贴纸、输入框、表情、发送。附件支持多选和粘贴，同一缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。贴纸选择器从客户端载入；回应选项打开一个紧凑的表情选择器，提供多种反应。
-- 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。
+- **时间线**：自己的消息靠右、他人的靠左；同一发送者连续段只在最后一条显示头像，头像贴近该段底部，昵称在第一条，头像完整圆形。连续段第一条气泡的左下、中间各条气泡的左上和左下、最后一条的左上使用更小的圆角，其余角为正常圆角，使整段看起来连成一体；自己的消息镜像到右侧。文字气泡按内容收缩，最大宽度受 `--bubble-max` 限制；消息间距比分组内间距大。图片和视频卡片在普通气泡纸面上略加深，贴纸没有气泡底色；时间作为 span 落在媒体内部的右下角，并使用比卡片更浓的主题 chip；文件/音频的时间落在卡片内部的右下角。图片进入视口附近才加载；视频显示为较小的预览卡片，点击后在居中弹窗播放；图片点击后居中显示，可缩放，点击背景或关闭按钮退出。只有一行的文字气泡撑长，时间留在同一行；日期分隔是行间小元素。不能解密的消息说明原因；加载更早和跳转不阻塞滚动。向上翻自动加载旧消息后保留当前位置，可以继续向上。当前房间在下方出现新未读消息且视口不在底部时，显示带计数的跳转按钮；到达底部或点击后标记已读。其他房间用导航未读徽章，不额外弹 toast。回应按数量从高到低排列，最多显示 6 个，其余用末尾的 `+N` 折叠按钮展开或收起，折叠行不超出消息内容宽度。点击有未读计数的房间时定位到第一条未读消息，整行背景短暂显示后消失，未读清零。
+- **输入框**：附件、贴纸、输入框、表情、发送。点击附件按钮打开文件管理器，选择完成后立即按文件发送，不进入缓冲区；粘贴的文件进入缓冲区，可移除、有进度、可取消、可重试。Enter 换行，Ctrl/Cmd+Enter 发送，输入法组字期间不发送。输入框随内容长高到上限后内部滚动。草稿按房间保存。发送按钮长按或右键打开 Normal text/Markdown，点击选项立即发送。只有富文本气泡渲染 Markdown，普通文本保持纯文本。缓冲区发送顺序：文件一条一个消息，随后文字。聊天区时间线与输入区占满内容列，不设 `--content-max`。贴纸选择器从客户端载入；回应选项打开与输入框相同尺寸和分类的完整表情面板，近期使用独立保存。
+- 消息菜单：回复、回应、编辑、删除、复制文本、复制链接。不显示 `...` 按钮；在消息上右键、长按或键盘上下文键打开。取消发送排在菜单最底部。
 
 ## 2.6 登录、密钥门、设置
 
@@ -284,20 +284,25 @@ Raising one is a change to this file with the reason.
 - 图片和视频消息不显示文件名说明；时间使用灰色 chip；未加载前保留柔和的模糊环境底色。
 - 图片、视频、贴纸的时间气泡统一为右下角小 chip，不加模糊；图片附件的时间也落在右下角。
 - 输入框的房间 placeholder 保持一行，超长省略，不加书名号。
+- 亮色模式下附件预览卡的背景更浅，删除 X 使用正常卡片墨色，因此在亮色下是黑色；输入框聚焦后的边框在亮色和暗色模式都使用更浅的颜色。
+- 亮色模式下导航使用 245 纸面，顶栏保留更浅的 251 玻璃；账号菜单与账号信息 hover 同色，默认头像和回应背景更浅，回应默认淡、点击后提高一阶；图片和视频卡片在气泡纸面上略加深，Load older 更浅，媒体图标和右下角时间使用深色，页面水印恢复 8%。
+- 所有输入框聚焦边框和键盘 Tab 焦点边框使用同一淡色；reaction 的焦点环贴住 chip 并高于相邻行，不会被消息或下一行遮住；搜索输入与范围按钮间距加大，范围按钮带向下箭头并在再次点击时关闭；搜索范围、附件和发送弹窗按内容收缩；视频播放按钮 hover 更轻；缺失媒体和媒体库图标使用半透明水印墨。
+- 左侧房间右键菜单只有标记已读、静音/取消静音、收藏、离开房间；顶栏房间菜单只有房间设置、媒体与文件、搜索、邀请。
+- 回应按数量排序并限制为 6 个，余下用末尾 `+N` 折叠；回应行以消息内容宽度换行，不超出消息框。reaction 弹窗使用与输入框相同的完整表情面板，但最近使用独立保存。
 - emoji 与贴纸 tile 在亮色模式使用更浅的纸面。
 - 贴纸和 emoji 弹窗的 section 标题与 nav 增加上下间距。
 - 图片附件的删除 X 叠在右上角，不占一列；默认无背景，仅 hover 有背景。
 - 关闭控件默认无背景，只有 hover / focus 时显示 ink-based overlay 背景，不固定黑色。
-- 账号弹出的菜单在暗色模式使用与账号卡 hover 相同的纸面值，但用独立 token 书写；浅色模式不变。
+- 账号弹出的菜单使用与账号卡 hover 相同的纸面值，亮色和暗色各自成立，但用独立 token 书写。
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
-- 多选勾选按钮出现在头像对侧的空隙、消息底部，绝对定位，不改变任何元素位置：对方消息在右，自己的消息在左；点击整行或复选框都切换选中，选中背景圆角很小、颜色很浅。
+- 多选勾选按钮出现在头像对侧的空隙、消息底部，绝对定位，不改变任何元素位置：对方消息在右，自己的消息在左；未选中时背景很淡，点击整行或复选框都切换选中。选中后消息框、图片、视频、贴纸和回应整体变暗，不再使用背景高亮。
 - 媒体与文件弹窗中的媒体按钮不显示文件名，像 emoji tile 一样带独立背景并缩小为六列小方块。
 - 图片预览窗口再缩到 30rem 高约 20rem；放大在窗口内部滚动，不再撑大窗口。
 - 账号弹出菜单使用与账号卡 hover 相同的独立纸面值，但两者不共享变量。
-- 消息右键菜单提供多选；多选后顶栏下方出现固定的独立按钮：左取消，中计数，右全选、删除、分享，分享最右，与输入区左右对齐并留一个小间距。按钮不再共用一条有颜色的栏，每个控件都有自己的浅色气泡背景；删除先弹确认，顶栏房间菜单仍在最上层。
-- 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。
-- 粘贴图片作为图片类型进入缓冲区；只有通过附件按钮选择的图片才是文件类型，但仍保留缩略图和预览。附件缓冲区与输入框的间距略大。
+- 消息右键菜单提供多选；多选后顶栏下方出现固定的独立按钮：左取消，中计数，右侧只有全选，与输入区左右对齐并留一个小间距。全选只把当前时间线视口内可见的消息加入现有选择，只会增加、不会取消已有选择，也不选屏幕外的历史。多个消息被选中时，右键或长按其中任一已选消息打开多选菜单：复制、转发、删除；删除先弹确认。按钮不再共用一条有颜色的栏，每个控件都是自己的胶囊形气泡背景，使用浮层高斯模糊，文字使用正常文本色并加粗；顶栏房间菜单仍在最上层。
+- 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。滑动手势只接受触摸和手写笔，鼠标拖动保留原生文本选择与复制。
+- 粘贴图片作为图片类型进入缓冲区；点击附件按钮选择的文件立即发送，不进入缓冲区。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
@@ -306,6 +311,18 @@ Raising one is a change to this file with the reason.
 - 消息、房间名、主题、搜索、输入和文件名使用 `dir="auto"`；布局使用逻辑属性，无法用逻辑值的锚点用 `:dir(rtl)` 覆盖，方向性图标在 RTL 镜像。
 - `Load older` 与 `Copy link` 保留为 mock 评审演示，不当作真实功能。
 - 浏览器存储不可用时显式说明并停止重定向，不进入循环。
+
+## 2.10 本轮追加（2026-11-15）
+
+- 操作按钮都要有浅色背景，fit-content 与整宽一致；switch 是唯一例外。此项覆盖 2.9 的“关闭控件默认无背景”：
+  关闭控件也属于按钮，hover/focus 只把背景再加深一层。
+- 输入框和下拉菜单在所有弹窗都有可见背景；下拉箭头默认向右，展开时向下。
+- 搜索窗口更大且高度固定；输入即搜索；文件名、图片/视频描述可搜；图片和视频用 `[图片]` / `[视频]` 占位。
+- 邀请窗口更大；左侧是头像、姓名和 MXID 的个人资料行，文字截断，点击打开资料；右侧接受/拒绝不变。
+- 只读设置行留出垂直间距；成员列表有自己的浅色背景。
+- 消息右键菜单增加“查看源码”；贴纸面板默认激活第一个 tab。
+- 富文本标题留出上下间距；代码块左右与气泡内边距一致。
+- 消息输入与富文本必须防 XSS；Markdown 的原始 HTML 不执行，`formatted_body` 使用白名单消毒。
 
 ---
 
@@ -414,10 +431,11 @@ the pointer. Section state is per account, with the old global map as the migrat
 rooms open, the rest closed. A room row has no visible menu button and no time; right-click, long-press or
 the keyboard context-menu key opens the room menu. The account card at the bottom has its own surface.
 Room cards use `space-2` left padding. Active is a deeper step than hover; a room nested in a space must
-still read as selected. Low priority rooms are absent from the list and appear in Settings instead. A room
-menu carries settings, read/favorite/mute, media and files, search, invite and leave; a space menu carries
-only space settings and leave. Search is room-scoped from that menu, with the scope chooser listing all
-rooms first and the current room selected. Leave, space leave and every sign-out share the confirm surface.
+still read as selected. Low priority rooms are absent from the list and appear in Settings instead. The
+navigation room context menu carries mark read, mute, favorite and leave; the topbar room menu carries
+settings, media and files, search and invite. A space menu carries only space settings and leave. Search is room-scoped from the topbar menu, with the scope chooser listing all
+rooms first and the current room selected; its trigger carries a chevron that turns down while the
+content-sized list is open, and a second activation closes it. Leave, space leave and every sign-out share the confirm surface.
 
 **Topbar** has four cells: back (narrow only), room avatar, title over topic, room menu. The title and
 topic truncate, never wrap. The bar stays when no room is selected. It shares the navigation's translucent
@@ -435,17 +453,17 @@ rows share one message body column between the two avatar gutters; other bubbles
 every bubble's right edge lines up, and own bubbles align to the same right edge. Text bubbles fit their
 content up to `--bubble-max` and break at any character rather than leaving a ragged right edge; message
 spacing is `space-3`; media timestamps sit inside the media at the bottom right as a span. Image and video
-messages carry no visible filename; their time is a gray chip over a soft, blurred ambient placeholder.
-A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
+messages carry no visible filename; their card uses a slightly deepened bubble paper with no ambient wash,
+and their time chip is denser than that card. A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
 media, with no blur. An opened image or video is a compact
 30rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
 button floats on the window, image previews shrink to the image and zoom inside the fixed box, and video uses its native controls. Selection starts
 from the message menu or a left swipe; the toolbar is fixed below the topbar with a small gap and aligned edge to edge with the composer: cancel at the
-inline start, count in the middle, and select all, delete, share at the inline end, with share last. The topbar room menu
-stays above it, delete opens the confirm dialog, and share writes the selected rows into the chosen room; escape,
-a room switch, or an action leaves selection. A selection check appears in the gutter opposite the avatar at the row bottom,
-absolutely positioned so no element moves: incoming messages on the right, own messages on the left. The full row toggles it, the selected message body gets a small
-radius and a two percent ink wash over the page, and the check stays outside that wash. Each toolbar control has its own card bubble. Media tiles in the media dialog
+inline start, count in the middle, and select all at the inline end. A context menu on any selected row offers copy, forward and delete, and delete asks
+for confirmation. Select all adds only the message rows that intersect the timeline viewport to the existing selection; it never removes a selected row, and it does not take the loaded offscreen history. The topbar room menu
+stays above it, delete opens the confirm dialog, and forward writes the selected rows into the chosen room; escape,
+a room switch, or cancel leaves selection. A selection check appears in the gutter opposite the avatar at the row bottom,
+absolutely positioned so no element moves: incoming messages on the right, own messages on the left. The unselected check sits on a faint control bubble. The full row toggles it; the selected message body, its media and its reactions dim together, and the check stays outside the dimmed content. Each toolbar control is its own pill-shaped glass bubble with the float blur and bold normal text color. Media tiles in the media dialog
 hide names, use the emoji tile paper, and sit in six small columns.
 Room rows swipe right to mark read and
 left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
@@ -455,7 +473,9 @@ group's bottom while the sender name is on the first, never clipped by `content-
 containment. Reactions occupy their own row below the message body, so the avatar aligns with the message,
 not with the reaction row. A group chains its inner bubble corners: the first bubble's bottom-left, the middle bubbles'
 top-left and bottom-left, and the last bubble's top-left use `--bubble-inner`; every other corner is the
-normal radius, mirrored on the right for own messages. Every timestamp uses the `--text-xs` tier. A queued or sending row
+normal radius, mirrored on the right for own messages. Every timestamp uses the `--text-xs` tier. Reactions sort by count with stable ties, show six chips at most,
+wrap within the measured message content width, and put the remaining count behind a final toggle that
+expands or collapses the tail. A queued or sending row
 places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge
 there, whose title carries the error. The timestamp, edited mark and status are not selectable; copying a
 message reads its body, not the meta. Images use native lazy loading and async decoding; the video row is a
@@ -466,7 +486,9 @@ bottom or using it marks the room read. Other rooms use the navigation badge. Ba
 restores the recorded row, so the reader stays in place and can continue upward.
 
 **Composer** owns its draft, its tray, its height and its selection. A pasted image enters the tray as an image;
-only an image chosen from the attachment button enters as a file. The tray keeps a little more distance from
+the attachment button opens the file manager and sends the chosen files immediately as file messages, without
+filling the tray. The tray paper is lighter than the card paper in light mode, and its remove control takes the
+tray ink; the focused composer field draws a soft outline derived from ink and the field paper. The tray keeps a little more distance from
 the bar when it is visible. The send button's long-press or
 context menu offers normal text and Markdown; choosing an option sends immediately, with no visible
 format switch. Only rich-text bubbles render Markdown; normal text stays plain. The dialogs never cover
@@ -486,18 +508,23 @@ scrolling panel; the Emoji panel carries every emoji.
   Escape, because Firefox light-dismisses an auto popover on the right-click release. The other pickers
   use `auto` and anchor positioning (`position-area`, `position-try-fallbacks`, and the popover's implicit
   anchor), as does the topbar room menu. Opening a new floating trigger closes an open context menu first,
-  so one menu at a time keeps its coordinates. The topbar room menu is anchored to its button at the
+  so one menu at a time keeps its coordinates. A trigger toggles its own popover: a second activation
+  closes it, including the manual room and send menus. Content-sized popovers shrink to their items; the
+  search scope, attachment picker and send menu do not keep an empty right column. The topbar room menu is anchored to its button at the
   topbar's bottom and right edges, never positioned from a context point. Pointer context menus are
   measured with visibility hidden, positioned at the pointer (a touch long-press opens after release,
   centered on the touch point), and then revealed without an entrance transition; a non-empty selection
   keeps the native menu, and a touch long-press suppresses the contextmenu only when no text is selected.
 
-The reaction picker is a compact manual popover anchored at the message. It follows the context-menu
-positioning and cleanup rules: outside pointer or Escape closes it, and keyboard focus returns to the
-message.
+The reaction picker is a manual popover with the same full emoji panel, dimensions, categories and recent
+section as the composer picker, but its own independent recent list. It opens at the original point that
+opened the message menu, not at the message row's far corner. It follows the context-menu positioning and
+cleanup rules: outside pointer or Escape closes it, chosen emojis update only the reaction recents, and
+keyboard focus returns to the message.
 
 The dialogs and floating menus share one glass language; the dialog paper is opaque with the weaker
-`--dialog-blur`, while the topbar, navigation and menus use the translucent `--float-blur` paper. There is
+`--dialog-blur`, while the topbar, navigation and menus use the translucent `--float-blur` paper; right-click
+room and message menus use the slightly stronger `--context-blur`. There is
 no second glass style. The entrance of either uses `@starting-style` and `transition-behavior:
 allow-discrete`, never a skeleton and never a fade on the initial page load.
 
@@ -528,6 +555,8 @@ task, computes the first scroll from the same snapshot, and only then becomes in
 injection never calls `markRead` and never scrolls a second time. The review's active room is already
 read, so its receipt is the last message and the first render is final. `prepaint` sets the interactive
 view and the saved section open state; it never writes data, a badge, a draft or a scroll position.
+With scripting disabled, the router shows its note and locale links without the spinner, and the
+navigation note sits inside the scrollable sections so the section labels keep their top position.
 
 A static page never contains a visible state that boot would change. C12 tests the data-free shell and the
 read snapshot; C10 remains the browser first-paint check.
@@ -571,10 +600,20 @@ badge and destructive actions.
 
 Surfaces: the page uses `--page`; the topbar uses `--chrome`; the navigation uses `--nav`; the account card
 uses `--account-bg`; raised cards use `--card-bg`; bubbles use `--bubble-bg`; floating menus use
-`--menu-bg`; dialogs use the opaque `--dialog-bg`; fields use `--field-bg`. Text, muted text and hover/active
-states come from that paper's own roles. The topbar, navigation and floating menus share the 8px glass blur;
-dialogs use a weaker `--dialog-blur` of 4px so the card stays readable. The dialog backdrop uses the scrim
+`--menu-bg`; dialogs use the opaque `--dialog-bg`; page fields use `--field-bg`, fields on dialog paper use
+`--dialog-field-bg`. Text, muted text and hover/active states come from that paper's own roles. The topbar,
+navigation and floating menus share the 8px glass blur;
+right-click room and message menus use the slightly stronger `--context-blur` of 10px; dialogs use a weaker
+`--dialog-blur` of 4px so the card stays readable. The dialog backdrop uses the scrim
 plus a 6px blur. No shadow, no gradient, no visible border.
+
+In light mode the page stays white, the navigation uses the 245 paper, and the topbar keeps the lighter
+251 glass. Floating menus sit at 248, the account menu takes the account hover paper, default avatars use
+the surface paper, reactions use a lighter chip, page fields use the surface step, dialog fields mix
+surface-hover toward the dialog paper, image and video cards use the bubble paper lifted slightly toward
+ink, and dialogs stay at 253. The light watermark is 8%, and a missing-media placeholder takes the
+card ink instead of the fixed media white. Load older uses the lighter surface-hover paper in light mode and
+the card paper in dark mode; the media timestamp is darker than its card in light mode.
 
 Dialogs have a title and a close control; floating surfaces have no header. The dialog is 24rem wide,
 settings 46rem, the SAS 22rem, the floating surface 14rem, the send menu 11rem, and the accessible name is
@@ -605,8 +644,10 @@ Rules for future CSS:
 Fluid layout: navigation `clamp(15rem, 22vw, 19rem)`, chat full content width, bubbles and media `36rem`,
 fixed space 1–7, radii and ease. `@container` on the body switches the narrow shell and `data-view` on the
 app switches list/room; no width media query. `appearance: none` on every control before styling. Focus is
-a visible outline at a small offset; never removed except the composer textarea, whose field draws the
-focus ring. The danger token is the only semantic state color; every other paper and text token is a fixed
+a visible outline at a small offset, using one soft focus color for inputs and keyboard Tab targets in both
+schemes; never removed except the composer textarea, whose field draws the focus ring with the same color.
+A focused reaction hugs its chip and sits above adjacent rows, so the message or the next row cannot cover
+the outline. The danger token is the only semantic state color; every other paper and text token is a fixed
 sRGB value.
 
 Decorative motion is absent or at most a 120ms opacity/color/rotate change. A section
@@ -643,7 +684,8 @@ anchor, `anchor-size`) places and sizes popovers without JS; `backdrop-filter` b
 topbar, the navigation and dialogs; `@starting-style` and `transition-behavior` handle entrances;
 `field-sizing`, `scrollbar-gutter` and container queries serve the layout; `:user-invalid` serves forms;
 `crypto.randomUUID` and async clipboard serve local actions. `dir` and `bdi` carry content direction, and
-`:dir()` selects the physical anchor or icon override needed under RTL. `content-visibility`, `::details-content`,
+`:dir()` selects the physical anchor or icon override needed under RTL; `scripting` hides the router
+spinner when JavaScript is unavailable. `content-visibility`, `::details-content`,
 `@scope` and nesting are not used and are not claimed.
 
 Rejected for this floor: scroll-driven animations, `interpolate-size`, `text-box`, cross-document view
@@ -723,7 +765,7 @@ Until answered, the design defaults to the conservative option and records the c
 ## Commands
 
 ```text
-npm run check       # the single gate: types, Prettier, Oxlint/Stylelint, tests, build, audit, contracts
+npm run check       # the single gate: types, Prettier, Oxlint/Stylelint, tests, build, audit, contracts; then refreshes the dev review pages
 npm run dev         # build, serve dist/ on 127.0.0.1:5172, watch src/scripts and live reload
 npm run serve       # serve an existing dist/ on 127.0.0.1:5172 (PORT/HOST override)
 npm run format      # write Prettier across src, scripts, test and the root JSON/YAML
@@ -743,11 +785,13 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
   chat and auth shells; `src/components/` — pure markup returned as `Html`, shared with the client, with
   `surfaces.ts` holding the dialog/floating bodies; `src/catalogs/` — typed copy; `src/styles/style.css` — the
   entry that imports `tokens`, `reset`, `base`, `layout`, `components`, `navigation`, `timeline`, `composer`,
-  `surfaces` and `motion`; `src/lib/` — HTML escaping, catalog, assets; `src/core/types.ts`, `state.ts`,
-  `regions.ts`, `surfaces.ts`, `locales.ts`, `rooms.ts`, `messageGroups.ts` and `mock.ts` — page state, ids,
-  locale paths, room factories, grouping and deterministic mock data; `src/client/` — main/app, guard,
-  prepaint, auth, chat, storage, session, prefs, store, actions, the surface controller, regions (navigation,
-  header, timeline, composer) and position.
+  `surfaces` and `motion`; `src/lib/` — HTML escaping, catalog, assets and byte formatting; `src/core/types.ts`,
+  `state.ts`, `regions.ts`, `surfaces.ts`, `locales.ts`, `rooms.ts`, `messageGroups.ts`, `search.ts`,
+  `reactions.ts`, `licenses.ts` and `mock.ts` — page state, ids, locale paths, room factories, grouping,
+  search matching, reaction folding, runtime license data and deterministic mock data; `src/client/` —
+  main/app, guard, prepaint, auth, chat, storage, session, prefs, store, actions, the surface controller,
+  the mock source, regions (navigation, header, timeline, composer) and position. `src/components/sas.ts`
+  owns the shared verification dialog.
 - `/` is the one-time language entry. `/en/` and `/zh-CN/` are the locale roots; the chat is the locale
   root, and the other pages sit under the prefix. `/` and `/en/` are English.
 - `scripts/pages.ts` — root router plus locale pages; `scripts/build.ts` — esbuild stylesheet, guard,
@@ -765,6 +809,27 @@ Prettier checks the tracked source and root configs. It does not reformat embedd
   review; do not add a second convention.
 - The client is a mock: `Load older` loads one local page of older rows; `Copy link` points at addresses the
   build does not serve. They are kept as review artifacts, not shipped behavior.
+- `MockSource` keeps one in-memory row log per room. `open`, `search`, `send`, edit, reaction, redaction and
+  forward read and write that log, so optimistic changes survive a room switch and appear in media/search.
+  A page reload still resets it; the IndexedDB worker owns persistence.
+
+## UI consolidation
+
+The accumulated UI problems had five roots, closed together rather than by more page-specific branches:
+
+- **Surface truth was split.** Ids, metadata, markup, body and behavior each carried their own list. Menus now
+  share role/menuitem semantics and one focus/arrow behavior; nested settings dialogs close generically;
+  reset and SAS dialogs use the same `surfaceHead` and `sasDialog` primitives.
+- **The data projection was split.** Fixtures and optimistic store rows had different owners. `MockSource`
+  now owns a per-room row log; search/reopen no longer see a different world from the rendered room.
+- **Small rules had several spellings.** Search matching (`core/search.ts`), reaction folding
+  (`core/reactions.ts`) and bytes (`lib/bytes.ts`) are single functions used by markup, source and client.
+- **Tabs and menu navigation were reimplemented per surface.** Media/member tabs share selection and
+  keyboard traversal; menus share focus entry, Home/End and arrow traversal; search scope is a real listbox.
+- **Attachments, invites and destructive actions were too implicit.** Attachment selection sends immediately
+  as the design requires; room-menu invite opens a room-invite form with inline validation and does not open
+  the incoming inbox; member moderation confirms; swipe no longer swallows the next click; failed and empty
+  timeline states are explicit.
 
 ## Generated and reference-only
 
@@ -792,8 +857,23 @@ deferred until the UI is complete, not raised.
    production page.
 3. **Budgets are deferred.** C6 enforces neither the client nor the stylesheet budget until the UI is
    complete; the current sizes are reported by the build rather than failing the gate.
-4. **Settings reset is absent.** A reset needs the worker's crypto/session command; until then the control
-   is not rendered rather than being a second destructive action.
+4. **Settings reset is mock-only.** The reset dialog and one-time key display exist, but no worker identity
+   reset backs them; the control mutates mock state and must not be read as a real identity change.
+5. **Notification delivery is absent.** The desktop switch requests permission and persists the preference,
+   but nothing creates a `Notification`; delivery waits for the worker and service worker.
+6. **Public room addresses are checked locally.** The form validates the shape, the local-homeserver suffix,
+   and the loaded alias list; a directory lookup for server-side existence waits for the worker.
+7. **Message source is a client projection.** The source dialog shows the row the client holds, not the
+   original event JSON; storing the raw event waits for the worker.
+8. **The mock row log is in memory.** Optimistic sends, edits, reactions, redactions and forwards survive
+   room switches within a tab; a reload resets the row log. Backup readiness is a separate local preference
+   and does survive reload. IndexedDB is owned by the worker.
+9. **Notification level is stored but inert.** Badge and preview now drive the navigation, but the global
+   level only changes the persisted preference; alert delivery waits for the worker and service worker.
+10. **Connection state has no surface.** `connection` is received and stored; offline/degraded has no visible
+    status yet, and the older-load wait has no cancel action.
+11. **Backup readiness is a local preference.** Setup persists and renders as ready, but no key backup is
+    created until the worker owns it.
 
 ## Visual regression log
 
@@ -814,5 +894,43 @@ Every layout refactor re-checks these against the before crop. They have regress
 - **2026-11-15, `/review/` selection.** The check sat in one gutter for both alignments, the toolbar scrolled
   with the timeline and clipped under the chrome, and attachment-picker images lost their preview. Resolved:
   the check sits opposite the avatar (incoming right, own left), the toolbar is fixed below the topbar and
-  aligned with the composer, the wash is two percent over the page, and picker images keep a thumbnail and preview while
-  remaining files. Each toolbar control has its own card bubble. Verified at 390 and 1280, and under a simulated `dir="rtl"`.
+  aligned with the composer, the selected message body, media and reactions dim without a background wash, and picker files send immediately while the tray stays paste-only. Each toolbar control is its own pill-shaped glass bubble with the float blur and bold normal text color; the unselected check uses a faint bubble. Verified at 390 and 1280, and under a simulated `dir="rtl"`.
+- **2026-11-15, `/review/` composer focus.** The light tray read as a gray card and its remove control was
+  faded, while the focus border was too dark in both schemes. Resolved: the light tray uses its own lighter
+  paper, the remove control uses the tray ink, and the composer focus derives from `ink-4` over the field paper.
+  Verified in light and dark at 1120 and 390.
+- **2026-11-15, light-mode surfaces.** The light chrome and float layers were nearly white on white, the
+  account menu did not match its trigger, image/video cards used a different paper, and media controls were
+  tuned for dark. Resolved: nav stays at 245, the topbar keeps the lighter 251 glass, float menus sit at
+  248, the account menu takes the account hover paper, default avatars use a lighter paper, reactions use a
+  lighter chip, image/video cards use the bubble paper, Load older uses the lighter surface-hover paper,
+  the watermark is 8%, and media icons and chips use theme ink.
+  Verified at 1280 in light and dark; media cards now match bubbles in both schemes.
+- **2026-11-15, focus and popover roots.** Input focus and Tab outlines used different weights, the search
+  scope and attachment menus kept empty right columns, and the pointerdown cleanup reopened the topbar room
+  menu before the click could close it. Resolved: one soft focus color drives inputs and Tab targets, the
+  search field is spaced from a chevron scope trigger, the scope, attachment and send popovers size to
+  content, every trigger closes its own open popover on a second activation, and media symbols use the
+  watermark ink. Verified in Chromium at 1280, light and dark.
+- **2026-11-15, mouse swipe and media states.** Mouse drags started the touch swipe gesture, so text could
+  not be selected or copied; the media cards were too close to the bubble paper, reactions were strong by
+  default, and Cancel send sat in the middle of its menu. Resolved: swipe binds only touch and pen, mouse
+  keeps native selection; media cards lift slightly toward ink with a denser time chip; reactions start
+  faint and gain one step when chosen; Cancel send is the last menu item. Verified by dragging across a
+  message in Chromium and checking the pending-message menu order.
+- **2026-11-15, reaction flow.** Reaction chips could run past the message content and the picker used a
+  fixed twelve-emoji strip. Resolved: chips sort by count with stable ties, show six at most, measure the
+  message line and wrap within it, fold the tail behind a final `+N` toggle, and open the full composer
+  emoji panel with an independent recent-reaction store. Verified with seven reactions added in Chromium:
+  six chips plus `+1`, list narrower than the text line, and the toggle expands/collapses the tail.
+- **2026-11-15, room menus.** One shared menu exposed every room action in both the navigation and the
+  topbar. Resolved: the navigation context menu shows only mark read, mute, favorite and leave; the topbar
+  menu shows only room settings, media and files, search and invite. Space menus still expose only settings
+  and leave. Verified both invocations in Chromium.
+- **2026-11-15, reaction picker and focus.** Selecting React opened the picker at the viewport origin
+  because closing the message menu cleared the shared context position after the picker opened; the
+  reaction focus ring could also be covered by the message above it. Resolved: the message menu stores its
+  opening point, dependent pickers reuse it, a closing menu keeps the position while another context is
+  open, and a focused reaction uses zero offset with its own stacking layer. The picker now uses the full
+  composer emoji panel with an independent recent-reaction list. Verified by right-clicking a message,
+  choosing React, selecting a reaction, reopening the picker, and checking the composer recents separately.

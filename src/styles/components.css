@@ -71,6 +71,12 @@
     border-radius: 50%;
   }
 
+  @media (scripting: none) {
+    .router-spinner {
+      display: none;
+    }
+  }
+
   .router .note {
     max-inline-size: 36ch;
     text-align: center;
@@ -122,18 +128,29 @@
   }
 
   select.input {
+    appearance: none;
     padding-inline-end: var(--space-7);
   }
 
   .field:has(> select.input)::after {
     position: absolute;
-    inset-block-end: 0.95rem;
+    inset-block-start: 50%;
+    inset-block-end: auto;
     inset-inline-end: var(--space-3);
+    inline-size: 0.4rem;
+    block-size: 0.4rem;
+    border-block-end: 1.5px solid currentColor;
+    border-inline-end: 1.5px solid currentColor;
     color: var(--ink-3);
-    content: "▾";
-    font-size: var(--text-xs);
-    line-height: 1;
+    content: "";
     pointer-events: none;
+    rotate: -45deg;
+    translate: 0 -50%;
+    transition: rotate var(--duration) var(--ease);
+  }
+
+  .field:has(> select.input:focus)::after {
+    rotate: 45deg;
   }
 
   .button-primary {
@@ -168,6 +185,7 @@
     min-block-size: 2.125rem;
     padding: 0 var(--space-2);
     border-radius: var(--radius-sm);
+    background: var(--surface-hover);
     color: var(--ink-2);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
@@ -177,7 +195,7 @@
   }
 
   .button-quiet:hover {
-    background: var(--surface-hover);
+    background: var(--surface-active);
     color: var(--ink);
   }
 
@@ -186,6 +204,7 @@
   }
 
   .button-quiet.is-danger {
+    background: var(--danger-soft);
     color: var(--danger);
   }
 

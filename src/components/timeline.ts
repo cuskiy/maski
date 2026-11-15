@@ -1,6 +1,7 @@
 import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
+import { formatBytes } from "../lib/bytes.ts";
 import type { ChatState, Media, MessageRow } from "../core/types.ts";
 import { messagePositions, type MessagePosition } from "../core/messageGroups.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
@@ -56,22 +57,21 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
       >
         ${icons.close}
       </button>
-      <span class="selection-count" data-selection-count></span>
+      <span class="selection-count" data-selection-count aria-live="polite"></span>
       <div class="selection-actions">
-        <button class="selection-button" type="button" data-selection-action="all">
+        <button
+          class="selection-button"
+          type="button"
+          data-selection-action="all"
+          aria-label="${t(c, "selection.all")}"
+        >
           ${icons.check}<span>${t(c, "selection.all")}</span>
-        </button>
-        <button class="selection-button is-danger" type="button" data-selection-action="delete">
-          ${icons.trash}<span>${t(c, "selection.delete")}</span>
-        </button>
-        <button class="selection-button" type="button" data-selection-action="share">
-          ${icons.share}<span>${t(c, "selection.share")}</span>
         </button>
       </div>
     </div>
     <div class="timeline-wrap">
       <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state">
-        ${stateNote(state, c)}
+        ${stateNote(state, c)}${ready && state.messages.length === 0 ? html`<p class="note">${t(c, "chat.empty")}</p>` : html``}
       </div>
       ${
         ready
@@ -86,7 +86,7 @@ export function timeline(state: ChatState, c: Catalog, locale: string): Html {
             </button>`
           : html``
       }
-      <ol class="timeline" role="list" aria-live="polite" aria-relevant="additions text">
+      <ol class="timeline" role="list">
         ${
           ready
             ? state.messages.map((message, index) =>
@@ -194,12 +194,14 @@ function messageRow(
         ${avatar}
         <div class="message-body">
           ${reply}
+          ${showSender && message.media !== null && message.encryption.state !== "undecryptable" ? sender : html``}
           <div class="message-line">${content}</div>
         </div>
         ${reactionsView(message, c)}
         <button
           class="message-select-mark"
           type="button"
+          aria-pressed="false"
           aria-label="${t(c, "selection.select")}"
         >
           ${icons.check}
@@ -231,17 +233,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   if (media.kind === "sticker" && media.url === null) {
     return html`<figure class="message-media is-sticker">
       <div class="media-frame">
-        <button
-          class="sticker media-open"
-          type="button"
-          data-media-open="${media.name}"
-          data-media-kind="sticker"
-          commandfor="${SURFACE.viewer}"
-          command="show-modal"
-          aria-label="${media.name}"
-        >
-          ${message.body}
-        </button>
+        <span class="sticker" role="img" aria-label="${media.name}">${message.body}</span>
         <div class="media-footer">${meta}</div>
       </div>
     </figure>`;
@@ -322,26 +314,47 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   </figure>`;
 }
 
-export function reactionsView(message: MessageRow, c: Catalog): Html {
-  if (message.reactions.length === 0) return html``;
-  return html`<ul class="reactions" role="list" aria-label="${t(c, "chat.reactions")}">
-    ${message.reactions.map(
-      (reaction) => html`<li>
-        <button
-          class="reaction${reaction.mine ? " is-mine" : ""}"
-          type="button"
-          data-reaction="${reaction.key}"
-          aria-pressed="${reaction.mine ? "true" : "false"}"
-        >
-          <span aria-hidden="true">${reaction.key}</span><span>${String(reaction.count)}</span>
-        </button>
-      </li>`,
-    )}
-  </ul>`;
+const REACTION_LIMIT = 6;
+
+function reactionItem(reaction: MessageRow["reactions"][number], extra: boolean): Html {
+  return html`<li${extra ? html` hidden data-reaction-extra` : html``}>
+    <button
+      class="reaction${reaction.mine ? " is-mine" : ""}"
+      type="button"
+      data-reaction="${reaction.key}"
+      aria-pressed="${reaction.mine ? "true" : "false"}"
+    >
+      <span aria-hidden="true">${reaction.key}</span><span>${String(reaction.count)}</span>
+    </button>
+  </li>`;
 }
 
-function formatBytes(size: number): string {
-  if (size < 1000) return `${String(size)} B`;
-  if (size >= 1_000_000) return `${Math.round(size / 100_000) / 10} MB`;
-  return `${Math.round(size / 1000)} kB`;
+export function reactionsView(message: MessageRow, c: Catalog): Html {
+  if (message.reactions.length === 0) return html``;
+  const sorted = message.reactions
+    .map((reaction, index) => ({ reaction, index }))
+    .toSorted((a, b) => b.reaction.count - a.reaction.count || a.index - b.index)
+    .map(({ reaction }) => reaction);
+  const visible = sorted.slice(0, REACTION_LIMIT);
+  const hidden = sorted.slice(REACTION_LIMIT);
+  return html`<ul class="reactions" role="list" aria-label="${t(c, "chat.reactions")}">
+    ${visible.map((reaction) => reactionItem(reaction, false))}
+    ${hidden.map((reaction) => reactionItem(reaction, true))}
+    ${
+      hidden.length === 0
+        ? html``
+        : html`<li class="reaction-more">
+            <button
+              class="reaction reaction-more-button"
+              type="button"
+              data-reaction-more
+              data-reaction-count="${String(hidden.length)}"
+              aria-expanded="false"
+              aria-label="${t(c, "chat.reactionsMore", { count: String(hidden.length) })}"
+            >
+              +${String(hidden.length)}
+            </button>
+          </li>`
+    }
+  </ul>`;
 }

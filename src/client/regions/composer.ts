@@ -1,7 +1,8 @@
-import { marked } from "marked";
+import { Marked } from "marked";
 import { t } from "../../lib/catalog.ts";
 import type { Catalog } from "../../lib/catalog.ts";
 import { html } from "../../lib/html.ts";
+import { formatBytes } from "../../lib/bytes.ts";
 import { REGION, SURFACE } from "../../core/regions.ts";
 import type { ChatState, MessageRow, ReplyRef } from "../../core/types.ts";
 import { icons } from "../../components/icons.ts";
@@ -17,6 +18,31 @@ interface ComposerInput {
 }
 
 type TrayKind = "image" | "file";
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>"']/gu, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
+const markdownParser = new Marked({
+  renderer: {
+    html({ text }) {
+      return escapeHtmlText(text);
+    },
+  },
+});
 
 interface TrayEntry {
   readonly file: File;
@@ -98,7 +124,7 @@ export class Composer {
         }
         if (files.length === 0) return;
         event.preventDefault();
-        this.addFiles(files, "paste");
+        this.addFiles(files);
       },
       { signal },
     );
@@ -227,7 +253,7 @@ export class Composer {
       return html`<div class="tray-item${preview === undefined ? "" : " has-thumb"}">
         ${preview === undefined ? icons.file : html`<img class="tray-thumb" src="${preview}" alt="" data-tray-preview="${preview}" data-tray-name="${file.name}" />`}
         <span class="tray-text"
-          ><span class="tray-name">${file.name}</span
+          ><span class="tray-name" dir="auto">${file.name}</span
           ><span class="tray-size"
             >${t(this.c, kind === "image" ? "chat.media.image" : "chat.media.file")} ·
             ${formatBytes(file.size)}</span
@@ -245,11 +271,11 @@ export class Composer {
     })}`.value;
   }
 
-  addFiles(files: readonly File[], source: "paste" | "picker"): void {
+  addFiles(files: readonly File[]): void {
     if (files.length === 0) return;
     const entries = files.map((file): TrayEntry => ({
       file,
-      kind: source === "paste" && file.type.startsWith("image/") ? "image" : "file",
+      kind: file.type.startsWith("image/") ? "image" : "file",
     }));
     for (const { file } of entries) {
       if (!this.previews.has(file) && file.type.startsWith("image/")) {
@@ -402,7 +428,7 @@ export class Composer {
   private async markdown(mode: "text" | "markdown", text: string): Promise<string | null> {
     if (mode !== "markdown") return null;
     try {
-      return await marked.parse(text);
+      return await markdownParser.parse(text);
     } catch {
       // A parse failure still sends the plain text body.
       return null;
@@ -445,7 +471,21 @@ export class Composer {
 
   handleFileInput(input: HTMLInputElement): void {
     const files = input.files;
-    if (files !== null) this.addFiles(Array.from(files), "picker");
+    const roomId = this.roomId;
+    if (files !== null && files.length > 0 && roomId !== null) {
+      const now = Date.now();
+      this.actions.appendRows(
+        roomId,
+        Array.from(files, (file, index) =>
+          this.actions.createRow(roomId, "", {
+            kind: "file",
+            media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
+            ts: now + index,
+            status: "sending",
+          }),
+        ),
+      );
+    }
     input.value = "";
     this.hide(SURFACE.attach);
     this.textarea?.focus();
@@ -472,7 +512,7 @@ export class Composer {
       return true;
     }
     const emoji = target.closest<HTMLElement>("[data-emoji]");
-    if (emoji !== null) {
+    if (emoji !== null && emoji.closest(`#${SURFACE.reaction}`) === null) {
       this.insertEmoji(emoji.dataset["emoji"] ?? "");
       return true;
     }
@@ -490,12 +530,6 @@ export class Composer {
     }
     return false;
   }
-}
-
-function formatBytes(size: number): string {
-  if (size < 1000) return `${String(size)} B`;
-  if (size >= 1_000_000) return `${Math.round(size / 100_000) / 10} MB`;
-  return `${Math.round(size / 1000)} kB`;
 }
 
 function readFileDataUrl(file: File): Promise<string | null> {

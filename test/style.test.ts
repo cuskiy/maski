@@ -54,10 +54,10 @@ void test("the color palette keeps the backup values", () => {
     "--bubble-ink": "light-dark(rgb(20 20 20), rgb(222 218 210))",
     "--menu-hover": "light-dark(rgb(238 238 238), rgb(41 39 37))",
     "--menu-active": "light-dark(rgb(228 228 228), rgb(49 47 44))",
-    "--float": "light-dark(rgb(253 253 253 / 88%), rgb(32 31 29 / 88%))",
+    "--float": "light-dark(rgb(248 248 247 / 92%), rgb(32 31 29 / 88%))",
     "--chrome": "light-dark(rgb(251 251 251 / 82%), rgb(29 28 26 / 82%))",
-    "--nav": "light-dark(rgb(241 241 241 / 94%), rgb(30 29 27 / 94%))",
-    "--focus": "light-dark(rgb(102 102 102), rgb(137 134 129))",
+    "--nav": "light-dark(rgb(245 245 245 / 94%), rgb(30 29 27 / 94%))",
+    "--focus": "light-dark(rgb(153 153 153), rgb(85 85 85))",
     "--danger": "light-dark(rgb(150 97 92), rgb(217 167 161))",
     "--danger-soft": "light-dark(rgb(150 97 92 / 10%), rgb(217 167 161 / 14%))",
     "--mark": "light-dark(rgb(232 232 232), rgb(64 62 59))",
@@ -65,8 +65,6 @@ void test("the color palette keeps the backup values", () => {
     "--scrim": "rgb(0 0 0 / 46%)",
     "--scrollbar": "light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%))",
     "--code": "light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%))",
-    "--media-ink": "rgb(255 255 255)",
-    "--media-bg": "light-dark(rgb(78 78 78 / 62%), rgb(88 87 84 / 62%))",
   };
   for (const [name, value] of Object.entries(palette)) {
     assert.equal(definitions.get(name), value, name);

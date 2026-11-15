@@ -1,6 +1,8 @@
 import type { ChatSource, SourceEvent, SourceEvents } from "./source.ts";
 import type { DeviceSession, Invite, MessageRow, NotificationPrefs, RoomSummary } from "../core/types.ts";
 import { mockChatState, mockDevices, mockInvites, mockMessagesFor, mockRecoveryKey } from "../core/mock.ts";
+import { messageMatches } from "../core/search.ts";
+import { toggledReactions } from "../core/reactions.ts";
 
 type Listener = (payload: unknown) => void;
 
@@ -44,7 +46,7 @@ export class MockSource implements ChatSource {
   private readonly listeners = new Map<SourceEvent, Set<Listener>>();
   private readonly timers = new Set<number>();
   private readonly olderLoaded = new Set<string>();
-  private readonly forwarded = new Map<string, MessageRow[]>();
+  private readonly messageLog = new Map<string, MessageRow[]>();
   private readonly state = mockChatState();
   private devices: readonly DeviceSession[] = [...mockDevices];
   private invites: readonly Invite[] = [...mockInvites];
@@ -73,6 +75,32 @@ export class MockSource implements ChatSource {
     for (const listener of this.listeners.get(event) ?? []) listener(payload);
   }
 
+  private rowsFor(roomId: string): MessageRow[] {
+    let rows = this.messageLog.get(roomId);
+    if (rows === undefined) {
+      rows = [...mockMessagesFor(roomId)];
+      this.messageLog.set(roomId, rows);
+    }
+    return rows;
+  }
+
+  private replaceRow(roomId: string, messageId: string, update: (row: MessageRow) => MessageRow): void {
+    const rows = this.rowsFor(roomId);
+    this.messageLog.set(
+      roomId,
+      rows.map((row) => (row.id === messageId ? update(row) : row)),
+    );
+  }
+
+  private upsertRow(roomId: string, row: MessageRow): void {
+    const rows = this.rowsFor(roomId);
+    const index = rows.findIndex((entry) => entry.id === row.id);
+    this.messageLog.set(
+      roomId,
+      index === -1 ? [...rows, row] : rows.map((entry) => (entry.id === row.id ? row : entry)),
+    );
+  }
+
   start(): void {
     if (this.withData) this.emit("session", this.state.session);
     this.emit("phase", "ready");
@@ -84,10 +112,11 @@ export class MockSource implements ChatSource {
   }
 
   open(roomId: string): void {
+    const rows = this.withData ? this.rowsFor(roomId) : [];
     this.emit("window", {
       roomId,
-      messages: this.withData ? [...mockMessagesFor(roomId), ...(this.forwarded.get(roomId) ?? [])] : [],
-      hasOlder: this.withData,
+      messages: rows,
+      hasOlder: this.withData && olderRows(roomId).length > 0 && !this.olderLoaded.has(roomId),
       older: false,
     });
   }
@@ -101,36 +130,41 @@ export class MockSource implements ChatSource {
     this.olderLoaded.add(roomId);
     const timer = window.setTimeout(() => {
       this.timers.delete(timer);
+      this.messageLog.set(roomId, [...rows, ...this.rowsFor(roomId)]);
       this.emit("window", { roomId, messages: rows, hasOlder: false, older: true });
     }, 650);
     this.timers.add(timer);
   }
 
   send(roomId: string, row: MessageRow): void {
+    this.upsertRow(roomId, row);
     if (row.status === "sent") return;
     const timer = window.setTimeout(() => {
       this.timers.delete(timer);
+      this.replaceRow(roomId, row.id, (existing) => ({ ...existing, status: "sent", error: null }));
       this.emit("outbox", { roomId, messageId: row.id, status: "sent", error: null });
     }, 600);
     this.timers.add(timer);
   }
   markRead(_roomId: string): void {}
-  react(_roomId: string, _messageId: string, _key: string): void {}
-  edit(_roomId: string, _messageId: string, _body: string, _html: string | null): void {}
-  redact(_roomId: string, _messageId: string): void {}
-  search(roomIds: readonly string[], query: string): readonly MessageRow[] {
+  react(roomId: string, messageId: string, key: string): void {
+    this.replaceRow(roomId, messageId, (row) => ({ ...row, reactions: toggledReactions(row.reactions, key) }));
+  }
+  edit(roomId: string, messageId: string, body: string, html: string | null): void {
+    this.replaceRow(roomId, messageId, (row) => ({ ...row, body, html, edited: true, status: "sent", error: null }));
+  }
+  redact(roomId: string, messageId: string): void {
+    this.messageLog.set(
+      roomId,
+      this.rowsFor(roomId).filter((row) => row.id !== messageId),
+    );
+  }
+  search(roomIds: readonly string[], query: string, mediaKinds?: ReadonlySet<string>): readonly MessageRow[] {
     if (!this.withData) return [];
-    const needle = query.trim().toLowerCase();
-    return roomIds
-      .flatMap((roomId) => [...mockMessagesFor(roomId), ...(this.forwarded.get(roomId) ?? [])])
-      .filter((row) => {
-        if (needle === "") return true;
-        const body = row.body === "" ? (row.media?.name ?? "") : row.body;
-        return body.toLowerCase().includes(needle);
-      });
+    return roomIds.flatMap((roomId) => this.rowsFor(roomId)).filter((row) => messageMatches(row, query, mediaKinds));
   }
   forward(roomId: string, rows: readonly MessageRow[]): void {
-    this.forwarded.set(roomId, [...(this.forwarded.get(roomId) ?? []), ...rows]);
+    this.messageLog.set(roomId, [...this.rowsFor(roomId), ...rows]);
   }
   typing(_roomId: string): void {}
 
@@ -138,6 +172,14 @@ export class MockSource implements ChatSource {
 
   revealRecoveryKey(): void {
     this.emit("recoveryKey", mockRecoveryKey);
+  }
+
+  resetIdentity(): void {
+    this.emit("recoveryKey", {
+      value: `maski-recovery-key-${crypto.randomUUID()}`,
+      copy: true,
+      download: true,
+    });
   }
 
   verifyDevice(deviceId: string): void {
@@ -152,6 +194,11 @@ export class MockSource implements ChatSource {
 
   signOutOthers(): void {
     this.devices = this.devices.filter((device) => device.current);
+    this.emit("devices", this.devices);
+  }
+
+  signOutAll(): void {
+    this.devices = [];
     this.emit("devices", this.devices);
   }
 

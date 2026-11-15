@@ -18,7 +18,21 @@ function at(day: number, hour: number, minute: number): number {
   return Date.UTC(2026, 10, day, hour, minute);
 }
 
-const roomSeeds: ReadonlyArray<Omit<RoomSummary, "notification" | "encryption" | "capabilities">> = [
+const roomSeeds: ReadonlyArray<
+  Omit<
+    RoomSummary,
+    | "notification"
+    | "encryption"
+    | "capabilities"
+    | "aliases"
+    | "joinRule"
+    | "guestAccess"
+    | "historyVisibility"
+    | "directoryPublished"
+    | "roomVersion"
+    | "federated"
+  >
+> = [
   {
     roomId: "design",
     name: "Design",
@@ -160,8 +174,15 @@ const roomSeeds: ReadonlyArray<Omit<RoomSummary, "notification" | "encryption" |
 
 const rooms: readonly RoomSummary[] = roomSeeds.map((room) =>
   Object.assign({}, room, {
-    notification: room.muted ? ("mute" as const) : ("all" as const),
+    notification: room.muted ? ("mute" as const) : ("default" as const),
     encryption: room.isSpace ? ("none" as const) : ("encrypted" as const),
+    aliases: room.roomId === "design" ? ["#design:matrix.org"] : [],
+    joinRule: room.isSpace ? ("invite" as const) : ("public" as const),
+    guestAccess: false,
+    historyVisibility: room.isSpace ? ("invited" as const) : ("shared" as const),
+    directoryPublished: room.roomId === "design",
+    roomVersion: "12",
+    federated: true,
     capabilities: {
       invite: !room.isSpace && room.membership === "join",
       manage: room.roomId === "design" || room.roomId === "product",
@@ -562,6 +583,22 @@ export const mockDevices: readonly DeviceSession[] = [
     current: false,
     capabilities: { verify: true, signOut: true },
   },
+  {
+    id: "laptop",
+    name: "Work laptop",
+    lastSeen: "Yesterday",
+    verified: false,
+    current: false,
+    capabilities: { verify: true, signOut: true },
+  },
+  {
+    id: "tablet",
+    name: "Tablet",
+    lastSeen: "3 days ago",
+    verified: true,
+    current: false,
+    capabilities: { verify: false, signOut: true },
+  },
 ];
 
 export const mockInvites: readonly Invite[] = [
@@ -570,6 +607,7 @@ export const mockInvites: readonly Invite[] = [
     name: "Garden",
     topic: "Weekend plans",
     inviter: "Alice",
+    inviterId: "@alice:matrix.org",
     capabilities: { accept: true, decline: true },
   },
 ];
@@ -581,11 +619,12 @@ export const mockRecoveryKey = {
 } as const;
 
 export const mockMembers = [
-  { userId: "@alice:matrix.org", displayName: "Alice", avatar: null, profile: true },
-  { userId: "@bob:matrix.org", displayName: "Bob", avatar: null, profile: true },
-  { userId: "@carol:matrix.org", displayName: "Carol", avatar: null, profile: true },
-  { userId: "@dave:matrix.org", displayName: "Dave", avatar: null, profile: true },
-  { userId: "@you:matrix.org", displayName: "You", avatar: null, profile: true },
+  { userId: "@alice:matrix.org", displayName: "Alice", avatar: null, profile: true, membership: "join" as const },
+  { userId: "@bob:matrix.org", displayName: "Bob", avatar: null, profile: true, membership: "join" as const },
+  { userId: "@carol:matrix.org", displayName: "Carol", avatar: null, profile: true, membership: "join" as const },
+  { userId: "@dave:matrix.org", displayName: "Dave", avatar: null, profile: true, membership: "invite" as const },
+  { userId: "@mallory:matrix.org", displayName: "Mallory", avatar: null, profile: true, membership: "ban" as const },
+  { userId: "@you:matrix.org", displayName: "You", avatar: null, profile: true, membership: "join" as const },
 ] as const;
 
 export function mockChatState(): ChatState {
@@ -607,6 +646,7 @@ export function mockChatState(): ChatState {
     messages,
     hasOlder: true,
     openSpaces: ["product"],
+    recentReactions: ["🎉", "👍"],
     recentStickers: ["👋", "🐱", "✨"],
     devices: mockDevices,
     invites: mockInvites,

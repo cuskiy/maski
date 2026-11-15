@@ -14,6 +14,7 @@ export function emptyChatState(): ChatState {
     olderLoading: false,
     typing: [],
     recentEmoji: [],
+    recentReactions: [],
     recentStickers: [],
     openSpaces: [],
     sections: {
@@ -27,10 +28,12 @@ export function emptyChatState(): ChatState {
       titleTotal: false,
       desktop: false,
       preview: true,
+      level: "all",
     },
     devices: [],
     invites: [],
     members: [],
     recoveryKey: null,
+    backupReady: false,
   };
 }

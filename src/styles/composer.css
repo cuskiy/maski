@@ -24,8 +24,8 @@
     min-inline-size: 0;
     padding: 4px 4px 4px 6px;
     border-radius: var(--radius-sm);
-    background: var(--card-bg);
-    color: var(--card-muted);
+    background: var(--composer-tray-bg);
+    color: var(--composer-tray-muted);
     font-size: var(--text-xs);
   }
 
@@ -56,7 +56,7 @@
   }
 
   .tray-item.has-thumb .tray-name {
-    color: var(--card-ink);
+    color: var(--composer-tray-ink);
     font-size: var(--text-sm);
   }
 
@@ -65,7 +65,7 @@
     inset-block-start: 2px;
     inset-inline-end: 2px;
     background: none;
-    color: var(--media-ink);
+    color: var(--composer-tray-ink);
   }
 
   .tray-item.has-thumb .tray-remove:hover {
@@ -74,7 +74,7 @@
   }
 
   .tray-size {
-    color: var(--card-muted);
+    color: var(--composer-tray-muted);
     font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -93,13 +93,13 @@
     block-size: var(--control-sm);
     place-items: center;
     border-radius: 50%;
-    color: var(--card-muted);
+    color: var(--composer-tray-ink);
     transition: var(--control-transition);
   }
 
   .tray-remove:hover {
     background: var(--card-hover-bg);
-    color: var(--card-ink);
+    color: var(--composer-tray-ink);
   }
 
   .tray-remove .icon {
@@ -115,7 +115,7 @@
     padding: 5px var(--space-2) 5px var(--space-3);
     border-radius: var(--radius-sm);
     background: var(--card-bg);
-    color: var(--card-ink);
+    color: var(--composer-tray-ink);
     font-size: var(--text-sm);
   }
 
@@ -126,7 +126,7 @@
   }
 
   .composer-reply-label {
-    color: var(--card-muted);
+    color: var(--composer-tray-muted);
     font-size: var(--text-xs);
     line-height: 1.2;
   }
@@ -203,7 +203,7 @@
   }
 
   .composer-field:has(.composer-input:focus-visible) {
-    outline: var(--outline-width) solid var(--field-focus);
+    outline: var(--outline-width) solid var(--composer-focus);
     outline-offset: 0;
   }
 
