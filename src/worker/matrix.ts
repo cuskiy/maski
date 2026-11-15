@@ -842,7 +842,7 @@ export class MatrixSession implements SessionPort {
       initialSyncLimit: 20,
       lazyLoadMembers: true,
       pendingEventOrdering: PendingEventOrdering.Detached,
-      threadSupport: true,
+      threadSupport: false,
     });
     const session = summary(client, stored);
     this.emit({ type: "session", payload: session });

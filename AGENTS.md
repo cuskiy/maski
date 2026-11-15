@@ -33,6 +33,25 @@ The reader's time and trust outrank every technical preference.
 Every rule below exists to make this principle enforceable. A rule without a check is a wish; 1.9
 names the owner of each promise.
 
+### The excellence gate
+
+A green check is evidence about the check, not permission to keep a known weaker design. When a stronger
+correct implementation is available inside the boundary, take it in the same change. Do not leave a
+"later" path, a compatibility shim, a second writer, or a known-bad fallback because it already passes.
+
+No compromise is accepted at these boundaries:
+
+- one writer per fact; one cache/store owner; one protocol path;
+- untrusted data through one sanitizer and one URL policy;
+- no fake control, fake gate, fake registration, no-op command, or optimistic row without a command;
+- no unowned async wait, no swallowed unexpected failure, no second path that can outlive its step;
+- first paint, focus, caret, selection, scroll and media state survive the change;
+- a test may not pass while the surface is visibly wrong.
+
+A user-owned product decision can choose behavior. It cannot choose a known security, storage or
+ownership defect. If the better design changes a product promise, a budget or a user decision, stop and
+ask with a recommendation; otherwise implement the better design now and delete the weaker one.
+
 ## 1.2 Precedence
 
 1. These rules.
@@ -162,6 +181,12 @@ place.
 - No vendor prefix, polyfill, engine-specific branch, or compatibility shim unless the platform check
   declares the exception and the user accepts it. One spelling per feature.
 - A generated file is never hand-edited. The generator changes.
+- A document line that describes an unverified implementation as current is a truth defect. Move it to
+  6.4 with its rung, or remove it; never make the contract match a weaker tree.
+- No `TODO`, "later", "temporary", "MVP", "phase 1", or compatibility comment. The defect record owns
+  unfinished work; the code is absent, complete, or blocked with the missing prerequisite named.
+- A `catch` states the expected failure. A catch that converts an unknown failure into success,
+  `undefined`, or silence is a defect.
 - Prefer the platform to a dependency. Prefer a typed function to a framework. Prefer a native control
   to a div with listeners.
 - Public behavior is typed. `any`, unchecked assertions, and `@ts-ignore` are forbidden except at a
@@ -211,7 +236,7 @@ paragraph that owns it.
 | C3 | the client never imports the SDK; the worker never imports the interface; a page never imports client code | boundary tests |
 | C4 | every page has a language, one `h1`, a scriptless note, and the chat page carries its `data-region` regions | page tests and contracts |
 | C5 | every manifest asset is hashed, present in the output, and found by the audit | audit and contracts |
-| C6 | client, stylesheet, worker and crypto wasm meet declared budgets; watermark is tracked as an open migration defect | build/audit |
+| C6 | client, stylesheet, worker, crypto wasm and watermark meet declared budgets | build/audit |
 | C7 | no TODO marker, no console output, no non-catalog user copy, no unused export | contracts and lint |
 | C8 | every screen exists in every language; English at `/en/`, the root is the language entry | contracts |
 | C9 | a new web feature is in `features.md` and passes the platform check | feature check and review |
@@ -221,9 +246,16 @@ paragraph that owns it.
 | C13 | a grouped message carries its avatar on the last row and chains its inner bubble corners | timeline and style tests |
 | C14 | no unsafe DOM sink, inline handler, `javascript:` URL, third-party request, or secret in local storage/logs | boundary/security tests and review |
 | C15 | the worker owns the outbox and every visible wait clears on success, failure, cancel or timeout | worker tests and browser harness |
+| C16 | the production capability set equals the implemented commands; an unsupported control is absent | capabilities test |
+| C17 | the worker alone writes the account projection, read markers and outbox; the client writes only UI state | projection/worker tests |
+| C18 | the gate has one worker owner; the cached gate is a hint, and no fake unlock/register exists | auth/worker tests and gate surface check |
+| C19 | the service-worker cache contains only shell pages and hashed shell assets | service-worker test |
+| C20 | crypto and sync stores are device-scoped, and one account lock is held across startup | worker browser harness |
 
 Current budgets are declared in Part 3.10. C6 measures them; a change that exceeds a budget is a user
-decision, not a refactor. C10 and C15 need a committed browser harness before the product can claim P1.
+decision, not a refactor. C10, C15 and C20 need a committed browser harness before the product can claim
+P1. C18's real-server recovery path is still a 6.4 item; the committed checks cover ownership and the
+absence of a fake gate, not a successful recovery against a homeserver.
 
 ## 1.10 Deciding and asking
 
@@ -684,16 +716,19 @@ owning paragraph.
 
 One dedicated module worker per tab, created when the page needs data.
 
-- `start` first opens the account projection and UI/session summary, emits cached rooms and gate state,
-  then initializes crypto and sync in the background. The main thread never waits for crypto to paint.
-- `login`, `logout`, `start` are serialized by one queue. `navigator.locks` holds the account lock across
-  startup and crypto; a second tab gets `locked`, not a second client. Tear down the previous client
-  before a retry.
+- `start` first opens the account projection and emits cached rooms plus the last-opened stored window,
+  then initializes crypto and sync in the background. The reply carries a session summary, connection and
+  `unknown` gate until the worker can decide. The cached gate hint belongs to the route guard, never to
+  the worker predicate. The main thread never waits for crypto to paint.
+- `login`, `logout`, `start` **must** be serialized by one queue. `navigator.locks` holds the account lock
+  across startup and crypto; a second tab gets `locked`, not a second client. The serialization queue is
+  still a 6.4 item; the lock is present.
 - The worker owns the outbox: write the queued row before the request, keep it until echo or explicit
   discard, emit status, error code and retry availability.
-- The worker owns the projection DB. Stores: session, room cursor, rooms, events indexed by room and
-  time, members, receipts/read markers, segment tokens, media cache, outbox. Project only the changed
-  event and the room fields it touches; read a page by a stable event-id cursor.
+- The worker owns the projection DB. Stores currently present: rooms, events by room/time, read markers,
+  segments and outbox. The session record is separate; members and media are not yet persisted in this
+  DB. Project only the changed event and the room fields it touches; read a page by a stable event-id
+  cursor.
 - Backfill names the oldest stored event id and returns one page. Preserve segments across `limited`
   sync gaps. Handle `TimelineReset` explicitly; never clear a readable segment because a sync was gappy.
 - Read state reads `m.fully_read` account data and the public `m.read` receipt; the conservative interim
@@ -701,22 +736,28 @@ One dedicated module worker per tab, created when the page needs data.
   never on every render. The marker is stored per room and unread/highlight come from projected events
   after it, never from `getUnreadNotificationCount`.
 - Unread is a product policy stored explicitly, not `getUnreadNotificationCount` used as an array index.
-- Members are loaded (`loadMembersIfNeeded`) before a full member projection; a partial list is labeled
-  partial.
-- Threads stay off until the product renders threads and their notifications.
-- Media upload/download/thumbnail and search live here. Search reads the account projection, not the
-  current window.
-- A worker error marks connection degraded, restarts once, and leaves disk untouched. There is no
-  main-thread SDK fallback. Every command has a timeout and clears its visible wait on failure.
+- The `members` command projects the SDK's current member state. A full preload
+  (`loadMembersIfNeeded`) and an explicit partial-list label are not implemented yet; do not claim a
+  complete member projection on a lazy-loaded room.
+- Threads are out of scope in 2.8. The SDK starts with `threadSupport: false`; no thread surface exists,
+  and thread notifications must not be claimed. Turning thread support on is a product decision with a
+  projection, notification policy and tests.
+- Media upload/download/thumbnail and search live here when implemented. Search must read the account
+  projection, not the current window. Both are absent today and their production controls are hidden
+  (6.4).
+- A worker error marks the connection offline. A bounded restart is not implemented yet; every command
+  still has a timeout and must clear its visible wait on failure. There is no main-thread SDK fallback.
 
 ## 3.5 Data
 
-Account database stores: session record, per-room cursor, rooms, events (by room, by room+time), members,
-media by content address, segment tokens, read markers, outbox.
+The account database currently stores rooms, events (by room and room+time), read markers, segment tokens
+and the outbox. The session record lives in the separate `maski:matrix` store. Members and media are not
+yet persisted in the projection DB; their worker paths are 6.4 items. The account database is worker-only.
 
-A message row carries identity, room, sender, name, avatar, time, kind, body, sanitized HTML reference,
-media, reply, edited, reactions, mentions, status, failure code, encrypted flag, membership, and search
-tokens. HTML is stored raw but is sanitized at render or at ingress; the DOM never receives it unsanitized.
+A message row carries identity, room, sender, name, avatar, time, kind, body, HTML, media, reply, edited,
+reactions, mentions, status, failure code, encrypted state and redaction. HTML is stored raw and crosses
+the one sanitizer before it reaches the DOM; the DOM never receives it unsanitized. Search tokens are a
+future field, not a current claim.
 
 The projection has two directions. Forward: every event after the room cursor plus the last bounded
 window, because an edit, reaction, or redaction can change an older row without adding one. Backward:
@@ -727,14 +768,17 @@ The outbox is an ordinary row keyed by transaction id, written before the reques
 same transaction id and replaces it. A failed send keeps the row with a typed code; retry resets; discard
 deletes.
 
-Reactions/replies/edits come from the SDK aggregate at projection time, stored in the same row, never a
-second replay store. An annotation counts once per sender per key; `me` is the viewer.
+Reactions and replies are projected into the message row when the SDK aggregate provides them; there is no
+second replay store. An annotation counts once per sender per key; `me` is the viewer. Production react,
+edit and redact commands are not wired yet (6.4), so their controls are absent.
 
-Read state is one advancing call that moves the fully-read marker and the chosen receipt together. The
-room row stores the receipt id so the timeline can draw where reading stopped.
+Read state is one advancing call that moves the public read receipt and `m.fully_read` together. The room
+row stores the marker id so the timeline can draw where reading stopped.
 
-UI database stores: locale, last account identifier (not token), section open state, drafts, recent emoji
-and recent stickers. It is account-scoped and cleared on logout. It never stores message history.
+Drafts are in the account-scoped UI IndexedDB. Locale, last account identifier, section open state, spaces,
+notification preferences, backup hint and recent emoji/stickers remain account-scoped `localStorage` values;
+none is a secret or message history. The split is deliberate: drafts and message text never enter
+`localStorage`. Logout clears the UI draft rows and the account-scoped preferences.
 
 ## 3.6 Protocol
 
@@ -764,21 +808,21 @@ source is a review fixture and advertises the whole surface. Hiding a control is
 
 ## 3.7 UI
 
-The store is a key table, not a render pass: phase, session, rooms, room id, messages, cursors, has-older,
-connection, keys, typing, selection, overlays. `set` compares each key by reference and notifies only
-changed keys. A region subscribes to keys it reads.
+The store is a key table, not a render pass: phase, session, rooms, room id, messages, loading/cursor flags,
+typing, recents, sections, notifications, members, devices, invites, recovery/backup state. `write`
+compares each key by reference and notifies only changed keys. A region subscribes to keys it reads.
 
-Regions are navigation, header, timeline, composer, surfaces. Each owns its DOM lifecycle. Keyed rows are
-patched by field; no full-list `replaceChildren`, no `innerHTML`, no `outerHTML` comparison, no serialized
-signature string. Focus, caret, selection, scroll anchor, lazy media and IME state survive a repaint.
+Regions are navigation, header, timeline, composer, surfaces. Each owns its DOM lifecycle. Timeline rows
+are keyed and patched by field; navigation nodes move by room id; the topbar updates in place. No full-list
+`replaceChildren` for the timeline, no `innerHTML`, no `outerHTML` comparison, no serialized signature
+string. Focus, caret, selection, scroll anchor, lazy media and IME state survive a repaint.
+
+Surface bodies are not yet field-patched: they still use the inert `replaceHtml` admission path, which
+reparses a body. That is a 6.4 item and must not be described as reconciliation. The path is inert and
+never owns data from a second producer.
 
 The composer owns its draft, tray, height, selection, mention state and focus. A store change never
 rebuilds it. Navigating to a room focuses the composer immediately when it is enabled.
-
-The navigation is built once and keyed by room id; order changes move nodes, not rebuild them. The topbar
-title/topic update in place. The timeline has a stable row map and per-row field updates. A surface body
-may be generated by components, but the admission path is inert and it never owns data from a second
-producer.
 
 ## 3.8 First paint
 
@@ -796,12 +840,13 @@ On the chat page:
 3. Nothing animates on this first pass. A sync changes rows in place.
 4. A reload is the same path. A background sync is the quiet one.
 
-The static shell carries no user state. The client receives one final snapshot, renders every region once,
-computes the first scroll from the same snapshot, then becomes interactive. The initial injection never
-calls `markRead` and never scrolls a second time. `prepaint` sets only the interactive view and saved
-section state; it writes no data, badge, draft or scroll position. With scripting disabled, the router
-shows its note and language links without a spinner, and the navigation note sits inside scrollable
-sections so labels keep their top position.
+The static shell carries no user state. The client paints the cached rooms/window first, then patches the
+same regions from the start reply and sync; it does not replace the page or scroll twice. The first paint
+does not mark read before the reader is positioned. A room switch may mark read once the read boundary is
+positioned and visible, never on every render. `prepaint` sets only the interactive view and saved section
+state; it writes no data, badge, draft or scroll position. With scripting disabled, the router shows its
+note and language links without a spinner, and the navigation note sits inside scrollable sections so
+labels keep their top position.
 
 ## 3.9 Visual system
 
@@ -859,11 +904,16 @@ measurement; the generated watermark is packed under its ceiling.
 
 ## 3.11 Testing
 
+The following is the required set. 6.3 records which rungs have actually run; a requirement is not a
+current claim.
+
 Pure tests: catalog parity and placeholder substitution, HTML escaping, one message grouping pass, store
 notification granularity/batching, generated page structure and locale addresses, surface registry,
 data-free shell, per-paper color roles, grouped avatars and bubble corners, CSS token/selector invariants,
-watermark determinism, protocol parser, projection at 1/30/1,000/10,000 events, permissions, URL policy,
-sanitizer allowlist, outbox state machine, cursor/gap rules, auth error mapping.
+watermark determinism, protocol parser, source capability parity, projection at 1/30/1,000/10,000 events,
+permissions, URL policy, sanitizer allowlist, outbox state machine, cursor/gap rules, recovery key decode,
+service-worker cache allowlist and the account-scoped UI draft store. Auth error mapping is not complete
+until the remaining `M_*` map exists.
 
 Browser surface tests: live chat at 390/856/1280, light/dark, scriptless, RTL, keyboard, reduced motion;
 dialogs and popovers; selection and focus; computed style where appearance is the claim; first-paint
@@ -1065,7 +1115,17 @@ that repeats them is not making progress.
 13. **Unbounded async.** A request without timeout/cancel, a promise caught into `undefined`, a spinner
     that never clears, a worker error with no restart.
 14. **Using the wrong SD layer.** A main-thread SDK import, an internal `matrix-js-sdk/lib/...` path, or
-    a second `MatrixClient` on the same crypto prefix.
+   a second `MatrixClient` on the same crypto prefix.
+15. **A stale truth section.** Counts, build sizes, "done" claims and lines like "temporarily disabled"
+   survive the tree that made them false. Part 6 is rewritten in the same change as the code.
+16. **A capability boundary only in prose.** `SourceCapabilities` says a command is absent while a
+   production control still exists or a method still no-ops. The set is tested against both sources.
+17. **A fake gate hidden in local storage.** `maski.key`, `setKeyReady` or a fake unlock makes the gate
+   green while the worker has no predicate. One worker owns the gate; the cache is only a hint.
+18. **Green means done.** `npm run check` passes while 6.4 is non-empty, or a hidden feature is called
+   complete because the control is invisible. Green is a gate, not the definition of done.
+19. **A weaker proof for a stronger claim.** Declaration multisets, source regexes or pure tests are
+   reported as computed layout, worker behavior or first paint. Name the rung; run it or remove the claim.
 
 ## 5.2 The required correction
 
@@ -1083,6 +1143,18 @@ For every non-trivial change:
 A user report is ground truth about the symptom. A test that contradicts the report is not evidence that
 the report is wrong; it is evidence that the test does not cover the symptom.
 
+### The override duty
+
+When the current code, a plan or an agent's own first draft is known to be weaker than a correct
+implementation available inside the same boundary, do not preserve it to avoid churn. Name the risk,
+replace the weaker path, and delete what it leaves behind in the same change. This is the default, not a
+negotiation.
+
+If the stronger change touches a Part 2 promise, a budget or a user-owned decision, stop and ask with the
+recommendation and the consequence. If the user overrules, implement their decision, keep the defect
+recorded, and never describe the weaker result as the best practice. "It works", "it is green" or "it was
+already there" is not a reason to keep a known-bad boundary.
+
 ## 5.3 The anti-patterns table
 
 | temptation | why it is wrong | replacement |
@@ -1099,10 +1171,19 @@ the report is wrong; it is evidence that the test does not cover the symptom.
 | "The CSS variable is reused, so the object is right" | coupling can be semantically wrong | name the role from its paper, e.g. `--nav-badge-bg` from `--nav`; `--account-bg` is the rest state, never `--account-hover-bg` |
 | "The button is disabled-looking because it is quiet" | enabled controls must read as enabled | normal ink; disabled only when disabled |
 | "A second fallback is harmless" | it becomes a permanent second path | one implementation, one platform decision |
+| "The gate is green" | it checks only what the gate covers; 6.4 may still be full | finish 6.4, or name the defect and rung |
+| "The command is hidden, so it is finished" | hiding a missing command is honest, not complete | implement the command end to end, or keep the scope cut explicit |
+| "The source text says the capability is absent" | prose is not the rendered surface | capability test plus a browser visibility check |
+| "The CSS multiset is identical, so the visual is identical" | cascade order can change computed values without changing declarations | browser computed styles / before-after crops |
+| "The doc says 132 tests" | the tree has moved; stale truth is misinformation | measure and rewrite 6.3 in the same change |
+| "The old path still works, keep it" | a second writer/path is a defect even when it works | delete the replaced path in the same change |
 
 ---
 
 # Part 6 - Working tree, current truth, migration
+
+6.3 and 6.4 are the only status. If another paragraph, `advice.md`, a screenshot or an old commit
+conflicts with them, 6.3/6.4 win until the code and this file are corrected together.
 
 ## 6.1 Commands
 
@@ -1125,11 +1206,14 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 ## 6.2 Map
 
 - `src/protocol/` - command/reply/event types, failure codes, runtime parsers.
-- `src/worker/` - entry, api, ports, failure, matrix, project, session DB. Only this layer imports the SDK
-  and crypto wasm.
+- `src/worker/` - entry, api, ports, failure, matrix, project, projection, account DB, outbox, recovery,
+  session DB. Only this layer imports the SDK and crypto wasm.
 - `src/client/` - boot, guard, prepaint, real WorkerSource/MatrixTransport, auth, actions, store, regions,
-  surfaces, inert DOM admission. Production chat uses the worker. `review.ts`/`reviewChat.ts` are a
-  separate review bundle; only that bundle imports `MockSource` and `core/mock.ts`.
+  surfaces, inert DOM admission, shell registration, UI draft store. Production chat uses the worker.
+  `review.ts`/`reviewChat.ts` are a separate review bundle; only that bundle imports `MockSource` and
+  `core/mock.ts`.
+- `src/service-worker.ts` - the shell precache generator; `scripts/build.ts` inlines the hashed manifest
+  and writes `dist/service-worker.js`.
 - `src/components/`, `src/layouts/`, `src/pages/`, `src/catalogs/`, `src/lib/`, `src/core/` - build-time
   shell and shared DTOs.
 - `scripts/` - build, pages, audit, contracts, dev, static, review, features, watermark.
@@ -1137,74 +1221,146 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-15 after the technical-debt baseline commit:
+Measured on 2026-11-15 after baseline commit `33ccbb5`. This is the only current-status section;
+counts and claims in `advice.md`, `past/`, browser history and old commits are evidence, not status.
 
-- `npm run check` is green: **148 tests**, 11 generated pages, 317 catalog keys, 2 languages.
+- `npm run check` is green: **149 tests**, 11 generated pages, 317 catalog keys, 2 languages.
 - Build sizes: stylesheet 85.7 KB, client 299.7 KB, matrix worker 1.26 MB, crypto wasm 7.79 MB,
-  watermark 69.9 KB (was 263 KB), generated service worker 2.8 KB.
+  watermark 69.9 KB (was 263 KB), generated service worker 2.8 KB. All budgets pass.
+- Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
+  read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
+  non-retryable failed send.
 - The shell service worker is written at `/service-worker.js` with the hashed manifest inlined: install
   precaches the 11 generated pages and 9 shell assets, navigation is cache-first with background
-  revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache.
-- `git` is clean at this baseline. Do not reset or clean user files; read the diff before reverting one.
-- `/review/` is a mock surface and is not the product. The production key page, gate redirect, static shell
-  and hidden-capability surface were checked in Chromium; no current real login/sync/send has been re-run.
-- Advice.md's snapshot describes an earlier red gate and an earlier tree; its architectural findings remain
-  valid, but its exact line numbers and counts are stale.
+  revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache. A real
+  offline reload was not run.
+- Chromium surface evidence: a cached-gate chat reaches `/en/key/`; the key page has one recovery form and
+  no fake SAS/reset dialog; production attach/search/settings controls are absent/hidden. This was a
+  headless check with a synthetic session, not a real account.
+- CSS: `no-descending-specificity` is enabled. The reorder preserved the declaration multiset, but a
+  computed-style before/after comparison and screenshot pair were not run; do not claim visual equivalence.
+- `git` is clean at the baseline. The commit was not pushed: `git push origin main` failed with
+  `git@github.com: Permission denied (publickey)`. Do not rewrite history; fix SSH and push.
+- `/review/` is a mock surface and is not the product. No real login/sync/send/recovery has been re-run
+  after this refactor.
+- `AGENTS.md` is part of the deliverable: a code change that makes a paragraph false must rewrite it in the
+  same change.
 
 ## 6.4 Current blockers
 
-The UI is ahead of the runtime in the hidden surfaces. These remain open:
+The UI is ahead of the runtime in the hidden surfaces. These are release blockers, not footnotes. Each has
+a reader-visible symptom, known facts, ruled-out paths and the next concrete step.
 
-1. **Key gate incomplete.** Recovery key/passphrase, secret storage and cross-signing signing share one worker
-   owner; the SAS path, device list, backup and reset-key display are absent. A device that cannot verify
-   through recovery stays locked and has no second path yet.
-2. **Auth lifecycle incomplete.** Refresh tokens are persisted through `onTokenRefresh`, account lock is held
-   across startup, and `M_UNKNOWN_TOKEN` soft logout is handled. Broader typed `M_*` error mapping,
-   `/login` flow discovery and a serialized start/login/logout queue are still missing.
-3. **Media missing.** No worker upload/download/cache; `mxc` never enters the DOM and media controls are
-   hidden. A file send becomes a stored, non-retryable failed row that can be discarded.
-4. **Search missing.** No account-projection query; search controls are hidden in production and remain in
-   the review fixture only.
-5. **CSP broad.** `connect-src https: wss:` is still a migration defect. An exact per-homeserver policy is a
-   user-owned decision (2.10), so the conservative wildcard remains.
-6. **DOM replacement remains.** The review surfaces admit generated markup through `replaceHtml`; it is
-   safer than `innerHTML`, but it still reparses whole bodies. Move to field-level patches.
-7. **Browser evidence absent.** There is no committed worker harness and no first-paint pair at the three
-   widths. Pure tests cannot prove focus, caret, scroll, worker behavior or first paint.
-8. **Counts drift.** The test/page/key counts and build sizes are measured after every change; do not quote a
-   previous run.
+1. **Key gate is incomplete.**
+   - Symptom: a new device that cannot use recovery has no second path; a real recovery has not been
+     proven against a homeserver.
+   - Known: recovery key/passphrase → secret storage → cross-signing signing exists in the worker; the
+     key page has one recovery form; the gate redirect is wired; SAS, device list, backup and reset-key
+     display are absent.
+   - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, and treating the cached gate hint as
+     authority. All were deleted.
+   - Next: run recovery against a real server; then add SAS, device list, backup and reset-key display with
+     typed failures and a browser run. Do not re-add a gate that cannot decide.
+
+2. **Registration and SSO are unavailable.**
+   - Symptom: `/register/` says registration is unavailable; SSO says it is unavailable.
+   - Known: password login, `.well-known` discovery and `/versions` checks are implemented; no worker
+     registration, interactive-auth or SSO callback command exists.
+   - Ruled out: creating a local account or navigating into chat without a homeserver session.
+   - Next: implement registration including interactive auth and the SSO callback, or take an explicit
+     product scope cut from the user; keep the current page honest until then.
+
+3. **Auth lifecycle is incomplete.**
+   - Symptom: some failures still collapse into one generic message; start/login/logout can overlap.
+   - Known: refresh tokens are persisted through `onTokenRefresh`; account lock is held; `M_UNKNOWN_TOKEN`
+     performs soft logout.
+   - Ruled out: an unlocked second tab, silent token loss, and redirecting a stale session into chat.
+   - Next: map the remaining `M_*` codes, implement `/login` flow discovery, and serialize
+     start/login/logout with a queue that has one outcome per command.
+
+4. **Media is absent.**
+   - Symptom: attach/paste/sticker controls are hidden; sending a media row ends as a failed outbox row.
+   - Known: the outbox stores and emits the failure, retry is disabled for unsupported media, discard works;
+     no `mxc://` enters the DOM.
+   - Ruled out: main-thread blob URLs, a media fallback outside the worker, and an optimistic media row.
+   - Next: worker upload with EXIF strip, authenticated download/thumbnail, content-addressed cache,
+     MIME/size limits, blob URLs and a protocol parser; enable composer media only after that.
+
+5. **Search is absent.**
+   - Symptom: search controls are hidden in production.
+   - Known: the account projection has the events, indexes and cursor needed for a worker query.
+   - Ruled out: searching only the rendered window or the review fixture.
+   - Next: add `search` with body/sender/filename/media-kind matching, stable results across timeline
+     changes, and a surface that demonstrates the result.
+
+6. **Settings, invites, spaces and notifications remain mock-only.**
+   - Symptom: their controls are absent or inert in production.
+   - Known: the review fixture still shows the full surface; capabilities hide the unimplemented production
+     paths.
+   - Ruled out: enabling a no-op control or keeping a mock response in the production source.
+   - Next: each feature gets a `types.ts` record, a protocol command, a worker handler, a projection and a
+     test before its control returns; otherwise keep it absent.
+
+7. **CSP is broad.**
+   - Symptom: `connect-src https: wss:` permits every origin.
+   - Known: the exact allowlist is the shell origin, the chosen homeserver origin and its websocket origin;
+     the response-header builder and service worker must consume the same policy.
+   - Ruled out: treating the wildcard as the final design or weakening the rest of the policy.
+   - Next: the user decides the arbitrary-homeserver policy in 2.10; then generate the exact response header
+     and add a negative test.
+
+8. **Review surfaces still replace whole bodies.**
+   - Symptom: a surface update can lose focus, caret, selection or scroll.
+   - Known: `replaceHtml` uses an inert DOMParser path, not `innerHTML`; production hides the unfinished
+     surfaces, but the review fixture still reparses bodies.
+   - Ruled out: accepting whole-body replacement as reconciliation.
+   - Next: field-level patches for each surface, with a browser test that preserves focus/caret/scroll.
+
+9. **Browser evidence is incomplete.**
+   - Symptom: there is no committed worker harness, no first-paint screenshot pair at 390/856/1280 in both
+     schemes and no two-tab lock test.
+   - Known: pure tests cover projection/outbox/capability/cache rules; Chromium headless checked the gate
+     redirect, the single recovery form and hidden controls.
+   - Ruled out: calling source regexes, a mock screenshot or a pure fake `SessionPort` a browser proof.
+   - Next: commit the Playwright harness for start, login against a fake homeserver, sync, open, older,
+     send, echo, receipt, decrypt success/failure, malformed command and two-tab lock; capture first-paint
+     pairs and run Firefox/Safari before claiming those engines. CSS reorder also needs a computed-style or
+     before/after crop check.
 
 ## 6.5 Migration order
 
-This order minimizes wasted UI work. Do not start at item 7.
+Work in this order. A step exits only when its 6.4 item is gone and its verification rung is recorded.
+Do not pull a later UI surface forward to make the product look complete.
 
-1. **Baseline gate and counts.** Done: the gate is green, the counts are measured, and the tree is still
-   user-owned.
+1. **Baseline gate and counts.** Done: the gate is green, the counts are measured, and the tree is committed.
 2. **One session authority.** Done: `maski.key`, `maski.registered`, `setKeyReady` and fake unlock/register
    are gone. The cached gate hint is not authority; the worker recomputes verification and secret storage.
 3. **Projection DB and cursors.** Done: worker-only rooms/events/outbox/markers/segments, bounded windows,
    before-cursor pages, reset gaps, and pure tests at 1/30/1,000/10,000 events.
 4. **Worker-owned outbox.** Done: queued row before request, status, retry/discard, echo replacement and
    typed failures. The client has no optimistic row writer.
-5. **Media in the worker.** Upload with EXIF strip, authenticated download/thumbnail, content-addressed
-   cache, MIME/size limits, blob URLs. Enable composer attachments and media surfaces only then.
-6. **Search in the worker.** Account projection query, media/file filters, stable results across timeline
+5. **Finish the key gate.** Run recovery against a real server; add SAS, backup, reset-key display and the
+   device list. Do not re-add a fake gate or a local unlock flag.
+6. **Media in the worker.** Upload with EXIF strip, authenticated download/thumbnail, content-addressed
+   cache, MIME/size limits, blob URLs. Enable composer media only after the command, projection and test.
+7. **Search in the worker.** Account projection query, media/file filters, stable results across timeline
    changes. No search of the current window only.
-7. **Finish the key gate.** Recovery key/passphrase is connected to secret storage and cross-signing; SAS,
-   backup, reset-key display and device list are still absent. Do not re-add a fake gate.
-8. **Auth lifecycle.** Typed `M_*` error mapping, `/login` flow discovery and a serialized
-   start/login/logout queue. Refresh tokens, account lock and `M_UNKNOWN_TOKEN` soft logout are done.
+8. **Auth lifecycle and registration.** Typed `M_*` mapping, `/login` flow discovery, serialized
+   start/login/logout, then registration with interactive auth and the SSO callback.
 9. **Settings/invites/spaces/notifications.** Only after each has a record in `types.ts`, a command, a
    projection and a test. Delete mock-only surfaces until then.
-10. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,
-    receipt, decrypt success/failure, malformed command, two-tab lock. This is the P1 exit.
+10. **CSP and field-level surfaces.** The user chooses the arbitrary-homeserver policy in 2.10; generate
+    the exact response header and replace whole-body surface replacement with field-level patches.
+11. **Committed browser harness.** start, login against a fake homeserver, sync, open, older, send, echo,
+    receipt, decrypt success/failure, malformed command, two-tab lock, first-paint pairs and the three
+    engines. This is the P1 exit.
 
 ## 6.6 Definition of done
 
-Every line of Part 2 is present and verified at rung 5. Open defects are empty. `npm run check` is green
-with no budget raised. The browser harness is committed. A reader can start from this file alone. A real
-account can sign in, pass the gate, read, search, send, receive, react, edit, delete, load media, go
-offline, reload, and keep its place without a white flash or a layout shift.
+Every line of Part 2 is present and verified at rung 5. **6.4 is empty.** `npm run check` is green with no
+budget raised and no browser harness skipped. A reader can start from this file alone. A real account can
+sign in, pass the gate, read, search, send, receive, react, edit, delete, load media, go offline, reload,
+and keep its place without a white flash or a layout shift. A green gate with a non-empty 6.4 is not done.
 
 ## 6.7 Visual regression references
 
@@ -1235,6 +1391,11 @@ Every layout refactor re-checks these against the before crop.
   tray-thumbnail and dialog control/row roles replaced rest uses of `*-hover-bg` tokens. The style test
   now asserts the semantic account roles.
 
+- **2026-11-15, specificity ordering pass.** `no-descending-specificity` is enabled. Selectors were
+  reordered while preserving every declaration and equal-specificity order. A PostCSS multiset comparison
+  is evidence that declarations survived; it is **not** evidence of computed visual equivalence. A computed
+  style check or before/after crop at the claimed width is still required.
+
 A layout refactor compares the before crop at the claimed width. A moved avatar anchor, closed gutter,
 lost glass layer, lost watermark, muted enabled button, inverted badge or changed focus color is a
 blocker, not a style preference.
@@ -1247,4 +1408,5 @@ The tree is not the product. The mock is not the worker. The CSS regex is not th
 after a wait is not first paint. The claim is not the rung.
 
 Read the code and the specification. Keep one writer per fact. Delete the second path. Verify the same
-symptom you claimed to fix. Then write the evidence down.
+symptom you claimed to fix. Then write the evidence down. A green gate is not a finished product: 6.4
+must be empty, the rung must match the claim, and this document must describe the tree that exists.

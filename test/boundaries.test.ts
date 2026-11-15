@@ -65,3 +65,12 @@ void test("the client never assigns serialized markup", () => {
     assert.doesNotMatch(source, /\.(?:inner|outer)HTML\b/u, file.pathname);
   }
 });
+
+void test("the key gate has one worker owner and no local fake", () => {
+  for (const file of files(root)) {
+    const source = readFileSync(file, "utf8");
+    assert.doesNotMatch(source, /maski\.(?:key|registered)\b/u, file.pathname);
+    assert.doesNotMatch(source, /\bsetKeyReady\b/u, file.pathname);
+    assert.doesNotMatch(source, /data-flow=["']reset["']/u, file.pathname);
+  }
+});
