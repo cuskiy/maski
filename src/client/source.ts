@@ -10,6 +10,7 @@ import type {
   RecoveryKey,
   RoomStatePatch,
   RoomSummary,
+  SasState,
   SessionSummary,
   SourceCapabilities,
 } from "../core/types.ts";
@@ -40,6 +41,7 @@ export interface SourceEvents {
   readonly invites: readonly Invite[];
   readonly connection: Connection;
   readonly recoveryKey: RecoveryKey | null;
+  readonly sas: SasState;
   readonly outbox: {
     readonly roomId: string;
     readonly messageId: string;
@@ -75,6 +77,7 @@ export function createSourceListeners(): SourceListeners {
     invites: new Set(),
     connection: new Set(),
     recoveryKey: new Set(),
+    sas: new Set(),
     outbox: new Set(),
     media: new Set(),
   };
@@ -128,6 +131,12 @@ export interface ChatSource {
   setNotification?(roomId: string, mode: RoomSummary["notification"]): void;
   resetRecoveryKey?(): void;
   resetIdentity?(password: string): void;
+  /** SAS starts own-user verification when `deviceId` is null; events carry every transition. */
+  startSas?(deviceId: string | null): Promise<void>;
+  acceptSas?(id: string): Promise<void>;
+  confirmSas?(id: string): Promise<void>;
+  mismatchSas?(id: string): Promise<void>;
+  cancelSas?(id: string): Promise<void>;
   signOutDevice?(deviceId: string): void;
   signOutOthers?(): void;
   answerInvite?(roomId: string, accept: boolean): void;

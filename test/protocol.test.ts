@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseCommand, parseEvent, parseReply, PROTOCOL_VERSION } from "../src/protocol/index.ts";
+import { parseCommand, parseEvent, parseReply, PROTOCOL_VERSION, REPLY_DATA_GUARDS } from "../src/protocol/index.ts";
 
 void test("the protocol parses the command set and rejects malformed input", () => {
   assert.equal(PROTOCOL_VERSION, 1);
@@ -265,4 +265,50 @@ void test("inbound worker messages are parsed before they reach the store", () =
   });
   assert.equal(parseEvent({ type: "typing", payload: { roomId: "!a:example.org", userIds: [1] } }), null);
   assert.equal(parseEvent({ type: "unknown", payload: {} }), null);
+});
+
+void test("the protocol parses SAS commands and rejects a malformed projection", () => {
+  assert.deepEqual(parseCommand({ id: 40, type: "sasStart", payload: { deviceId: null } }), {
+    id: 40,
+    type: "sasStart",
+    payload: { deviceId: null },
+  });
+  assert.deepEqual(parseCommand({ id: 40, type: "sasStart", payload: { deviceId: "PHONE" } }), {
+    id: 40,
+    type: "sasStart",
+    payload: { deviceId: "PHONE" },
+  });
+  assert.equal(parseCommand({ id: 40, type: "sasStart", payload: {} }), null);
+  assert.equal(parseCommand({ id: 40, type: "sasStart", payload: { deviceId: 4 } }), null);
+  for (const type of ["sasAccept", "sasConfirm", "sasMismatch", "sasCancel"]) {
+    assert.deepEqual(parseCommand({ id: 41, type, payload: { id: "sas-1" } }), {
+      id: 41,
+      type,
+      payload: { id: "sas-1" },
+    });
+    assert.equal(parseCommand({ id: 41, type, payload: {} }), null);
+    assert.equal(parseCommand({ id: 41, type, payload: { id: "" } }), null);
+  }
+
+  const sas = {
+    id: "sas-1",
+    otherUserId: "@alice:example.org",
+    otherDeviceId: "PHONE",
+    isSelfVerification: true,
+    phase: "started",
+    emoji: ["🐶", "🐱"],
+    decimal: [1, 2, 3],
+    cancellationCode: null,
+  };
+  assert.deepEqual(parseEvent({ type: "sas", payload: sas }), { type: "sas", payload: sas });
+  assert.equal(REPLY_DATA_GUARDS.sasStart(sas), true);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, otherDeviceId: null }), true);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, phase: "bogus" }), false);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, otherUserId: "alice" }), false);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, emoji: ["🐶", 3] }), false);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, emoji: [] }), false);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, decimal: [1, 2] }), false);
+  assert.equal(REPLY_DATA_GUARDS.sasStart({ ...sas, cancellationCode: 5 }), false);
+  assert.equal(REPLY_DATA_GUARDS.sasAccept(null), true);
+  assert.equal(REPLY_DATA_GUARDS.sasAccept("null"), false);
 });

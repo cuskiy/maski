@@ -22,6 +22,8 @@ import type {
   RoomStatePatch,
   RoomSummary,
   RoomTag,
+  SasPhase,
+  SasState,
   SessionSummary,
   UndecryptableReason,
 } from "../core/types.ts";
@@ -63,7 +65,12 @@ export type CommandName =
   | "forward"
   | "memberAction"
   | "sendMedia"
-  | "media";
+  | "media"
+  | "sasStart"
+  | "sasAccept"
+  | "sasConfirm"
+  | "sasMismatch"
+  | "sasCancel";
 export type KeyStatus = KeyGate;
 export type FailureCode =
   | "invalid"
@@ -183,6 +190,12 @@ export interface CommandMap {
     readonly messageId: string;
     readonly variant: MediaVariant;
   };
+  /** `deviceId` null starts own-user verification; a device id targets that device. */
+  readonly sasStart: { readonly deviceId: string | null };
+  readonly sasAccept: { readonly id: string };
+  readonly sasConfirm: { readonly id: string };
+  readonly sasMismatch: { readonly id: string };
+  readonly sasCancel: { readonly id: string };
 }
 
 export interface RegisterResult {
@@ -232,6 +245,11 @@ export interface ReplyData {
   readonly memberAction: null;
   readonly sendMedia: MessageRow;
   readonly media: MediaReply;
+  readonly sasStart: SasState;
+  readonly sasAccept: null;
+  readonly sasConfirm: null;
+  readonly sasMismatch: null;
+  readonly sasCancel: null;
 }
 
 export interface EventMap {
@@ -267,6 +285,8 @@ export interface EventMap {
     readonly variant: MediaVariant;
     readonly url: string | null;
   };
+  /** Every SAS transition, including one adopted after a worker restart. */
+  readonly sas: SasState;
 }
 
 export type Command = {
@@ -323,6 +343,11 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "memberAction",
   "sendMedia",
   "media",
+  "sasStart",
+  "sasAccept",
+  "sasConfirm",
+  "sasMismatch",
+  "sasCancel",
 ]);
 
 const FAILURE_CODES: ReadonlySet<string> = new Set<FailureCode>([
@@ -350,6 +375,16 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
   "connection",
   "outbox",
   "media",
+  "sas",
+]);
+
+const SAS_PHASES: ReadonlySet<string> = new Set<SasPhase>([
+  "needs-accept",
+  "requested",
+  "ready",
+  "started",
+  "cancelled",
+  "done",
 ]);
 
 const ATTACHMENT_KINDS: ReadonlySet<string> = new Set(["image", "video", "audio", "file", "sticker"]);
@@ -444,6 +479,15 @@ function isAttachmentKind(value: unknown): value is CommandMap["sendMedia"]["kin
 
 function isMediaVariant(value: unknown): value is MediaVariant {
   return isInSet<MediaVariant>(value, MEDIA_VARIANTS);
+}
+
+function validSasStart(fields: Record<string, unknown>): fields is CommandMap["sasStart"] {
+  const deviceId = fields["deviceId"];
+  return "deviceId" in fields && (deviceId === null || (isString(deviceId) && deviceId.length <= 255));
+}
+
+function validSasId(fields: Record<string, unknown>): fields is CommandMap["sasAccept"] {
+  return isString(fields["id"]) && fields["id"].length <= 128;
 }
 
 /** The main thread only ever receives a worker-minted object URL for media. */
@@ -722,6 +766,32 @@ function isDevicesPayload(value: unknown): value is EventMap["devices"] {
   return isArrayOf(value, isDeviceSession);
 }
 
+function isSasPhase(value: unknown): value is SasPhase {
+  return isInSet<SasPhase>(value, SAS_PHASES);
+}
+
+function isSasDecimal(value: unknown): value is SasState["decimal"] {
+  return (
+    value === null || (Array.isArray(value) && value.length === 3 && value.every((entry: unknown) => isNumber(entry)))
+  );
+}
+
+function isSasState(value: unknown): value is SasState {
+  if (!isRecord(value)) return false;
+  const emoji = value["emoji"];
+  return (
+    isString(value["id"]) &&
+    value["id"].length <= 128 &&
+    isUserId(value["otherUserId"]) &&
+    (value["otherDeviceId"] === null || (isString(value["otherDeviceId"]) && value["otherDeviceId"].length <= 255)) &&
+    isBoolean(value["isSelfVerification"]) &&
+    isSasPhase(value["phase"]) &&
+    (emoji === null || (isArrayOf(emoji, isString) && emoji.length > 0 && emoji.length <= 7)) &&
+    isSasDecimal(value["decimal"]) &&
+    isStringOrNull(value["cancellationCode"])
+  );
+}
+
 function isInvite(value: unknown): value is Invite {
   if (!isRecord(value)) return false;
   const capabilities = value["capabilities"];
@@ -878,6 +948,11 @@ export const REPLY_DATA_GUARDS: {
   memberAction: isNull,
   sendMedia: isMessageRow,
   media: isMediaReply,
+  sasStart: isSasState,
+  sasAccept: isNull,
+  sasConfirm: isNull,
+  sasMismatch: isNull,
+  sasCancel: isNull,
 };
 
 export function parseReply(value: unknown): ReplyEnvelope | null {
@@ -923,6 +998,8 @@ export function parseEvent(value: unknown): Event | null {
       return isOutboxPayload(payload) ? { type, payload } : null;
     case "media":
       return isMediaPayload(payload) ? { type, payload } : null;
+    case "sas":
+      return isSasState(payload) ? { type, payload } : null;
     default:
       return assertNever(type);
   }
@@ -1375,6 +1452,15 @@ export function parseCommand(value: unknown): Command | null {
         type,
         payload: { roomId: fields.roomId, messageId: fields.messageId, variant: fields.variant },
       };
+    case "sasStart":
+      if (!validSasStart(fields)) return null;
+      return { id, type, payload: { deviceId: fields.deviceId } };
+    case "sasAccept":
+    case "sasConfirm":
+    case "sasMismatch":
+    case "sasCancel":
+      if (!validSasId(fields)) return null;
+      return { id, type, payload: { id: fields.id } };
     default:
       return null;
   }

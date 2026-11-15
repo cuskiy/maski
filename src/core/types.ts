@@ -287,6 +287,21 @@ export interface Member {
   readonly membership: Membership;
 }
 
+/** A verification request as the reader sees it; `needs-accept` waits for this user's decision. */
+export type SasPhase = "needs-accept" | "requested" | "ready" | "started" | "cancelled" | "done";
+
+/** The only SAS shape the main thread may receive; the request and verifier objects stay in the worker. */
+export interface SasState {
+  readonly id: string;
+  readonly otherUserId: string;
+  readonly otherDeviceId: string | null;
+  readonly isSelfVerification: boolean;
+  readonly phase: SasPhase;
+  readonly emoji: readonly string[] | null;
+  readonly decimal: readonly [number, number, number] | null;
+  readonly cancellationCode: string | null;
+}
+
 export interface ChatState {
   readonly phase: Phase;
   readonly connection: Connection;
@@ -311,4 +326,5 @@ export interface ChatState {
   readonly membersLoading: boolean;
   readonly recoveryKey: RecoveryKey | null;
   readonly backupReady: boolean;
+  readonly sas: SasState | null;
 }

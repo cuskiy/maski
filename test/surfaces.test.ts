@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { emptyChatState } from "../src/core/state.ts";
+import type { SasState } from "../src/core/types.ts";
 import { SURFACE } from "../src/core/regions.ts";
 import { CHAT_SURFACES } from "../src/core/surfaces.ts";
 import { surfaceBodyFor } from "../src/components/surfaces.ts";
@@ -153,10 +154,8 @@ void test("settings expose notification levels, keys, devices, reset and license
   assert.match(markup, /data-reset-key-value/u);
   assert.doesNotMatch(markup, /data-settings-action="sign-out-all"/u);
   assert.match(markup, /data-settings-action="sign-out-others"/u);
-  assert.match(markup, /data-settings-action="verify-device"/u);
-  assert.match(markup, /id="device-sas-dialog"/u);
-  assert.match(markup, /Verification needs the Matrix sync worker/u);
-  assert.doesNotMatch(markup, /data-sas-match/u);
+  assert.doesNotMatch(markup, /data-settings-action="verify-device"/u);
+  assert.doesNotMatch(markup, /id="device-sas-dialog"/u);
   assert.match(markup, /commandfor="surface-licenses"/u);
   assert.doesNotMatch(markup, /No analytics/u);
   const desktop = markup.indexOf('data-setting="desktop"');
@@ -228,4 +227,71 @@ void test("runtime license versions match the manifest", () => {
     if (typeof range !== "string") assert.fail(`${entry.name} has no version`);
     assert.equal(range.replace(/^[~^]/u, ""), entry.version, entry.name);
   }
+});
+
+void test("device rows offer verification only from the worker capability", () => {
+  const state = mockChatState();
+  const target = state.devices.find((device) => !device.current);
+  if (target === undefined) assert.fail("the fixture has no other device");
+  const compatible = {
+    ...state,
+    devices: state.devices.map((device) =>
+      Object.assign({}, device, {
+        capabilities: { verify: device.id === target.id, signOut: device.capabilities.signOut },
+      }),
+    ),
+  };
+  const markup = surfaceBodyFor(en, SURFACE.settings, compatible).value;
+  assert.match(
+    markup,
+    new RegExp(`data-settings-action="verify-device"[\\s\\S]{0,300}data-device-id="${target.id}"`, "u"),
+  );
+});
+
+void test("the SAS surface renders accept, compare, cancel and result controls", () => {
+  const base = mockChatState();
+  const started: SasState = {
+    id: "sas-1",
+    otherUserId: "@alice:example.org",
+    otherDeviceId: "PHONE",
+    isSelfVerification: true,
+    phase: "started",
+    emoji: ["🐶", "🐱"],
+    decimal: [1, 2, 3],
+    cancellationCode: null,
+  };
+  const ready = surfaceBodyFor(en, SURFACE.sas, { ...base, sas: started }).value;
+  assert.match(ready, /data-sas-phase="started"/u);
+  assert.match(ready, /data-sas-action="confirm"/u);
+  assert.match(ready, /data-sas-action="mismatch"/u);
+  assert.match(ready, /data-sas-action="cancel"/u);
+  assert.match(ready, /🐶/u);
+  assert.match(ready, /1 · 2 · 3/u);
+  assert.match(ready, /Compare these emoji on both devices/u);
+
+  const incoming = surfaceBodyFor(en, SURFACE.sas, {
+    ...base,
+    sas: { ...started, phase: "needs-accept", emoji: null, decimal: null },
+  }).value;
+  assert.match(incoming, /data-sas-action="accept"/u);
+  assert.match(incoming, /only if you started verification there/u);
+
+  const cancelled = surfaceBodyFor(en, SURFACE.sas, {
+    ...base,
+    sas: { ...started, phase: "cancelled", emoji: null, decimal: null, cancellationCode: "m.mismatched_sas" },
+  }).value;
+  assert.match(cancelled, /The emoji did not match/u);
+  assert.match(cancelled, /commandfor="surface-sas"/u);
+
+  const done = surfaceBodyFor(en, SURFACE.sas, {
+    ...base,
+    sas: { ...started, phase: "done", emoji: null, decimal: null },
+  }).value;
+  assert.match(done, /This device is verified/u);
+});
+
+void test("closing an unanswered SAS surface sends no fake confirmation", () => {
+  const markup = surfaceBodyFor(en, SURFACE.sas, { ...mockChatState(), sas: null }).value;
+  assert.match(markup, /commandfor="surface-sas"/u);
+  assert.doesNotMatch(markup, /data-sas-action=(?:"confirm"|"accept")/u);
 });

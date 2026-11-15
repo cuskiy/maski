@@ -927,10 +927,10 @@ server also sends `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referr
 `Permissions-Policy`.
 
 Budgets are measured by the build and enforced by C6. Values in this contract are ceilings, not targets:
-client JS 320 KB, stylesheet 96 KB, matrix worker 1.5 MB, crypto wasm 8.5 MB, generated watermark 96 KB,
-no unbudgeted asset above 8 KB. The build prints every size. A budget increase is a user decision, never a
-silent output of a refactor. Audit enforces client, stylesheet, worker, wasm and watermark and reports every
-measurement; the generated watermark is packed under its ceiling.
+client JS 320 KiB, stylesheet 96 KiB, matrix worker 1.5 MiB, crypto wasm 8.5 MiB, generated watermark
+96 KiB, no unbudgeted asset above 8 KiB. The build prints every size. A budget increase is a user
+decision, never a silent output of a refactor. Audit enforces client, stylesheet, worker, wasm and
+watermark and reports every measurement; the generated watermark is packed under its ceiling.
 
 ## 3.11 Testing
 
@@ -1253,21 +1253,26 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-15 after baseline commit `33ccbb5`. This is the only current-status section;
-counts and claims in `advice.md`, `past/`, browser history and old commits are evidence, not status.
+Measured on 2026-11-15 on the working tree after `b01ca6f` plus the SAS change. This is the only
+current-status section; counts and claims in `advice.md`, `past/`, browser history and old commits are
+evidence, not status.
 
-- `npm run check` is green: **164 tests**, 11 generated pages, 320 catalog keys, 2 languages.
-- Build sizes: stylesheet 85.7 KB, client 307.8 KB, matrix worker 1.302 MB, crypto wasm 7.79 MB,
-  watermark 69.9 KB (was 263 KB), generated service worker 2.8 KB. All budgets pass.
+- `npm run check` is green: **180 tests**, 11 generated pages, 336 catalog keys, 2 languages.
+- Build sizes: stylesheet 83.8 KiB, client 308.9 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+  watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
   non-retryable failed send. Media tests cover MIME sniffing/scriptable rejection, unencrypted/encrypted/
   sticker content shapes, AES-CTR round-trip and hash mismatch, thumbnail dimensions, no-mxc projection,
-  object URL revocation and upload-once/retry-send. A real server and browser worker protocol were not run.
+  object URL revocation and upload-once/retry-send. SAS tests exercise the worker state machine's
+  projection, ready/started transition, confirm, mismatch, user cancel, unknown id, incoming request and
+  restart adoption; no real device or homeserver completed a SAS handshake. A real server and browser
+  worker protocol were not run.
 - The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
   registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM
-  create, forward, member actions, `sendMedia`, `media` and read-only `devices`.
+  create, forward, member actions, `sendMedia`, `media`, read-only `devices` and SAS
+  (`sasStart`, `sasAccept`, `sasConfirm`, `sasMismatch`, `sasCancel`).
   Pure tests cover protocol shapes, reaction aggregation/removal, edit/redaction projection, search,
   the mock patch path and the dispatcher.
 - `PRODUCTION_CAPABILITIES` is true for media, search, react, edit, redact, forward, typing, memberAction,
@@ -1278,13 +1283,21 @@ counts and claims in `advice.md`, `past/`, browser history and old commits are e
   caches by content address and emits only `blob:` URLs. The projection never emits mxc/token/key.
 - Recovery key/passphrase derivation now uses PBKDF2-SHA-512 with a UTF-8 salt, validates the candidate
   against `secretStorage.checkKey`, and refuses to create a new cross-signing identity during recovery.
-  The device list is read-only; SAS, sign-out and backup setup are still absent.
+  The device list is read-only and reports `getDeviceVerificationStatus(...).isVerified()`.
+  SAS is worker-owned: the state machine starts own-user or per-device verification, adopts an incoming
+  `crypto.verificationRequestReceived` and `getVerificationRequestsToDeviceInProgress` after a restart,
+  starts `m.sas.v1`, and projects only id, target, phase, emoji/decimal and cancellation code; request and
+  verifier objects never cross the port. `crypto.devicesUpdated` and SAS completion recompute the gate and
+  emit `keys` plus `devices`. The key page and settings device rows drive the same commands. Device
+  sign-out and backup setup are still absent. The SAS messages follow
+  `spec/content/client-server-api/modules/end_to_end_encryption.md:671` and `:827`.
 - The shell service worker is written at `/service-worker.js` with the hashed manifest inlined: install
   precaches the 11 generated pages and 9 shell assets, navigation is cache-first with background
   revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache. A real
   offline reload was not run.
 - Chromium evidence: `/review/` loaded with no console errors and the composer rendered; an earlier
-  production check reached `/en/key/` with one recovery form and no fake SAS/reset dialog. Media upload,
+  production check reached `/en/key/` with one recovery form and no fake SAS/reset dialog. The SAS dialog
+  and its worker commands have **not** been driven in a browser or between two real devices. Media upload,
   worker search, actions, room management, device list and the encrypted media path were **not** exercised
   in a browser or against a real account. The earlier production check used a synthetic session.
 - CSS: `no-descending-specificity` is enabled. The reorder preserved the declaration multiset, but a
@@ -1302,15 +1315,21 @@ The UI is ahead of the runtime in the hidden surfaces. These are release blocker
 a reader-visible symptom, known facts, ruled-out paths and the next concrete step.
 
 1. **Key gate is incomplete.**
-   - Symptom: a new device that cannot use recovery has no second path; a real recovery has not been
-     proven against a homeserver.
+   - Symptom: a real SAS handshake and a real recovery have not been proven against a homeserver; device
+     sign-out, backup setup and reset-key display are still absent.
    - Known: recovery key/passphrase validates the candidate against secret storage, uses PBKDF2-SHA-512,
-     imports cross-signing and signs this device; the device list is read-only and the gate redirect is
-     wired. SAS, sign-out one/others, backup setup and reset-key display are absent.
-   - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, a wrong KDF and treating the cached
-     gate hint as authority. All were deleted or corrected.
-   - Next: run recovery against a real server; then add SAS, device sign-out with UIA, backup state/setup
-     and reset-key display with typed failures and a browser run. Do not re-add a gate that cannot decide.
+     imports cross-signing and signs this device. SAS is a worker state machine for own-user and per-device
+     verification, including incoming and post-restart adoption, with confirm/mismatch/cancel and a
+     projected state; the key page and settings device rows drive it. The gate is recomputed from crypto
+     device events and SAS completion, never by the UI. The device list is read-only and verification
+     state comes from `getDeviceVerificationStatus(...).isVerified()`.
+   - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, a wrong KDF, treating the cached
+     gate hint as authority, sending request/verifier objects over the port, and resetting the gate from
+     the SAS UI. All were deleted or never added.
+   - Next: complete a SAS handshake between two real devices against a homeserver, then run recovery;
+     add device sign-out with UIA and backup state/setup, and add the settings "show existing key" entry
+     if the product still needs it. The one-time key display exists on registration and the gate reset.
+     Keep typed failures and a browser run. Do not re-add a gate that cannot decide.
 
 2. **Registration and SSO are partial.**
    - Symptom: registration works only for password + `m.login.dummy`; terms/recaptcha/email/SSO stages
@@ -1392,9 +1411,9 @@ Do not pull a later UI surface forward to make the product look complete.
    before-cursor pages, reset gaps, and pure tests at 1/30/1,000/10,000 events.
 4. **Worker-owned outbox.** Done: queued row before request, status, retry/discard, echo replacement and
    typed failures. The client has no optimistic row writer.
-5. **Finish the key gate.** Run recovery against a real server; add SAS, device sign-out with UIA, backup
-   state/setup and reset-key display. The read-only device list is done. Do not re-add a fake gate or a
-   local unlock flag.
+5. **Finish the key gate.** Run recovery and SAS between real devices against a real server; add device
+   sign-out with UIA and backup state/setup. The read-only device list, worker SAS state machine, gate reset
+   and one-time key display are done. Do not re-add a fake gate or a local unlock flag.
 6. **Finish media residuals.** Encrypted thumbnail strategy, media dimensions/duration, image-backed
    sticker sending, cancel/progress, and real-server encrypted/unencrypted upload/download/thumbnail.
 7. **Search in the worker.** Done: `search` reads the account projection plus the outbox, dedupes, filters

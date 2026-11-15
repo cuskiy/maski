@@ -575,7 +575,7 @@ export const mockDevices: readonly DeviceSession[] = [
     lastSeen: "2 hours ago",
     verified: false,
     current: false,
-    capabilities: { verify: true, signOut: true },
+    capabilities: { verify: false, signOut: true },
   },
   {
     id: "laptop",
@@ -583,7 +583,7 @@ export const mockDevices: readonly DeviceSession[] = [
     lastSeen: "Yesterday",
     verified: false,
     current: false,
-    capabilities: { verify: true, signOut: true },
+    capabilities: { verify: false, signOut: true },
   },
   {
     id: "tablet",

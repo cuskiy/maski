@@ -15,6 +15,7 @@ import {
 } from "../core/rooms.ts";
 import { messagePermissions, roomPermissions } from "../core/permissions.ts";
 import { surfaceBodyFor, mediaFilesBody } from "../components/surfaces.ts";
+import { isActiveSas, sasBody } from "../components/sas.ts";
 import { replaceHtml } from "./dom.ts";
 import { emojiPickerBody } from "../components/emoji.ts";
 import { icons } from "../components/icons.ts";
@@ -71,6 +72,11 @@ function closeContextMenus(): void {
     menu.style.removeProperty("--context-y");
     if (menu.matches(":popover-open")) menu.hidePopover();
   }
+}
+
+function sasDialogElement(): HTMLDialogElement | null {
+  const dialog = document.getElementById(SURFACE.sas);
+  return dialog instanceof HTMLDialogElement ? dialog : null;
 }
 
 function insideContextSurface(target: Element): boolean {
@@ -452,6 +458,11 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   let confirmFocus: HTMLElement | null = null;
   let desktopRequest = 0;
   let pendingResetKey = false;
+  let sasError: CatalogKey | null = null;
+  let sasConfirmedId: string | null = null;
+  let sasDismissedId: string | null = null;
+  let sasSentCancelId: string | null = null;
+  let sasShownId: string | null = null;
 
   const state = (): ChatState => store.snapshot();
   const capabilities = actions.capabilities;
@@ -459,6 +470,57 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   const room = (id: string | null): RoomSummary | null => state().rooms.find((entry) => entry.roomId === id) ?? null;
   const message = (id: string | null): MessageRow | null => state().messages.find((entry) => entry.id === id) ?? null;
   let viewerMessageId: string | null = null;
+
+  function renderSas(): void {
+    const body = sasDialogElement()?.querySelector<HTMLElement>(`[data-region="${SURFACE.sas}-body"]`);
+    if (body === null || body === undefined) return;
+    const sas = state().sas;
+    replaceHtml(
+      body,
+      sasBody(c, sas, {
+        dialogId: SURFACE.sas,
+        error: sasError,
+        confirmed: sasConfirmedId !== null && sasConfirmedId === sas?.id,
+      }),
+    );
+  }
+
+  function openSas(): void {
+    const dialog = sasDialogElement();
+    if (dialog === null) return;
+    renderSas();
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function failSas(): void {
+    sasError = "auth.key.sasFailed";
+    openSas();
+  }
+
+  function cancelSas(id: string): void {
+    if (sasSentCancelId === id) return;
+    sasSentCancelId = id;
+    void actions.cancelSas(id).catch(() => undefined);
+  }
+
+  function handleSasAction(action: string): void {
+    const sas = state().sas;
+    if (sas === null) return;
+    sasError = null;
+    if (action === "accept") {
+      void actions.acceptSas(sas.id).catch(failSas);
+    } else if (action === "confirm") {
+      sasConfirmedId = sas.id;
+      renderSas();
+      void actions.confirmSas(sas.id).catch(failSas);
+    } else if (action === "mismatch") {
+      void actions.mismatchSas(sas.id).catch(failSas);
+    } else if (action === "cancel") {
+      sasDismissedId = sas.id;
+      cancelSas(sas.id);
+      sasDialogElement()?.close();
+    }
+  }
 
   function downloadMedia(roomId: string, messageId: string, name: string): void {
     void actions.resolveMedia(roomId, messageId, "full").then((url) => {
@@ -728,9 +790,11 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       downloadRecovery();
       return;
     } else if (action === "verify-device") {
-      if (!capabilities.signOutDevice) return;
-      const dialog = document.getElementById("device-sas-dialog");
-      if (dialog instanceof HTMLDialogElement) dialog.showModal();
+      const deviceId = element.dataset["deviceId"] ?? "";
+      const device = state().devices.find((entry) => entry.id === deviceId);
+      if (device === undefined || !device.capabilities.verify || device.verified || device.current) return;
+      sasError = null;
+      void actions.startSas(device.id).catch(failSas);
       return;
     } else if (action === "sign-out-device") {
       if (!capabilities.signOutDevice) return;
@@ -940,6 +1004,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (suppressClick) {
       suppressClick = false;
       event.preventDefault();
+      return;
+    }
+
+    const sasAction = target.closest<HTMLElement>("[data-sas-action]");
+    if (sasAction !== null) {
+      event.preventDefault();
+      handleSasAction(sasAction.dataset["sasAction"] ?? "");
       return;
     }
 
@@ -1733,6 +1804,36 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     showResetKeyDialog(key.value);
   });
 
+  const applySasState = (): void => {
+    const sas = state().sas;
+    if (sas === null) return;
+    if (sas.id !== sasShownId) {
+      sasShownId = sas.id;
+      sasConfirmedId = null;
+      sasDismissedId = null;
+      sasSentCancelId = null;
+    }
+    sasError = null;
+    if (sasDismissedId === sas.id) {
+      renderSas();
+      return;
+    }
+    openSas();
+  };
+  const unwatchSas = store.watch(["sas"], applySasState);
+  applySasState();
+
+  const sasElement = sasDialogElement();
+  const onSasClose = (): void => {
+    const sas = state().sas;
+    if (sas === null) return;
+    sasDismissedId = sas.id;
+    if (isActiveSas(sas.phase)) cancelSas(sas.id);
+    const settings = document.getElementById(SURFACE.settings);
+    if (settings instanceof HTMLDialogElement && settings.open) refreshBody(SURFACE.settings);
+  };
+  sasElement?.addEventListener("close", onSasClose);
+
   const unwatchMembers = store.watch(["members", "membersLoading"], () => {
     const dialog = document.getElementById(SURFACE.roomSettings);
     if (dialog instanceof HTMLDialogElement && dialog.open) {
@@ -1761,6 +1862,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
 
   return () => {
     unwatchResetKey();
+    unwatchSas();
+    sasElement?.removeEventListener("close", onSasClose);
     unwatchMembers();
     document.removeEventListener("click", onClick);
     document.removeEventListener("maski:forward-open", onForwardOpen);

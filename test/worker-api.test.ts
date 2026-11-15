@@ -96,6 +96,35 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("devices");
       return [];
     },
+    async sasStart() {
+      calls.push("sasStart");
+      return {
+        id: "sas-1",
+        otherUserId: session.userId,
+        otherDeviceId: "PHONE",
+        isSelfVerification: true,
+        phase: "requested",
+        emoji: null,
+        decimal: null,
+        cancellationCode: null,
+      };
+    },
+    async sasAccept() {
+      calls.push("sasAccept");
+      return null;
+    },
+    async sasConfirm() {
+      calls.push("sasConfirm");
+      return null;
+    },
+    async sasMismatch() {
+      calls.push("sasMismatch");
+      return null;
+    },
+    async sasCancel() {
+      calls.push("sasCancel");
+      return null;
+    },
     async resetIdentity() {
       calls.push("resetIdentity");
       return null;
@@ -315,4 +344,51 @@ void test("the worker dispatcher rejects malformed and failed commands", async (
     }),
     { id: 7, ok: false, code: "auth" },
   );
+});
+
+void test("the worker dispatcher routes SAS commands by worker id", async () => {
+  const calls: string[] = [];
+  const api = createWorkerApi(fakePort(calls));
+  const sas = {
+    id: "sas-1",
+    otherUserId: session.userId,
+    otherDeviceId: "PHONE",
+    isSelfVerification: true,
+    phase: "requested",
+    emoji: null,
+    decimal: null,
+    cancellationCode: null,
+  };
+  assert.deepEqual(await api.handle({ id: 60, type: "sasStart", payload: { deviceId: null } }), {
+    id: 60,
+    ok: true,
+    data: sas,
+  });
+  for (const [index, type] of ["sasAccept", "sasConfirm", "sasMismatch", "sasCancel"].entries()) {
+    assert.deepEqual(await api.handle({ id: 61 + index, type, payload: { id: "sas-1" } }), {
+      id: 61 + index,
+      ok: true,
+      data: null,
+    });
+  }
+  assert.deepEqual(calls, ["sasStart", "sasAccept", "sasConfirm", "sasMismatch", "sasCancel"]);
+});
+
+void test("the worker dispatcher applies SAS failures and malformed ids", async () => {
+  const api = createWorkerApi({
+    ...fakePort([]),
+    async sasConfirm() {
+      throw new WorkerFailure("invalid");
+    },
+  });
+  assert.deepEqual(await api.handle({ id: 70, type: "sasConfirm", payload: { id: "sas-404" } }), {
+    id: 70,
+    ok: false,
+    code: "invalid",
+  });
+  assert.deepEqual(await api.handle({ id: 71, type: "sasAccept", payload: { id: "" } }), {
+    id: 71,
+    ok: false,
+    code: "invalid",
+  });
 });

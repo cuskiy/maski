@@ -35,6 +35,7 @@ import type {
   MessageRow,
   RoomStatePatch,
   RoomSummary,
+  SasState,
   SessionSummary,
 } from "../core/types.ts";
 import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
@@ -69,6 +70,7 @@ import {
   projectWindow,
 } from "./project.ts";
 import { decodeRecoveryKey, derivePassphraseKey } from "./recovery.ts";
+import { SasSessions, type SasEvents } from "./sas.ts";
 import { clearSession, readSession, writeSession, type StoredSession } from "./sessionDb.ts";
 
 type SilentLogger = {
@@ -90,6 +92,48 @@ const silentLogger: SilentLogger = {
 };
 
 type Listener = (event: Event) => void;
+
+type CryptoApiShape = NonNullable<ReturnType<MatrixClient["getCrypto"]>>;
+type VerificationRequestShape = Awaited<ReturnType<CryptoApiShape["requestOwnUserVerification"]>>;
+type VerifierShape = Awaited<ReturnType<VerificationRequestShape["startVerification"]>>;
+type ShowSasShape = NonNullable<ReturnType<VerifierShape["getShowSasCallbacks"]>>;
+
+/**
+ * The pinned SDK does not export CryptoEvent, VerificationRequest or Verifier from its package
+ * root, so crypto events are subscribed by literal name through this narrow adapter. Callback
+ * types are inferred from the public MatrixClient methods; no private subpath is imported.
+ */
+interface LiteralEmitter {
+  on(event: string, listener: (...args: never[]) => void): void;
+  off(event: string, listener: (...args: never[]) => void): void;
+}
+
+function sasEvents(client: MatrixClient): SasEvents {
+  const clientEvents: LiteralEmitter = client;
+  return {
+    watchIncoming(listener) {
+      const handler = (request: VerificationRequestShape): void => listener(request);
+      clientEvents.on("crypto.verificationRequestReceived", handler);
+      return () => clientEvents.off("crypto.verificationRequestReceived", handler);
+    },
+    watchRequest(request, onChange) {
+      const requestEvents: LiteralEmitter = request;
+      requestEvents.on("change", onChange);
+      return () => requestEvents.off("change", onChange);
+    },
+    watchVerifier(verifier, handlers) {
+      const verifierEvents: LiteralEmitter = verifier;
+      const showSas = (callbacks: ShowSasShape): void => handlers.showSas(callbacks);
+      const cancel = (): void => handlers.cancel();
+      verifierEvents.on("show_sas", showSas);
+      verifierEvents.on("cancel", cancel);
+      return () => {
+        verifierEvents.off("show_sas", showSas);
+        verifierEvents.off("cancel", cancel);
+      };
+    },
+  };
+}
 
 function normalizeHomeserver(value: string): string | null {
   try {
@@ -316,6 +360,7 @@ export class MatrixSession implements SessionPort {
   private stored: StoredSession | null = null;
   private activeRoomId: string | null = null;
   private keyReady: KeyStatus = "unknown";
+  private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
   private releaseLock: (() => void) | null = null;
   private roomsQueued = false;
@@ -526,12 +571,42 @@ export class MatrixSession implements SessionPort {
           lastSeen: typeof device.last_seen_ts === "number" ? new Date(device.last_seen_ts).toISOString() : "",
           verified: status?.isVerified() ?? false,
           current: device.device_id === current,
-          capabilities: { verify: false, signOut: false },
+          capabilities: { verify: device.device_id !== current, signOut: false },
         } satisfies DeviceSession;
       }),
     );
     this.emit({ type: "devices", payload: devices });
     return devices;
+  }
+
+  async sasStart(deviceId: string | null): Promise<SasState> {
+    const sas = this.sas;
+    if (sas === null) throw new WorkerFailure("unavailable");
+    return sas.start(deviceId);
+  }
+
+  async sasAccept(id: string): Promise<null> {
+    const sas = this.sas;
+    if (sas === null) throw new WorkerFailure("unavailable");
+    return sas.accept(id);
+  }
+
+  async sasConfirm(id: string): Promise<null> {
+    const sas = this.sas;
+    if (sas === null) throw new WorkerFailure("unavailable");
+    return sas.confirm(id);
+  }
+
+  async sasMismatch(id: string): Promise<null> {
+    const sas = this.sas;
+    if (sas === null) throw new WorkerFailure("unavailable");
+    return sas.mismatch(id);
+  }
+
+  async sasCancel(id: string): Promise<null> {
+    const sas = this.sas;
+    if (sas === null) throw new WorkerFailure("unavailable");
+    return sas.cancel(id);
   }
 
   async resetIdentity(password: string): Promise<string | null> {
@@ -1230,6 +1305,14 @@ export class MatrixSession implements SessionPort {
     }
   }
 
+  /** One writer for the SAS aftermath: the gate and the device list both come from crypto. */
+  private async refreshKeys(): Promise<void> {
+    if (this.client === null) return;
+    this.keyReady = await this.refreshGate();
+    this.emit({ type: "keys", payload: this.keyReady });
+    await this.devices().catch(() => undefined);
+  }
+
   private async refreshGate(): Promise<KeyStatus> {
     const client = this.client;
     const userId = client?.getUserId();
@@ -1759,6 +1842,12 @@ export class MatrixSession implements SessionPort {
   }
 
   private wire(client: MatrixClient): void {
+    const cryptoEvents: LiteralEmitter = client;
+    cryptoEvents.on("crypto.devicesUpdated", (users: string[]) => {
+      const stored = this.stored;
+      if (stored === null || !users.includes(stored.userId)) return;
+      void this.refreshKeys().catch(() => undefined);
+    });
     client.on(ClientEvent.SyncUnexpectedError, (error: Error) => {
       if (isRecord(error) && error["errcode"] === "M_UNKNOWN_TOKEN") void this.softLogout();
     });
@@ -1905,6 +1994,18 @@ export class MatrixSession implements SessionPort {
     await client.store.startup();
     await initAsync(wasmUrl);
     await client.initRustCrypto({ cryptoDatabasePrefix: this.cryptoPrefix });
+    this.sas?.dispose();
+    this.sas = new SasSessions({
+      crypto: () => client.getCrypto(),
+      ownUserId: stored.userId,
+      events: sasEvents(client),
+      emit: (state) => this.emit({ type: "sas", payload: state }),
+      settled: () => {
+        void this.refreshKeys().catch(() => undefined);
+      },
+      failure: (error) => this.transportFailure(error),
+    });
+    this.sas.adoptInProgress();
     this.keyReady = await this.refreshGate();
     await client.startClient({
       initialSyncLimit: 20,
@@ -1932,6 +2033,8 @@ export class MatrixSession implements SessionPort {
 
   private async softLogout(): Promise<void> {
     const client = this.client;
+    this.sas?.dispose();
+    this.sas = null;
     this.client = null;
     this.stored = null;
     this.outbox = null;
@@ -1958,6 +2061,8 @@ export class MatrixSession implements SessionPort {
   private async teardown(client: MatrixClient | null): Promise<void> {
     const prefix = this.cryptoPrefix;
     const account = this.account;
+    this.sas?.dispose();
+    this.sas = null;
     this.releaseLock?.();
     this.releaseLock = null;
     this.client = null;

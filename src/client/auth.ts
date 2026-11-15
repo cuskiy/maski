@@ -1,9 +1,12 @@
-import type { Catalog } from "../lib/catalog.ts";
+import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
 import type { LocaleId } from "../core/locales.ts";
 import { localeRoot } from "../core/locales.ts";
+import type { SasState } from "../core/types.ts";
+import { isActiveSas, sasBody } from "../components/sas.ts";
 import { config } from "../config.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
+import { replaceHtml } from "./dom.ts";
 import { mockSession, setAccount, setGate, setServer } from "./session.ts";
 
 function navigate(path: string): void {
@@ -285,15 +288,106 @@ function initKey(c: Catalog, locale: LocaleId): void {
     return;
   }
 
+  const verifyButton = document.querySelector<HTMLButtonElement>("[data-key-verify]");
+  const sasDialog = document.querySelector<HTMLDialogElement>("#key-sas-dialog");
+  const sasRegion = document.querySelector<HTMLElement>('[data-region="key-sas-dialog-body"]');
+  let sas: SasState | null = null;
+  let sasError: CatalogKey | null = null;
+  let sasConfirmedId: string | null = null;
+  let sasSentCancelId: string | null = null;
+
+  const renderSas = (): void => {
+    if (sasRegion === null) return;
+    replaceHtml(
+      sasRegion,
+      sasBody(c, sas, {
+        dialogId: "key-sas-dialog",
+        error: sasError,
+        confirmed: sasConfirmedId !== null && sasConfirmedId === sas?.id,
+      }),
+    );
+  };
+
+  const showSas = (): void => {
+    renderSas();
+    if (sasDialog !== null && !sasDialog.open) sasDialog.showModal();
+  };
+
+  const failSas = (): void => {
+    sasError = "auth.key.sasFailed";
+    showSas();
+  };
+
+  const cancelSas = (): void => {
+    if (sas === null || sasSentCancelId === sas.id) return;
+    sasSentCancelId = sas.id;
+    void transport.sasCancel(sas.id).catch(() => undefined);
+  };
+
+  const revealVerify = (gate: string): void => {
+    if (verifyButton === null) return;
+    verifyButton.hidden = gate !== "needs-verification";
+  };
+
   transport.onEvent((event) => {
+    if (event.type === "sas") {
+      if (sas?.id !== event.payload.id) {
+        sasConfirmedId = null;
+        sasSentCancelId = null;
+      }
+      sas = event.payload;
+      sasError = null;
+      if (verifyButton !== null) verifyButton.disabled = isActiveSas(sas.phase);
+      showSas();
+      return;
+    }
     if (event.type !== "keys") return;
     setGate(event.payload);
+    if (verifyButton !== null) verifyButton.disabled = false;
+    revealVerify(event.payload);
     if (event.payload === "ready") {
       transport.dispose();
       navigate(localeRoot(locale));
       return;
     }
     showStatus(keyStatusText(c, event.payload));
+  });
+
+  verifyButton?.addEventListener("click", () => {
+    if (verifyButton.disabled) return;
+    verifyButton.disabled = true;
+    sasError = null;
+    void transport.sasStart(null).catch(() => {
+      verifyButton.disabled = false;
+      failSas();
+    });
+  });
+
+  sasDialog?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || sas === null) return;
+    const button = target.closest<HTMLElement>("[data-sas-action]");
+    if (button === null) return;
+    event.preventDefault();
+    sasError = null;
+    const action = button.dataset["sasAction"] ?? "";
+    if (action === "accept") {
+      void transport.sasAccept(sas.id).catch(failSas);
+    } else if (action === "confirm") {
+      sasConfirmedId = sas.id;
+      renderSas();
+      void transport.sasConfirm(sas.id).catch(failSas);
+    } else if (action === "mismatch") {
+      void transport.sasMismatch(sas.id).catch(failSas);
+    } else if (action === "cancel") {
+      cancelSas();
+      sasDialog.close();
+    }
+  });
+
+  sasDialog?.addEventListener("close", () => {
+    if (sas !== null && isActiveSas(sas.phase)) cancelSas();
+    if (verifyButton !== null) verifyButton.disabled = false;
   });
 
   void transport.start().then(
@@ -305,6 +399,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
       }
       const gate = await transport.keyStatus();
       setGate(gate);
+      revealVerify(gate);
       if (gate === "ready") {
         transport.dispose();
         navigate(localeRoot(locale));
@@ -340,6 +435,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
       .recover({ recoveryKey: recovery.value.trim(), passphrase: passphrase.value })
       .then((gate) => {
         setGate(gate);
+        revealVerify(gate);
         if (gate === "ready") {
           transport.dispose();
           navigate(localeRoot(locale));

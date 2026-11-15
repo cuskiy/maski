@@ -1,4 +1,11 @@
-import type { DeviceSession, MessageKind, MessageRow, RoomStatePatch, SessionSummary } from "../core/types.ts";
+import type {
+  DeviceSession,
+  MessageKind,
+  MessageRow,
+  RoomStatePatch,
+  SasState,
+  SessionSummary,
+} from "../core/types.ts";
 import type {
   CommandMap,
   CommandName,
@@ -176,6 +183,26 @@ export class MatrixTransport {
 
   devices(): Promise<readonly DeviceSession[]> {
     return this.request("devices", {});
+  }
+
+  sasStart(deviceId: string | null): Promise<SasState> {
+    return this.request("sasStart", { deviceId });
+  }
+
+  sasAccept(id: string): Promise<null> {
+    return this.request("sasAccept", { id });
+  }
+
+  sasConfirm(id: string): Promise<null> {
+    return this.request("sasConfirm", { id });
+  }
+
+  sasMismatch(id: string): Promise<null> {
+    return this.request("sasMismatch", { id });
+  }
+
+  sasCancel(id: string): Promise<null> {
+    return this.request("sasCancel", { id });
   }
 
   resetIdentity(password: string): Promise<string | null> {

@@ -91,6 +91,16 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
         return { id, ok: true, data: await session.members(command.payload.roomId) };
       case "devices":
         return { id, ok: true, data: await session.devices() };
+      case "sasStart":
+        return { id, ok: true, data: await session.sasStart(command.payload.deviceId) };
+      case "sasAccept":
+        return { id, ok: true, data: await session.sasAccept(command.payload.id) };
+      case "sasConfirm":
+        return { id, ok: true, data: await session.sasConfirm(command.payload.id) };
+      case "sasMismatch":
+        return { id, ok: true, data: await session.sasMismatch(command.payload.id) };
+      case "sasCancel":
+        return { id, ok: true, data: await session.sasCancel(command.payload.id) };
       case "resetIdentity":
         return { id, ok: true, data: await session.resetIdentity(command.payload.password) };
       case "react":

@@ -209,6 +209,26 @@ export class WorkerSource implements ChatSource {
     void this.transport.memberAction(roomId, userId, action).catch(() => undefined);
   }
 
+  startSas(deviceId: string | null): Promise<void> {
+    return this.transport.sasStart(deviceId).then(() => undefined);
+  }
+
+  acceptSas(id: string): Promise<void> {
+    return this.transport.sasAccept(id).then(() => undefined);
+  }
+
+  confirmSas(id: string): Promise<void> {
+    return this.transport.sasConfirm(id).then(() => undefined);
+  }
+
+  mismatchSas(id: string): Promise<void> {
+    return this.transport.sasMismatch(id).then(() => undefined);
+  }
+
+  cancelSas(id: string): Promise<void> {
+    return this.transport.sasCancel(id).then(() => undefined);
+  }
+
   async logout(): Promise<void> {
     await this.transport.logout();
   }
@@ -262,6 +282,9 @@ export class WorkerSource implements ChatSource {
         break;
       case "devices":
         this.emit("devices", event.payload);
+        break;
+      case "sas":
+        this.emit("sas", event.payload);
         break;
       case "invites":
         this.emit("invites", event.payload);

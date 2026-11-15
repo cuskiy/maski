@@ -21,6 +21,7 @@ export const CHAT_SURFACES: readonly SurfaceDefinition[] = [
   { id: SURFACE.create, titleKey: "surface.create", kind: "modal" },
   { id: SURFACE.settings, titleKey: "surface.settings", kind: "modal" },
   { id: SURFACE.roomSettings, titleKey: "surface.roomSettings", kind: "modal" },
+  { id: SURFACE.sas, titleKey: "auth.key.sasTitle", kind: "modal" },
   { id: SURFACE.viewer, titleKey: "surface.viewer", kind: "modal" },
   { id: SURFACE.mediaFiles, titleKey: "surface.mediaFiles", kind: "modal" },
   { id: SURFACE.forward, titleKey: "surface.forward", kind: "modal" },

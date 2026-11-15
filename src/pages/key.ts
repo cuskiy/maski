@@ -26,6 +26,16 @@ export function keyView({ locale }: PageContext): PageView {
             <button class="button-quiet is-danger" type="submit">${t(c, "settings.resetIdentity")}</button>
           </form>
         </div>
+        <button class="button-primary" type="button" data-key-verify hidden>${t(c, "auth.key.sasTitle")}</button>
+        <dialog
+          id="key-sas-dialog"
+          class="surface modal sas"
+          closedby="any"
+          aria-labelledby="key-sas-dialog-title"
+        >
+          ${surfaceHead(c, "key-sas-dialog", "auth.key.sasTitle")}
+          <div class="surface-body" data-region="key-sas-dialog-body"></div>
+        </dialog>
         <dialog
           id="key-reset-dialog"
           class="surface modal reset-key-dialog"

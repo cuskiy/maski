@@ -24,7 +24,7 @@ import { surfaceHead } from "./surface.ts";
 import { stickerPickerBody } from "../components/stickers.ts";
 import { icons } from "../components/icons.ts";
 import { ATTRIBUTIONS, LICENSES } from "../core/licenses.ts";
-import { sasDialog } from "./sas.ts";
+import { sasBody } from "./sas.ts";
 
 function textForm(c: Catalog, id: string, labelKey: CatalogKey, submitKey: CatalogKey): Html {
   return html`<form class="form" method="post" data-surface="${id}">
@@ -503,6 +503,8 @@ export function surfaceBodyFor(
       return html`<p class="note">${t(c, "surface.viewer.empty")}</p>`;
     case SURFACE.mediaFiles:
       return capabilities.search ? mediaFilesBody(c, state.messages) : html``;
+    case SURFACE.sas:
+      return sasBody(c, state.sas, { dialogId: SURFACE.sas, error: null, confirmed: false });
     case SURFACE.licenses:
       return html`<ul class="license-list" role="list">
         ${LICENSES.map(
@@ -743,7 +745,6 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
       </dialog>`
           : html``
       }
-      ${sasDialog(c, "device-sas-dialog")}
       <h3>${t(c, "settings.sessions")}</h3>
       ${
         state.devices.length === 0
@@ -769,7 +770,7 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
                   </div>
                   <div class="device-actions">
                     ${
-                      capabilities.signOutDevice && device.capabilities.verify && !device.verified
+                      device.capabilities.verify && !device.verified && !device.current
                         ? html`<button
                             class="button-quiet"
                             type="button"

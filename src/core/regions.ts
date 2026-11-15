@@ -22,6 +22,7 @@ export const SURFACE = {
   create: "surface-create",
   settings: "surface-settings",
   roomSettings: "surface-room-settings",
+  sas: "surface-sas",
   roomMenu: "surface-room-menu",
   messageMenu: "surface-message-menu",
   selectionMenu: "surface-selection-menu",

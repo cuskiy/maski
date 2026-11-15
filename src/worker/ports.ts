@@ -1,4 +1,11 @@
-import type { DeviceSession, MessageKind, MessageRow, RoomStatePatch, SessionSummary } from "../core/types.ts";
+import type {
+  DeviceSession,
+  MessageKind,
+  MessageRow,
+  RoomStatePatch,
+  SasState,
+  SessionSummary,
+} from "../core/types.ts";
 import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
 
 export interface SessionPort {
@@ -29,6 +36,11 @@ export interface SessionPort {
   markRead(roomId: string, eventId: string): Promise<null>;
   members(roomId: string): Promise<null>;
   devices(): Promise<readonly DeviceSession[]>;
+  sasStart(deviceId: string | null): Promise<SasState>;
+  sasAccept(id: string): Promise<null>;
+  sasConfirm(id: string): Promise<null>;
+  sasMismatch(id: string): Promise<null>;
+  sasCancel(id: string): Promise<null>;
   resetIdentity(password: string): Promise<string | null>;
   react(roomId: string, eventId: string, key: string): Promise<null>;
   edit(roomId: string, eventId: string, body: string, html: string | null): Promise<null>;

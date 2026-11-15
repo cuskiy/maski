@@ -1978,6 +1978,13 @@
     font-size: var(--text-xl);
   }
 
+  .sas-decimal {
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+
   .sas-actions {
     display: flex;
     flex-wrap: wrap;

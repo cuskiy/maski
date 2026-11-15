@@ -98,6 +98,11 @@ export interface Actions {
   resetRecoveryKey(): void;
   clearRecoveryKey(): void;
   resetIdentity(password: string): void;
+  startSas(deviceId: string | null): Promise<void>;
+  acceptSas(id: string): Promise<void>;
+  confirmSas(id: string): Promise<void>;
+  mismatchSas(id: string): Promise<void>;
+  cancelSas(id: string): Promise<void>;
   signOutDevice(deviceId: string): void;
   signOutOthers(): void;
   logout(): Promise<void>;
@@ -596,6 +601,26 @@ export function createActions({ store, source, c, account }: Context): Actions {
       if (!caps.resetIdentity) return;
       source.resetIdentity?.(password);
     },
+    startSas(deviceId) {
+      if (source.startSas === undefined) return Promise.reject(new Error("unavailable"));
+      return source.startSas(deviceId);
+    },
+    acceptSas(id) {
+      if (source.acceptSas === undefined) return Promise.reject(new Error("unavailable"));
+      return source.acceptSas(id);
+    },
+    confirmSas(id) {
+      if (source.confirmSas === undefined) return Promise.reject(new Error("unavailable"));
+      return source.confirmSas(id);
+    },
+    mismatchSas(id) {
+      if (source.mismatchSas === undefined) return Promise.reject(new Error("unavailable"));
+      return source.mismatchSas(id);
+    },
+    cancelSas(id) {
+      if (source.cancelSas === undefined) return Promise.reject(new Error("unavailable"));
+      return source.cancelSas(id);
+    },
     signOutDevice(deviceId) {
       if (!caps.signOutDevice) return;
       source.signOutDevice?.(deviceId);
@@ -686,6 +711,7 @@ export function wireSources(store: Store, source: ChatSource): () => void {
       store.write("typing", userIds);
     }),
     source.on("recoveryKey", (recoveryKey) => store.write("recoveryKey", recoveryKey)),
+    source.on("sas", (sas) => store.write("sas", sas)),
     source.on("media", ({ roomId, messageId, url }) => patchMediaUrl(store, roomId, messageId, url)),
     source.on("outbox", ({ roomId, messageId, row }) => {
       if (roomId !== store.read("roomId")) return;
