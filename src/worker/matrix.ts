@@ -1886,6 +1886,7 @@ export class MatrixSession implements SessionPort {
     const direct = directRooms(client);
     const spaces = spaceParents(client);
     const rooms: RoomRecord[] = [];
+    const live = new Set<string>();
     for (const room of client.getRooms()) {
       if (this.leftRooms.has(room.roomId)) continue;
       const projectedBase = projectRoom(
@@ -1896,6 +1897,7 @@ export class MatrixSession implements SessionPort {
         this.directoryPublished.get(room.roomId) ?? false,
       );
       if (projectedBase === null) continue;
+      live.add(room.roomId);
       const avatar = this.roomAvatars.get(room.roomId);
       const base = avatar === undefined ? projectedBase : { ...projectedBase, avatar };
       const mxcAvatar = room.getMxcAvatarUrl();
@@ -1916,6 +1918,10 @@ export class MatrixSession implements SessionPort {
       };
       await account.writeRoom(record);
       rooms.push({ room: summaryRoom, lastOpened: record.lastOpened });
+    }
+    // Safe only here: this path runs after SyncState.Prepared, so absence is an explicit leave.
+    for (const record of records) {
+      if (!live.has(record.room.roomId)) await account.deleteRoom(record.room.roomId);
     }
     this.emit({
       type: "rooms",
