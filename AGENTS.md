@@ -1257,8 +1257,8 @@ Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and 
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **186 tests**, 11 generated pages, 342 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 311.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **187 tests**, 11 generated pages, 343 catalog keys, 2 languages.
+- Build sizes: stylesheet 83.8 KiB, client 312.3 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1417,12 +1417,12 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
      failure or timeout; a failed device-list read is rendered as "No devices.", and several fire-and-forget
      actions still convert a failure into silence.
    - Known: the transport has timeouts and typed failure codes; `search`, media-file loading, sign-out and
-     the key page now surface their failures. The source still has no one failure event that clears a
-     loading flag and gives the invoking surface a retry.
+     the key page now surface their failures. A typed source failure event now clears the window, history
+     and member loading flags and shows the conversation failure note; other fire-and-forget actions still
+     have no per-command surface.
    - Ruled out: treating a timeout as an empty result, a successful sign-out or a successful edit.
-   - Next: add one typed source failure event keyed by command, clear the corresponding loading flag in
-     `wireSources`, render the retry in the timeline/member/device surface, and cover a forced rejection in
-     the browser harness.
+   - Next: extend the typed failure event to the remaining commands, render a retry in the member/device
+     and action surfaces, and cover a forced rejection in the browser harness.
 
 ## 6.5 Migration order
 

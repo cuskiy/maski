@@ -1,5 +1,6 @@
 import type { KeyGate, MessageKind, MessageRow, Phase, RoomStatePatch, RoomSummary } from "../core/types.ts";
-import type { CommandMap, Event, MediaReply, MediaVariant } from "../protocol/index.ts";
+import type { CommandMap, Event, FailureCode, MediaReply, MediaVariant } from "../protocol/index.ts";
+import { isFailureCode } from "../protocol/index.ts";
 import { PRODUCTION_CAPABILITIES } from "../core/types.ts";
 import type { ChatSource, ForwardSource, SourceEvent, SourceEvents } from "./source.ts";
 import { clearSourceListeners, createSourceListeners } from "./source.ts";
@@ -97,11 +98,11 @@ export class WorkerSource implements ChatSource {
   }
 
   open(roomId: string): void {
-    this.transport.open(roomId);
+    void this.transport.open(roomId).catch((error: unknown) => this.report("open", error));
   }
 
   older(roomId: string): void {
-    this.transport.older(roomId);
+    void this.transport.older(roomId).catch((error: unknown) => this.report("older", error));
   }
 
   send(roomId: string, row: MessageRow): Promise<MessageRow> {
@@ -148,7 +149,7 @@ export class WorkerSource implements ChatSource {
   }
 
   members(roomId: string): void {
-    this.transport.members(roomId);
+    void this.transport.members(roomId).catch((error: unknown) => this.report("members", error));
   }
 
   react(roomId: string, eventId: string, key: string): void {
@@ -260,6 +261,11 @@ export class WorkerSource implements ChatSource {
     this.unlisten();
     this.transport.dispose();
     clearSourceListeners(this.listeners);
+  }
+
+  private report(command: "open" | "older" | "members", error: unknown): void {
+    const code: FailureCode = error instanceof Error && isFailureCode(error.message) ? error.message : "unavailable";
+    this.emit("failure", { command, code });
   }
 
   private emit<K extends SourceEvent>(event: K, payload: SourceEvents[K]): void {

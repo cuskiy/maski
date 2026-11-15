@@ -65,3 +65,10 @@ void test("media captions render and the viewer control carries the message id",
   const dated = message("d5");
   assert.match(dated, /The placeholder stays neutral/u);
 });
+
+void test("a failed window reveals a retryable failure instead of an empty room", () => {
+  const failed = timeline({ ...mockChatState(), failure: "open", windowLoading: false }, en, "en").value;
+  assert.match(failed, /role="alert"/u);
+  assert.match(failed, /Could not load this conversation/u);
+  assert.doesNotMatch(failed, /No messages yet/u);
+});

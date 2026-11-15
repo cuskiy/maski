@@ -20,6 +20,7 @@ export function emptyChatState(): ChatState {
     windowLoading: false,
     hasOlder: false,
     olderLoading: false,
+    failure: null,
     typing: [],
     recentEmoji: [],
     recentReactions: [],

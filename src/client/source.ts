@@ -15,7 +15,7 @@ import type {
   SessionSummary,
   SourceCapabilities,
 } from "../core/types.ts";
-import type { CommandMap, MediaReply, MediaVariant } from "../protocol/index.ts";
+import type { CommandMap, FailureCode, MediaReply, MediaVariant } from "../protocol/index.ts";
 
 export type { RoomStatePatch };
 
@@ -57,6 +57,10 @@ export interface SourceEvents {
     readonly variant: MediaVariant;
     readonly url: string | null;
   };
+  readonly failure: {
+    readonly command: "open" | "older" | "members";
+    readonly code: FailureCode;
+  };
 }
 
 export type SourceEvent = keyof SourceEvents;
@@ -83,6 +87,7 @@ export function createSourceListeners(): SourceListeners {
     sas: new Set(),
     outbox: new Set(),
     media: new Set(),
+    failure: new Set(),
   };
 }
 

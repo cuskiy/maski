@@ -302,6 +302,7 @@ export const zhCN = {
   "chat.title": "聊天",
   "chat.empty": "还没有消息。",
   "chat.loading": "正在加载消息…",
+  "chat.loadFailed": "无法加载这段会话，请重试。",
   "chat.back": "返回房间列表",
   "chat.roomMenu": "房间菜单",
   "chat.loadOlder": "加载更早的消息",

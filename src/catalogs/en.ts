@@ -305,6 +305,7 @@ export const en = {
   "chat.title": "Chat",
   "chat.empty": "No messages yet.",
   "chat.loading": "Loading messages…",
+  "chat.loadFailed": "Could not load this conversation. Try again.",
   "chat.back": "Back to the room list",
   "chat.roomMenu": "Room menu",
   "chat.loadOlder": "Load older messages",

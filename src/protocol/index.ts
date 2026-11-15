@@ -534,7 +534,7 @@ function isCommandName(value: unknown): value is CommandName {
   return isInSet<CommandName>(value, COMMANDS);
 }
 
-function isFailureCode(value: unknown): value is FailureCode {
+export function isFailureCode(value: unknown): value is FailureCode {
   return isInSet<FailureCode>(value, FAILURE_CODES);
 }
 

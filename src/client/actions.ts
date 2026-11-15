@@ -146,6 +146,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
       store.write("roomId", room.roomId);
       store.write("messages", []);
       store.write("windowLoading", true);
+      store.write("failure", null);
       store.write("members", []);
       store.write("membersLoading", true);
     });
@@ -199,6 +200,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.write("messages", []);
         store.write("windowLoading", true);
         store.write("hasOlder", false);
+        store.write("failure", null);
         store.write("typing", []);
         store.write("members", []);
         store.write("membersLoading", true);
@@ -213,6 +215,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.write("messages", []);
         store.write("windowLoading", false);
         store.write("hasOlder", false);
+        store.write("failure", null);
         store.write("members", []);
         store.write("membersLoading", false);
       });
@@ -563,6 +566,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
         store.write("messages", []);
         store.write("windowLoading", true);
         store.write("hasOlder", false);
+        store.write("failure", null);
         store.write("typing", []);
         store.write("members", []);
         store.write("membersLoading", true);
@@ -660,6 +664,7 @@ export function wireSources(store: Store, source: ChatSource): () => void {
       }
       if (roomId !== store.read("roomId")) return;
       store.batch(() => {
+        store.write("failure", null);
         if (patch) {
           const current = store.read("messages");
           const next = [...current];
@@ -712,6 +717,19 @@ export function wireSources(store: Store, source: ChatSource): () => void {
       store.batch(() => {
         store.write("members", members);
         store.write("membersLoading", false);
+        store.write("failure", null);
+      });
+    }),
+    source.on("failure", ({ command }) => {
+      store.batch(() => {
+        store.write("failure", command);
+        if (command === "open") {
+          store.write("windowLoading", false);
+        } else if (command === "older") {
+          store.write("olderLoading", false);
+        } else {
+          store.write("membersLoading", false);
+        }
       });
     }),
     source.on("typing", ({ roomId, userIds }) => {

@@ -79,11 +79,13 @@ export function timeline(
     <div class="timeline-wrap">
       <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state" ${state.windowLoading ? html` aria-busy="true"` : html``}>
         ${stateNote(state, c)}${
-          ready && state.windowLoading && state.messages.length === 0
-            ? html`<p class="note" role="status">${t(c, "chat.loading")}</p>`
-            : ready && state.messages.length === 0
-              ? html`<p class="note">${t(c, "chat.empty")}</p>`
-              : html``
+          state.failure !== null
+            ? html`<p class="note form-error" role="alert">${t(c, "chat.loadFailed")}</p>`
+            : ready && state.windowLoading && state.messages.length === 0
+              ? html`<p class="note" role="status">${t(c, "chat.loading")}</p>`
+              : ready && state.messages.length === 0
+                ? html`<p class="note">${t(c, "chat.empty")}</p>`
+                : html``
         }
       </div>
       ${

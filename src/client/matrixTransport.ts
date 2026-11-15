@@ -108,12 +108,12 @@ export class MatrixTransport {
     return this.request("recover", input);
   }
 
-  open(roomId: string): void {
-    void this.request("open", { roomId }).catch(() => undefined);
+  open(roomId: string): Promise<null> {
+    return this.request("open", { roomId });
   }
 
-  older(roomId: string): void {
-    void this.request("older", { roomId }).catch(() => undefined);
+  older(roomId: string): Promise<null> {
+    return this.request("older", { roomId });
   }
 
   send(
@@ -178,8 +178,8 @@ export class MatrixTransport {
     void this.request("markRead", { roomId, eventId }).catch(() => undefined);
   }
 
-  members(roomId: string): void {
-    void this.request("members", { roomId }).catch(() => undefined);
+  members(roomId: string): Promise<null> {
+    return this.request("members", { roomId });
   }
 
   devices(): Promise<readonly DeviceSession[]> {

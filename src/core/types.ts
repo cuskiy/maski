@@ -324,6 +324,7 @@ export interface ChatState {
   readonly windowLoading: boolean;
   readonly hasOlder: boolean;
   readonly olderLoading: boolean;
+  readonly failure: "open" | "older" | "members" | null;
   readonly typing: readonly string[];
   readonly recentEmoji: readonly string[];
   readonly recentReactions: readonly string[];
