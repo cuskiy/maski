@@ -438,7 +438,7 @@ export class MatrixSession implements SessionPort {
       throw new WorkerFailure("auth");
     }
 
-    return this.beginSession(baseUrl, response);
+    return this.beginSession(baseUrl, response, false);
   }
 
   async loginToken(input: CommandMap["loginToken"]): Promise<SessionSummary> {
@@ -457,7 +457,7 @@ export class MatrixSession implements SessionPort {
     } catch {
       throw new WorkerFailure("auth");
     }
-    return this.beginSession(baseUrl, response);
+    return this.beginSession(baseUrl, response, false);
   }
 
   async ssoUrl(input: CommandMap["ssoUrl"]): Promise<string> {
@@ -2054,6 +2054,7 @@ export class MatrixSession implements SessionPort {
       readonly access_token?: string;
       readonly refresh_token?: string;
     },
+    startClient = true,
   ): Promise<SessionSummary> {
     if (response.device_id === undefined || response.access_token === undefined) {
       throw new WorkerFailure("auth");
@@ -2080,6 +2081,7 @@ export class MatrixSession implements SessionPort {
     this.account = account;
     this.outbox = this.createOutbox(account);
     this.openMedia(account);
+    if (!startClient) return summary(null, stored);
     return this.startClient(stored, this.generation);
   }
 

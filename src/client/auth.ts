@@ -56,17 +56,12 @@ function destination(gate: string, locale: LocaleId): string {
   return gate === "ready" ? localeRoot(locale) : `${localeRoot(locale)}key/`;
 }
 
-async function finishLogin(
-  transport: MatrixTransport,
-  session: { readonly userId: string },
-  locale: LocaleId,
-): Promise<void> {
+function finishLogin(transport: MatrixTransport, session: { readonly userId: string }, locale: LocaleId): void {
   setAccount(session.userId);
   void keepStorage();
-  const gate = await transport.keyStatus();
-  setGate(gate);
+  const cached = mockSession().gate;
   transport.dispose();
-  navigate(destination(gate, locale));
+  navigate(destination(cached, locale));
 }
 
 function loginError(c: Catalog, error: unknown): string {
@@ -394,6 +389,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
     if (verifyButton !== null) verifyButton.disabled = false;
   });
 
+  showStatus(t(c, "auth.key.waiting"));
   void transport
     .start()
     .then(

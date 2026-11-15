@@ -1258,7 +1258,7 @@ This is the only current-status section; counts and claims in `advice.md`, `past
 old commits are evidence, not status.
 
 - `npm run check` is green: **188 tests**, 11 generated pages, 343 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 313.3 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- Build sizes: stylesheet 83.8 KiB, client 313.4 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1363,7 +1363,9 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Known: password and token login request refresh tokens, which are persisted through `onTokenRefresh`;
      the account lock is acquired before a session is written and only reused for the same user; a
      startup generation stops an in-flight client from re-emitting after logout; `M_UNKNOWN_TOKEN`
-     performs soft logout.
+     performs soft logout. Login returns after the session and account DB are open, before crypto; a
+     cached ready gate routes to chat, otherwise the key page shows its waiting status while the account
+     worker starts crypto.
    - Ruled out: an unlocked second tab, silent token loss, and redirecting a stale session into chat.
    - Next: map the remaining `M_*` codes, implement `/login` flow discovery, and serialize
      start/login/logout with a queue that has one outcome per command.
