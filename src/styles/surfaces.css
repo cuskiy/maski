@@ -95,7 +95,7 @@
     z-index: 1;
   }
 
-  @container (inline-size < 32rem) {
+  @container (inline-size < 34rem) {
     #surface-settings .surface-head::before,
     #surface-room-settings .surface-head::before {
       display: none;
@@ -159,22 +159,43 @@
   }
 
   .settings-tabs a[aria-current="true"],
-  :root:has(#settings-account:target) .settings-tabs a[href="#settings-account"],
-  :root:has(#settings-notifications:target) .settings-tabs a[href="#settings-notifications"],
-  :root:has(#settings-security:target) .settings-tabs a[href="#settings-security"],
-  :root:has(#settings-about:target) .settings-tabs a[href="#settings-about"],
-  :root:has(#room-settings-overview:target) .settings-tabs a[href="#room-settings-overview"],
-  :root:has(#room-settings-members:target) .settings-tabs a[href="#room-settings-members"],
-  :root:has(#room-settings-notifications:target) .settings-tabs a[href="#room-settings-notifications"],
-  :root:not(:has(.surface-section:target)) .settings-tabs a:first-child {
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-settings:has(#settings-account:target)
+    .settings-tabs
+    a[href="#settings-account"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-settings:has(#settings-notifications:target)
+    .settings-tabs
+    a[href="#settings-notifications"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-settings:has(#settings-security:target)
+    .settings-tabs
+    a[href="#settings-security"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-settings:has(#settings-about:target)
+    .settings-tabs
+    a[href="#settings-about"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-room-settings:has(#room-settings-overview:target)
+    .settings-tabs
+    a[href="#room-settings-overview"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-room-settings:has(#room-settings-members:target)
+    .settings-tabs
+    a[href="#room-settings-members"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]))
+    #surface-room-settings:has(#room-settings-notifications:target)
+    .settings-tabs
+    a[href="#room-settings-notifications"],
+  :root:not(:has(.settings-tabs a[aria-current="true"]), :has(.surface-section:target)) .settings-tabs a:first-child {
     background: var(--card-active-bg);
     color: var(--card-ink);
     font-weight: var(--weight-strong);
   }
 
-  .settings-tabs a:hover,
-  .settings-tabs a:focus-visible {
-    background: var(--dialog-hover-bg);
+  .settings-tabs a:not([aria-current="true"]):hover,
+  .settings-tabs a:not([aria-current="true"]):focus-visible {
+    background: var(--settings-hover-bg);
     color: var(--card-ink);
   }
 
@@ -278,6 +299,8 @@
       overflow-x: auto;
       overflow-y: hidden;
       padding: var(--space-2) var(--space-3);
+      background: var(--dialog-bg);
+      color: var(--dialog-muted);
     }
 
     .settings-tabs a {
