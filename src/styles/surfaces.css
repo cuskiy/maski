@@ -108,11 +108,6 @@
     block-size: min(30rem, 80dvh);
   }
 
-  #surface-room-settings {
-    block-size: fit-content;
-    max-block-size: min(30rem, 80dvh);
-  }
-
   #surface-settings .surface-body,
   #surface-room-settings .surface-body {
     display: block;
@@ -120,17 +115,6 @@
     padding: 0;
     overflow: hidden;
     container-type: inline-size;
-  }
-
-  #surface-room-settings .surface-body {
-    flex: none;
-    block-size: auto;
-    max-block-size: inherit;
-    overflow-y: auto;
-  }
-
-  #surface-room-settings .settings-layout {
-    block-size: auto;
   }
 
   .settings-layout {
