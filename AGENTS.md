@@ -280,7 +280,7 @@ Raising one is a change to this file with the reason.
 - 贴纸面板固定尺寸：上方最近使用过的贴纸，中间是 emoji 与贴纸包的横向滚动 tab，下方是纵向滚动内容；切换贴纸包不改变外框。
 - 贴纸面板的 emoji tab 放全部 emoji，不再只放最近使用。
 - 图片和视频消息不显示文件名说明；时间使用灰色 chip；未加载前保留柔和的模糊环境底色。
-- 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在内容下方，用灰色气泡。
+- 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
@@ -415,12 +415,13 @@ every bubble's right edge lines up, and own bubbles align to the same right edge
 content up to `--bubble-max` and break at any character rather than leaving a ragged right edge; message
 spacing is `space-3`; media timestamps sit inside the media at the bottom right as a span. Image and video
 messages carry no visible filename; their time is a gray chip over a soft, blurred ambient placeholder.
-A sticker places its time below the sticker in the same gray chip. An opened image or video is a compact
-media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
+A sticker places its time at its bottom-right in a translucent watermark chip. An opened image or video is a compact
+42rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
 button floats on the window, and video uses its native controls. The first unread message gets a full-row reveal background that clears after the
 reveal. The message avatar is a complete circle on the last message of a sender group, aligned to the
 group's bottom while the sender name is on the first, never clipped by `content-visibility` paint
-containment. A group chains its inner bubble corners: the first bubble's bottom-left, the middle bubbles'
+containment. Reactions occupy their own row below the message body, so the avatar aligns with the message,
+not with the reaction row. A group chains its inner bubble corners: the first bubble's bottom-left, the middle bubbles'
 top-left and bottom-left, and the last bubble's top-left use `--bubble-inner`; every other corner is the
 normal radius, mirrored on the right for own messages. Every timestamp uses the `--text-xs` tier. A queued or sending row
 places three pulsing dots inside the bubble below the time; a failed row places a small `--danger` badge

@@ -169,8 +169,10 @@ void test("the switch knob starts left and the dialog has a weaker blur", () => 
 void test("media previews stay compact and the viewer can zoom", () => {
   assert.match(css, /\.message-media\.is-video\s*\{[^}]*var\(--media-video-width\)/u);
   assert.match(css, /\.viewer-zoom\.is-zoomed\s*\{/u);
-  assert.match(css, /\.message-media\.is-sticker \.media-footer\s*\{[^}]*position:\s*static/u);
-  assert.match(css, /#surface-viewer\s*\{[^}]*56rem/u);
+  assert.match(css, /\.message-media\.is-sticker \.media-footer\s*\{[^}]*position:\s*absolute/u);
+  assert.match(css, /\.reactions\s*\{[^}]*grid-row:\s*2/u);
+  assert.match(css, /#surface-viewer \.surface-close\s*\{[^}]*backdrop-filter:\s*blur/u);
+  assert.match(css, /#surface-viewer\s*\{[^}]*42rem/u);
   assert.match(css, /#surface-viewer \.surface-head\s*\{[^}]*position:\s*absolute/u);
   assert.match(css, /#surface-viewer \.surface-head h2\s*\{[^}]*clip-path:\s*inset\(50%\)/u);
 });

@@ -165,8 +165,8 @@ function messageRow(
         <div class="message-body">
           ${reply}
           <div class="message-line">${content}</div>
-          ${reactionsView(message, c)}
         </div>
+        ${reactionsView(message, c)}
       </article>
     </li>`;
 }

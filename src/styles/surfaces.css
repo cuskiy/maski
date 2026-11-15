@@ -68,19 +68,19 @@
   }
 
   #surface-viewer {
-    inline-size: min(100% - 2 * var(--space-4), 56rem);
+    inline-size: min(100% - 2 * var(--space-4), 42rem);
     max-inline-size: none;
     block-size: fit-content;
     max-block-size: calc(100dvh - 2 * var(--overlay-inset));
     margin: auto;
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--card-bg) 72%, var(--page) 28%);
-    backdrop-filter: blur(var(--dialog-blur));
+    background: color-mix(in srgb, var(--dialog-bg) 82%, transparent);
+    backdrop-filter: blur(24px) saturate(1.08);
   }
 
   #surface-viewer::backdrop {
     background: var(--scrim);
-    backdrop-filter: blur(18px);
+    backdrop-filter: blur(32px);
   }
 
   #surface-viewer .surface-head {
@@ -88,7 +88,7 @@
     inset-block-start: 0;
     inset-inline-end: 0;
     z-index: 2;
-    padding: var(--space-3);
+    padding: var(--space-1);
     background: none;
   }
 
@@ -103,16 +103,17 @@
   }
 
   #surface-viewer .surface-close {
-    inline-size: 2.5rem;
-    block-size: 2.5rem;
+    inline-size: 2rem;
+    block-size: 2rem;
     border-radius: 50%;
-    background: var(--media-bg);
+    background: var(--scrim);
     color: var(--media-ink);
-    font-size: var(--text-lg);
+    font-size: var(--text-base);
+    backdrop-filter: blur(10px);
   }
 
   #surface-viewer .surface-close:focus-visible {
-    background: color-mix(in srgb, var(--media-bg) 82%, var(--media-ink) 18%);
+    background: color-mix(in srgb, var(--scrim) 78%, var(--media-ink) 22%);
     outline-color: var(--media-ink);
   }
 
@@ -1145,7 +1146,7 @@
     place-items: center;
     gap: var(--space-3);
     overflow: auto;
-    color: var(--media-ink);
+    color: var(--dialog-ink);
   }
 
   .viewer-preview.is-missing {
@@ -1193,15 +1194,15 @@
   }
 
   .viewer-name {
-    color: var(--media-ink);
+    color: var(--dialog-ink);
     font-size: var(--text-sm);
     text-align: center;
     opacity: 0.72;
   }
 
   .viewer-preview .note {
-    color: var(--media-ink);
-    opacity: 0.72;
+    color: var(--dialog-ink);
+    opacity: 0.62;
   }
 
   .viewer-missing {
