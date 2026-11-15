@@ -132,6 +132,16 @@ function harness(): Harness {
     markRead: () => Promise.resolve(null),
     members: () => Promise.resolve(null),
     devices: () => Promise.resolve([]),
+    backupStatus: () =>
+      Promise.resolve({
+        version: null,
+        trusted: false,
+        matchesDecryptionKey: false,
+        enabled: false,
+        error: null,
+      }),
+    backupSetup: () =>
+      Promise.resolve({ version: "1", trusted: true, matchesDecryptionKey: true, enabled: true, error: null }),
     sasStart: () => Promise.reject(new WorkerFailure("unavailable")),
     sasAccept: () => Promise.resolve(null),
     sasConfirm: () => Promise.resolve(null),

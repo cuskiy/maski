@@ -233,6 +233,10 @@ export class WorkerSource implements ChatSource {
     await this.transport.logout();
   }
 
+  backupSetup(): void {
+    void this.transport.backupSetup().catch(() => undefined);
+  }
+
   resetIdentity(password: string): void {
     void this.transport
       .resetIdentity(password)
@@ -282,6 +286,9 @@ export class WorkerSource implements ChatSource {
         break;
       case "devices":
         this.emit("devices", event.payload);
+        break;
+      case "backup":
+        this.emit("backup", event.payload);
         break;
       case "sas":
         this.emit("sas", event.payload);

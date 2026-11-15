@@ -30,6 +30,7 @@ import {
 import { initAsync } from "@matrix-org/matrix-sdk-crypto-wasm";
 import { isRecord } from "../lib/json.ts";
 import type {
+  BackupState,
   DeviceSession,
   MessageKind,
   MessageRow,
@@ -189,7 +190,7 @@ function summary(client: MatrixClient | null, stored: StoredSession): SessionSum
     avatar: null,
     capabilities: {
       recoveryKey: false,
-      backup: false,
+      backup: true,
       signOut: true,
       signOutOthers: true,
     },
@@ -577,6 +578,66 @@ export class MatrixSession implements SessionPort {
     );
     this.emit({ type: "devices", payload: devices });
     return devices;
+  }
+
+  async backupStatus(): Promise<BackupState> {
+    return this.readBackup(this.requireClient());
+  }
+
+  async backupSetup(): Promise<BackupState> {
+    const client = this.requireClient();
+    const crypto = client.getCrypto();
+    if (crypto === undefined) throw new WorkerFailure("unavailable");
+    try {
+      await crypto.resetKeyBackup();
+      await crypto.checkKeyBackupAndEnable();
+    } catch (error) {
+      const failure = this.transportFailure(error);
+      const current = await this.readBackup(client).catch(() => null);
+      this.emit({
+        type: "backup",
+        payload: {
+          ...(current ?? {
+            version: null,
+            trusted: false,
+            matchesDecryptionKey: false,
+            enabled: false,
+            error: null,
+          }),
+          error: failure.code,
+        },
+      });
+      throw failure;
+    }
+    const state = await this.readBackup(client);
+    this.emit({ type: "backup", payload: state });
+    return state;
+  }
+
+  private async readBackup(client: MatrixClient): Promise<BackupState> {
+    const crypto = client.getCrypto();
+    if (crypto === undefined) throw new WorkerFailure("unavailable");
+    const info = await crypto.getKeyBackupInfo();
+    if (info === null) {
+      return { version: null, trusted: false, matchesDecryptionKey: false, enabled: false, error: null };
+    }
+    const trust = await crypto.isKeyBackupTrusted(info);
+    const active = await crypto.getActiveSessionBackupVersion();
+    return {
+      version: info.version,
+      trusted: trust.trusted,
+      matchesDecryptionKey: trust.matchesDecryptionKey,
+      enabled: active !== null,
+      error: null,
+    };
+  }
+
+  private refreshBackup(): void {
+    const client = this.client;
+    if (client === null) return;
+    void this.readBackup(client)
+      .then((state) => this.emit({ type: "backup", payload: state }))
+      .catch(() => undefined);
   }
 
   async sasStart(deviceId: string | null): Promise<SasState> {
@@ -1866,6 +1927,7 @@ export class MatrixSession implements SessionPort {
           this.emit({ type: "keys", payload: gate });
         });
         void this.devices().catch(() => undefined);
+        this.refreshBackup();
         this.emitInvites();
       }
     });
@@ -2018,6 +2080,7 @@ export class MatrixSession implements SessionPort {
     this.emit({ type: "keys", payload: this.keyReady });
     this.emit({ type: "connection", payload: "connecting" });
     void this.devices().catch(() => undefined);
+    this.refreshBackup();
     this.emitInvites();
     const account = this.account;
     if (account !== null) {

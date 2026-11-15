@@ -810,7 +810,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         queueMicrotask(() => refreshBody(SURFACE.settings));
       });
     } else if (action === "backup") {
-      actions.setBackupReady();
+      actions.backupSetup();
     }
     queueMicrotask(() => refreshBody(SURFACE.settings));
   }

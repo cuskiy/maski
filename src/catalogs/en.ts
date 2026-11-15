@@ -168,6 +168,7 @@ export const en = {
   "settings.verify": "Verify",
   "settings.signOutOthers": "Sign out other sessions",
   "settings.backupSetup": "Set up backup",
+  "settings.backupFailed": "Backup setup failed. Try again.",
   "settings.recoveryShow": "Reset key",
   "settings.recoveryOnce": "This key is shown once. Keep it somewhere safe.",
   "settings.newRecoveryKey": "New recovery key",

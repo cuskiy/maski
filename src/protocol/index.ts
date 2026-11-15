@@ -1,4 +1,5 @@
 import type {
+  BackupState,
   Connection,
   DeviceSession,
   GuestAccess,
@@ -48,6 +49,8 @@ export type CommandName =
   | "markRead"
   | "members"
   | "devices"
+  | "backupStatus"
+  | "backupSetup"
   | "resetIdentity"
   | "react"
   | "edit"
@@ -129,6 +132,8 @@ export interface CommandMap {
   readonly markRead: { readonly roomId: string; readonly eventId: string };
   readonly members: { readonly roomId: string };
   readonly devices: Record<string, never>;
+  readonly backupStatus: Record<string, never>;
+  readonly backupSetup: Record<string, never>;
   readonly resetIdentity: { readonly password: string };
   readonly react: { readonly roomId: string; readonly eventId: string; readonly key: string };
   readonly edit: {
@@ -227,6 +232,8 @@ export interface ReplyData {
   readonly markRead: null;
   readonly members: null;
   readonly devices: readonly DeviceSession[];
+  readonly backupStatus: BackupState;
+  readonly backupSetup: BackupState;
   readonly resetIdentity: string | null;
   readonly react: null;
   readonly edit: null;
@@ -267,6 +274,7 @@ export interface EventMap {
   };
   readonly members: { readonly roomId: string; readonly members: readonly Member[] };
   readonly devices: readonly DeviceSession[];
+  readonly backup: BackupState;
   readonly invites: readonly Invite[];
   /** An ephemeral typing event replaces the whole user list; it is never stored. */
   readonly typing: { readonly roomId: string; readonly userIds: readonly string[] };
@@ -325,6 +333,8 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "markRead",
   "members",
   "devices",
+  "backupStatus",
+  "backupSetup",
   "resetIdentity",
   "react",
   "edit",
@@ -370,6 +380,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
   "window",
   "members",
   "devices",
+  "backup",
   "invites",
   "typing",
   "connection",
@@ -766,6 +777,17 @@ function isDevicesPayload(value: unknown): value is EventMap["devices"] {
   return isArrayOf(value, isDeviceSession);
 }
 
+function isBackupState(value: unknown): value is BackupState {
+  return (
+    isRecord(value) &&
+    isStringOrNull(value["version"]) &&
+    isBoolean(value["trusted"]) &&
+    isBoolean(value["matchesDecryptionKey"]) &&
+    isBoolean(value["enabled"]) &&
+    isStringOrNull(value["error"])
+  );
+}
+
 function isSasPhase(value: unknown): value is SasPhase {
   return isInSet<SasPhase>(value, SAS_PHASES);
 }
@@ -930,6 +952,8 @@ export const REPLY_DATA_GUARDS: {
   markRead: isNull,
   members: isNull,
   devices: isDevicesPayload,
+  backupStatus: isBackupState,
+  backupSetup: isBackupState,
   resetIdentity: isStringOrNull,
   react: isNull,
   edit: isNull,
@@ -988,6 +1012,8 @@ export function parseEvent(value: unknown): Event | null {
       return isMembersPayload(payload) ? { type, payload } : null;
     case "devices":
       return isDevicesPayload(payload) ? { type, payload } : null;
+    case "backup":
+      return isBackupState(payload) ? { type, payload } : null;
     case "invites":
       return isInvitesPayload(payload) ? { type, payload } : null;
     case "typing":
@@ -1320,6 +1346,8 @@ export function parseCommand(value: unknown): Command | null {
       if (!validRoom(fields)) return null;
       return { id, type, payload: { roomId: fields.roomId } };
     case "devices":
+    case "backupStatus":
+    case "backupSetup":
       if (!empty(fields)) return null;
       return { id, type, payload: {} };
     case "send":

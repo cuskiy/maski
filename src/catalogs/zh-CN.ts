@@ -166,6 +166,7 @@ export const zhCN = {
   "settings.verify": "验证",
   "settings.signOutOthers": "登出其他会话",
   "settings.backupSetup": "设置备份",
+  "settings.backupFailed": "备份设置失败，请重试。",
   "settings.recoveryShow": "重置密钥",
   "settings.recoveryOnce": "此密钥只显示一次，请妥善保存。",
   "settings.newRecoveryKey": "新的恢复密钥",

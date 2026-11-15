@@ -91,6 +91,10 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
         return { id, ok: true, data: await session.members(command.payload.roomId) };
       case "devices":
         return { id, ok: true, data: await session.devices() };
+      case "backupStatus":
+        return { id, ok: true, data: await session.backupStatus() };
+      case "backupSetup":
+        return { id, ok: true, data: await session.backupSetup() };
       case "sasStart":
         return { id, ok: true, data: await session.sasStart(command.payload.deviceId) };
       case "sasAccept":

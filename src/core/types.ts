@@ -172,7 +172,8 @@ export type SourceCapability =
   | "signOutDevice"
   | "signOutOthers"
   | "answerInvite"
-  | "saveNotifications";
+  | "saveNotifications"
+  | "backupSetup";
 
 export type SourceCapabilities = Readonly<Record<SourceCapability, boolean>>;
 
@@ -199,6 +200,7 @@ export const REVIEW_CAPABILITIES: SourceCapabilities = {
   signOutOthers: true,
   answerInvite: true,
   saveNotifications: true,
+  backupSetup: true,
 };
 
 /** The worker conversation: only the commands the worker protocol implements. */
@@ -226,6 +228,7 @@ export const PRODUCTION_CAPABILITIES: SourceCapabilities = {
   signOutOthers: false,
   answerInvite: true,
   saveNotifications: false,
+  backupSetup: true,
 };
 
 export interface DeviceCapabilities {
@@ -279,6 +282,14 @@ export interface RecoveryKey {
   readonly download: boolean;
 }
 
+export interface BackupState {
+  readonly version: string | null;
+  readonly trusted: boolean;
+  readonly matchesDecryptionKey: boolean;
+  readonly enabled: boolean;
+  readonly error: string | null;
+}
+
 export interface Member {
   readonly userId: string;
   readonly displayName: string;
@@ -326,5 +337,6 @@ export interface ChatState {
   readonly membersLoading: boolean;
   readonly recoveryKey: RecoveryKey | null;
   readonly backupReady: boolean;
+  readonly backupError: string | null;
   readonly sas: SasState | null;
 }

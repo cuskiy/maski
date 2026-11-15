@@ -26,6 +26,7 @@ const TIMEOUTS: Partial<Record<CommandName, number>> = {
   ssoUrl: 60_000,
   register: 120_000,
   recover: 120_000,
+  backupSetup: 120_000,
   resetIdentity: 120_000,
   createRoom: 60_000,
   joinRoom: 60_000,
@@ -183,6 +184,14 @@ export class MatrixTransport {
 
   devices(): Promise<readonly DeviceSession[]> {
     return this.request("devices", {});
+  }
+
+  backupStatus(): Promise<ReplyData["backupStatus"]> {
+    return this.request("backupStatus", {});
+  }
+
+  backupSetup(): Promise<ReplyData["backupSetup"]> {
+    return this.request("backupSetup", {});
   }
 
   sasStart(deviceId: string | null): Promise<SasState> {

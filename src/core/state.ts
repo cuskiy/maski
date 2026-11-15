@@ -44,6 +44,7 @@ export function emptyChatState(): ChatState {
     membersLoading: false,
     recoveryKey: null,
     backupReady: false,
+    backupError: null,
     sas: null,
   };
 }

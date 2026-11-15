@@ -26,6 +26,7 @@ const METHOD_CAPABILITIES = [
   "signOutOthers",
   "answerInvite",
   "saveNotifications",
+  "backupSetup",
 ] as const satisfies readonly SourceCapability[];
 
 /** Every command the worker protocol answers, so every one must stay implemented. */

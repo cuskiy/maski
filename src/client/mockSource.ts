@@ -446,6 +446,16 @@ export class MockSource implements ChatSource {
 
   saveNotifications(_prefs: NotificationPrefs): void {}
 
+  backupSetup(): void {
+    this.emit("backup", {
+      version: "1",
+      trusted: true,
+      matchesDecryptionKey: true,
+      enabled: true,
+      error: null,
+    });
+  }
+
   async logout(): Promise<void> {}
 
   dispose(): void {

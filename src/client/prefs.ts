@@ -74,10 +74,6 @@ export function readBackup(account: string): boolean | null {
   return stored === "true";
 }
 
-export function saveBackup(account: string, ready: boolean): void {
-  storage.write(storage.STORAGE.backup(account), ready ? "true" : null);
-}
-
 export function readRecentEmoji(account: string): readonly string[] | null {
   const stored = storage.readJson(storage.STORAGE.recentEmoji(account));
   if (!Array.isArray(stored)) return null;

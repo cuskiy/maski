@@ -96,6 +96,14 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("devices");
       return [];
     },
+    async backupStatus() {
+      calls.push("backupStatus");
+      return { version: null, trusted: false, matchesDecryptionKey: false, enabled: false, error: null };
+    },
+    async backupSetup() {
+      calls.push("backupSetup");
+      return { version: "1", trusted: true, matchesDecryptionKey: true, enabled: true, error: null };
+    },
     async sasStart() {
       calls.push("sasStart");
       return {
@@ -272,6 +280,16 @@ void test("the worker dispatcher covers every command and preserves order", asyn
     ok: true,
     data: null,
   });
+  assert.deepEqual(await api.handle({ id: 12, type: "backupStatus", payload: {} }), {
+    id: 12,
+    ok: true,
+    data: { version: null, trusted: false, matchesDecryptionKey: false, enabled: false, error: null },
+  });
+  assert.deepEqual(await api.handle({ id: 13, type: "backupSetup", payload: {} }), {
+    id: 13,
+    ok: true,
+    data: { version: "1", trusted: true, matchesDecryptionKey: true, enabled: true, error: null },
+  });
   assert.deepEqual(calls, [
     "start",
     "login",
@@ -284,6 +302,8 @@ void test("the worker dispatcher covers every command and preserves order", asyn
     "members",
     "devices",
     "resetIdentity",
+    "backupStatus",
+    "backupSetup",
   ]);
 });
 

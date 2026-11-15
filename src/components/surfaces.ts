@@ -701,6 +701,7 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
           </button>`
           : html``
       }
+      ${state.backupError === null ? html`` : html`<p class="field-hint">${t(c, "settings.backupFailed")}</p>`}
       ${
         capabilities.resetIdentity
           ? html`<form class="setting-stack" method="post" data-surface="reset-identity">

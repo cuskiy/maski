@@ -94,7 +94,7 @@ export interface Actions {
   acceptInvite(roomId: string): void;
   declineInvite(roomId: string): void;
   setPref(key: "badge" | "titleTotal" | "desktop" | "preview", value: boolean): void;
-  setBackupReady(): void;
+  backupSetup(): void;
   resetRecoveryKey(): void;
   clearRecoveryKey(): void;
   resetIdentity(password: string): void;
@@ -586,9 +586,9 @@ export function createActions({ store, source, c, account }: Context): Actions {
       prefs.saveNotifications(account, next);
       source.saveNotifications?.(next);
     },
-    setBackupReady() {
-      store.write("backupReady", true);
-      prefs.saveBackup(account, true);
+    backupSetup() {
+      if (!caps.backupSetup || source.backupSetup === undefined) return;
+      source.backupSetup();
     },
     resetRecoveryKey() {
       if (!caps.resetRecoveryKey) return;
@@ -698,6 +698,12 @@ export function wireSources(store: Store, source: ChatSource): () => void {
       });
     }),
     source.on("devices", (devices) => store.write("devices", devices)),
+    source.on("backup", (backup) =>
+      store.batch(() => {
+        store.write("backupReady", backup.enabled && backup.trusted);
+        store.write("backupError", backup.error);
+      }),
+    ),
     source.on("invites", (invites) => store.write("invites", invites)),
     source.on("members", ({ roomId, members }) => {
       if (roomId !== store.read("roomId")) return;

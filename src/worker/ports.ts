@@ -1,4 +1,5 @@
 import type {
+  BackupState,
   DeviceSession,
   MessageKind,
   MessageRow,
@@ -36,6 +37,8 @@ export interface SessionPort {
   markRead(roomId: string, eventId: string): Promise<null>;
   members(roomId: string): Promise<null>;
   devices(): Promise<readonly DeviceSession[]>;
+  backupStatus(): Promise<BackupState>;
+  backupSetup(): Promise<BackupState>;
   sasStart(deviceId: string | null): Promise<SasState>;
   sasAccept(id: string): Promise<null>;
   sasConfirm(id: string): Promise<null>;

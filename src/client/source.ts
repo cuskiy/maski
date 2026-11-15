@@ -1,4 +1,5 @@
 import type {
+  BackupState,
   Connection,
   DeviceSession,
   KeyGate,
@@ -38,6 +39,7 @@ export interface SourceEvents {
   readonly typing: { readonly roomId: string; readonly userIds: readonly string[] };
   readonly phase: Phase;
   readonly devices: readonly DeviceSession[];
+  readonly backup: BackupState;
   readonly invites: readonly Invite[];
   readonly connection: Connection;
   readonly recoveryKey: RecoveryKey | null;
@@ -74,6 +76,7 @@ export function createSourceListeners(): SourceListeners {
     typing: new Set(),
     phase: new Set(),
     devices: new Set(),
+    backup: new Set(),
     invites: new Set(),
     connection: new Set(),
     recoveryKey: new Set(),
@@ -141,6 +144,7 @@ export interface ChatSource {
   signOutOthers?(): void;
   answerInvite?(roomId: string, accept: boolean): void;
   saveNotifications?(prefs: NotificationPrefs): void;
+  backupSetup?(): void;
   logout(): Promise<void>;
   on<K extends SourceEvent>(event: K, listener: (payload: SourceEvents[K]) => void): () => void;
   dispose(): void;

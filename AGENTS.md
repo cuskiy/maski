@@ -1253,12 +1253,12 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-15 on the working tree after `b01ca6f` plus the SAS change. This is the only
-current-status section; counts and claims in `advice.md`, `past/`, browser history and old commits are
-evidence, not status.
+Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and the current changes.
+This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
+old commits are evidence, not status.
 
-- `npm run check` is green: **180 tests**, 11 generated pages, 336 catalog keys, 2 languages.
-- Build sizes: stylesheet 83.8 KiB, client 308.9 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **180 tests**, 11 generated pages, 337 catalog keys, 2 languages.
+- Build sizes: stylesheet 83.8 KiB, client 309.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
@@ -1271,13 +1271,14 @@ evidence, not status.
 - The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
   registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM
-  create, forward, member actions, `sendMedia`, `media`, read-only `devices` and SAS
-  (`sasStart`, `sasAccept`, `sasConfirm`, `sasMismatch`, `sasCancel`).
+  create, forward, member actions, `sendMedia`, `media`, read-only `devices`, `backupStatus`,
+  `backupSetup` and SAS (`sasStart`, `sasAccept`, `sasConfirm`, `sasMismatch`, `sasCancel`).
   Pure tests cover protocol shapes, reaction aggregation/removal, edit/redaction projection, search,
   the mock patch path and the dispatcher.
 - `PRODUCTION_CAPABILITIES` is true for media, search, react, edit, redact, forward, typing, memberAction,
-  inviteUser, addRoom, leaveRoom, setRoomState, setRoomTag, setNotification, answerInvite and resetIdentity.
-  It stays false for stickers, resetRecoveryKey, signOutDevice, signOutOthers and saveNotifications.
+  inviteUser, addRoom, leaveRoom, setRoomState, setRoomTag, setNotification, answerInvite, resetIdentity
+  and backupSetup. It stays false for stickers, resetRecoveryKey, signOutDevice, signOutOthers and
+  saveNotifications.
 - Media is worker-owned: upload validates/sanitizes/EXIF-strips, encrypts in encrypted rooms, uploads once,
   sends with a txn id, downloads authenticated with no-store, hash-verifies before decrypt, allowlists MIME,
   caches by content address and emits only `blob:` URLs. The projection never emits mxc/token/key.
@@ -1288,9 +1289,11 @@ evidence, not status.
   `crypto.verificationRequestReceived` and `getVerificationRequestsToDeviceInProgress` after a restart,
   starts `m.sas.v1`, and projects only id, target, phase, emoji/decimal and cancellation code; request and
   verifier objects never cross the port. `crypto.devicesUpdated` and SAS completion recompute the gate and
-  emit `keys` plus `devices`. The key page and settings device rows drive the same commands. Device
-  sign-out and backup setup are still absent. The SAS messages follow
-  `spec/content/client-server-api/modules/end_to_end_encryption.md:671` and `:827`.
+  emit `keys` plus `devices`. The key page and settings device rows drive the same commands. Backup
+  status/setup is worker-owned (`resetKeyBackup` + `checkKeyBackupAndEnable`) and emits version/trust/
+  matches/enabled plus a typed failure; the settings button reflects it. Device sign-out remains absent.
+  The SAS messages follow `spec/content/client-server-api/modules/end_to_end_encryption.md:671` and
+  `:827`; backup follows the key-backup section of the same module.
 - The shell service worker is written at `/service-worker.js` with the hashed manifest inlined: install
   precaches the 11 generated pages and 9 shell assets, navigation is cache-first with background
   revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache. A real
@@ -1315,21 +1318,22 @@ The UI is ahead of the runtime in the hidden surfaces. These are release blocker
 a reader-visible symptom, known facts, ruled-out paths and the next concrete step.
 
 1. **Key gate is incomplete.**
-   - Symptom: a real SAS handshake and a real recovery have not been proven against a homeserver; device
-     sign-out, backup setup and reset-key display are still absent.
+   - Symptom: a real SAS handshake, recovery and backup setup have not been proven against a homeserver;
+     device sign-out and the settings "show existing key" entry are absent.
    - Known: recovery key/passphrase validates the candidate against secret storage, uses PBKDF2-SHA-512,
      imports cross-signing and signs this device. SAS is a worker state machine for own-user and per-device
      verification, including incoming and post-restart adoption, with confirm/mismatch/cancel and a
      projected state; the key page and settings device rows drive it. The gate is recomputed from crypto
      device events and SAS completion, never by the UI. The device list is read-only and verification
-     state comes from `getDeviceVerificationStatus(...).isVerified()`.
+     state comes from `getDeviceVerificationStatus(...).isVerified()`. Backup status/setup is wired;
+     failures are surfaced and one-time keys are shown at registration and gate reset.
    - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, a wrong KDF, treating the cached
      gate hint as authority, sending request/verifier objects over the port, and resetting the gate from
      the SAS UI. All were deleted or never added.
-   - Next: complete a SAS handshake between two real devices against a homeserver, then run recovery;
-     add device sign-out with UIA and backup state/setup, and add the settings "show existing key" entry
-     if the product still needs it. The one-time key display exists on registration and the gate reset.
-     Keep typed failures and a browser run. Do not re-add a gate that cannot decide.
+   - Next: complete a SAS handshake and backup setup between real devices/homeserver, then run recovery;
+     add device sign-out with UIA and the settings "show existing key" entry if the product still needs
+     it. The one-time key display exists on registration and the gate reset. Keep typed failures and a
+     browser run. Do not re-add a gate that cannot decide.
 
 2. **Registration and SSO are partial.**
    - Symptom: registration works only for password + `m.login.dummy`; terms/recaptcha/email/SSO stages
@@ -1411,9 +1415,10 @@ Do not pull a later UI surface forward to make the product look complete.
    before-cursor pages, reset gaps, and pure tests at 1/30/1,000/10,000 events.
 4. **Worker-owned outbox.** Done: queued row before request, status, retry/discard, echo replacement and
    typed failures. The client has no optimistic row writer.
-5. **Finish the key gate.** Run recovery and SAS between real devices against a real server; add device
-   sign-out with UIA and backup state/setup. The read-only device list, worker SAS state machine, gate reset
-   and one-time key display are done. Do not re-add a fake gate or a local unlock flag.
+5. **Finish the key gate.** Run recovery, SAS and backup setup between real devices/server; add device
+   sign-out with UIA and the settings "show existing key" entry if needed. The read-only device list,
+   worker SAS state machine, backup state/setup, gate reset and one-time key display are done. Do not
+   re-add a fake gate or a local unlock flag.
 6. **Finish media residuals.** Encrypted thumbnail strategy, media dimensions/duration, image-backed
    sticker sending, cancel/progress, and real-server encrypted/unencrypted upload/download/thumbnail.
 7. **Search in the worker.** Done: `search` reads the account projection plus the outbox, dedupes, filters
