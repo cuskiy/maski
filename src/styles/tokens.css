@@ -27,7 +27,8 @@
     --scrollbar: light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%));
     --code: light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%));
     --media-ink: rgb(255 255 255);
-    --media-bg: rgb(0 0 0 / 55%);
+    --media-bg: light-dark(rgb(78 78 78 / 62%), rgb(88 87 84 / 62%));
+    --media-ambient: color-mix(in srgb, var(--ink) 5%, var(--card-bg));
 
     --nav-ink: var(--ink);
     --nav-muted: color-mix(in srgb, var(--ink) 66%, var(--nav) 34%);

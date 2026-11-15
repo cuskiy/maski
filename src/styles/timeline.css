@@ -425,8 +425,37 @@
     max-inline-size: 100%;
     overflow: hidden;
     border-radius: var(--radius-md);
-    background: var(--card-bg);
+    background: color-mix(in srgb, var(--card-bg) 58%, var(--page) 42%);
     color: var(--card-ink);
+  }
+
+  .message-media:is(.is-image, .is-video) .media-frame::before {
+    position: absolute;
+    inset: -20%;
+    z-index: 0;
+    border-radius: 50%;
+    background: var(--media-ambient);
+    filter: blur(28px);
+    content: "";
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .message-media:is(.is-image, .is-video) .media-frame::after {
+    position: absolute;
+    inset: -12% -8% 45% 18%;
+    z-index: 0;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    filter: blur(30px);
+    content: "";
+    opacity: 0.25;
+    pointer-events: none;
+  }
+
+  .message-media:is(.is-image, .is-video) :is(.media-open, .media-placeholder, .video-preview, .media-element) {
+    position: relative;
+    z-index: 1;
   }
 
   .media-open {
@@ -458,8 +487,8 @@
     place-items: center;
     border: 0;
     border-radius: inherit;
-    background: var(--card-bg);
-    color: var(--card-ink);
+    background: transparent;
+    color: var(--media-ink);
     cursor: pointer;
   }
 
@@ -469,32 +498,19 @@
     block-size: 3.25rem;
     place-items: center;
     border-radius: 50%;
-    background: var(--card-hover-bg);
-    color: var(--card-ink);
+    background: color-mix(in srgb, var(--media-bg) 68%, transparent);
+    color: var(--media-ink);
     transition: var(--control-transition);
   }
 
   .video-preview:hover .video-play {
-    background: var(--card-active-bg);
+    background: color-mix(in srgb, var(--media-bg) 82%, var(--media-ink) 18%);
   }
 
   .video-play .icon {
     inline-size: 1.125rem;
     block-size: 1.125rem;
     margin-inline-start: 2px;
-  }
-
-  .video-title {
-    position: absolute;
-    inset-block-end: var(--space-3);
-    inset-inline: var(--space-3) calc(var(--space-3) + 5.5rem);
-    overflow: hidden;
-    color: var(--card-muted);
-    font-size: var(--text-sm);
-    line-height: var(--leading-snug);
-    text-align: start;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .message-media.is-sticker .media-frame {
@@ -522,8 +538,8 @@
     padding: 0;
     overflow: hidden;
     border-radius: inherit;
-    background: var(--card-bg);
-    color: var(--card-muted);
+    background: transparent;
+    color: var(--media-ink);
     cursor: zoom-in;
   }
 
@@ -532,9 +548,9 @@
     z-index: 1;
     inset-block-start: 50%;
     inset-inline-start: 50%;
-    inline-size: 1.5rem;
-    block-size: 1.5rem;
-    color: var(--card-muted);
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    color: color-mix(in srgb, var(--media-ink) 76%, transparent);
     transform: translate(-50%, -50%);
   }
 
@@ -542,6 +558,7 @@
     position: absolute;
     inset-block-end: var(--space-2);
     inset-inline-end: var(--space-2);
+    z-index: 1;
     display: flex;
     justify-content: flex-end;
     padding: 0;
@@ -555,24 +572,18 @@
     color: var(--media-ink);
   }
 
-  .message-media.is-sticker .media-footer .bubble-meta {
+  .message-media.is-sticker .media-footer {
+    position: static;
+    justify-self: stretch;
+    justify-content: flex-end;
     padding: 0;
-    background: none;
-    color: var(--media-ink);
   }
 
-  .media-caption {
-    position: absolute;
-    inset-block-start: calc(50% + 1rem);
-    inset-inline: 0;
-    padding-inline: var(--space-2);
-    color: var(--card-ink);
-    font-size: var(--text-md);
-    line-height: var(--leading-snug);
-    overflow: hidden;
-    text-align: center;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .message-media.is-sticker .media-footer .bubble-meta {
+    padding: 2px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--media-bg);
+    color: var(--media-ink);
   }
 
   .attachment {

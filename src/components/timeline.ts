@@ -189,10 +189,6 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   const media = message.media;
   if (media === null) return html``;
   const label = t(c, MEDIA_LABELS[media.kind]);
-  const caption =
-    message.body === "" || message.body === media.name || media.kind === "sticker"
-      ? html``
-      : html`<span class="media-caption">${message.body}</span>`;
   if (media.kind === "sticker" && media.url === null) {
     return html`<figure class="message-media is-sticker">
       <div class="media-frame">
@@ -226,7 +222,6 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           aria-label="${label}: ${title}"
         >
           <span class="video-play" aria-hidden="true">${icons.play}</span>
-          <span class="video-title">${title}</span>
         </button>
         <div class="media-footer">${meta}</div>
       </div>
@@ -267,7 +262,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
           command="show-modal"
           aria-label="${label}: ${media.name}"
         >
-          ${MEDIA_ICONS[media.kind]}${caption}
+          ${MEDIA_ICONS[media.kind]}
         </button>`
       : html`<button
           class="media-open"

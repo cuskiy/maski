@@ -66,13 +66,13 @@ function showViewer(name: string, kind: string, url: string | null, c: Catalog):
   const body = document.querySelector<HTMLElement>(`[data-region="${SURFACE.viewer}-body"]`);
   if (body === null) return;
   if (url !== null && kind === "video") {
-    body.innerHTML = html`<div class="viewer-preview">
-      <video class="viewer-media" controls autoplay playsinline src="${url}" aria-label="${name}"></video>
+    body.innerHTML = html`<div class="viewer-preview is-video">
+      <video class="viewer-media" controls autoplay playsinline preload="metadata" src="${url}" aria-label="${name}"></video>
     </div>`.value;
     return;
   }
   if (url !== null && kind === "image") {
-    body.innerHTML = html`<div class="viewer-preview">
+    body.innerHTML = html`<div class="viewer-preview is-image">
       <button
         class="viewer-zoom"
         type="button"
@@ -86,22 +86,27 @@ function showViewer(name: string, kind: string, url: string | null, c: Catalog):
     return;
   }
   if (url !== null && kind === "audio") {
-    body.innerHTML = html`<div class="viewer-preview">
+    body.innerHTML = html`<div class="viewer-preview is-audio">
       <audio class="viewer-media" controls src="${url}" aria-label="${name}"></audio>
       <span class="viewer-name">${name}</span>
     </div>`.value;
     return;
   }
-  if (kind === "video") {
-    body.innerHTML = html`<div class="viewer-preview">
-      ${icons.video}<span class="viewer-name">${name}</span>
-      <p class="note">${t(c, "surface.viewer.missingMedia")}</p>
+  if (kind === "video" || kind === "image") {
+    const icon = kind === "video" ? icons.video : icons.image;
+    body.innerHTML = html`<div class="viewer-preview is-missing">
+      <div class="viewer-missing">
+        ${icon}
+        <span class="viewer-name">${name}</span>
+        <p class="note">${t(c, "surface.viewer.missingMedia")}</p>
+      </div>
     </div>`.value;
     return;
   }
-  const icon =
-    kind === "image" ? icons.image : kind === "audio" ? icons.audio : kind === "sticker" ? icons.sticker : icons.file;
-  body.innerHTML = html`<div class="viewer-preview">${icon}<span class="viewer-name">${name}</span></div>`.value;
+  const icon = kind === "audio" ? icons.audio : kind === "sticker" ? icons.sticker : icons.file;
+  body.innerHTML = html`<div class="viewer-preview is-missing">
+    <div class="viewer-missing">${icon}<span class="viewer-name">${name}</span></div>
+  </div>`.value;
 }
 
 function copy(text: string): void {
@@ -838,6 +843,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     dialog.addEventListener("toggle", syncSettingsTabs);
   }
 
+  const viewer = document.getElementById(SURFACE.viewer);
+  const onViewerClose = (): void => {
+    for (const media of viewer?.querySelectorAll<HTMLMediaElement>("video, audio") ?? []) media.pause();
+    const body = viewer?.querySelector<HTMLElement>(`.surface-body`);
+    if (body !== null && body !== undefined) body.innerHTML = "";
+  };
+  viewer?.addEventListener("close", onViewerClose);
+
   document.addEventListener("click", onClick);
   document.addEventListener("submit", onSubmit);
   document.addEventListener("change", onChange);
@@ -866,6 +879,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     window.removeEventListener("hashchange", syncSettingsTabs);
     window.removeEventListener("pageshow", closeRestoredPopovers);
     confirmDialog?.removeEventListener("close", onConfirmClose);
+    viewer?.removeEventListener("close", onViewerClose);
     for (const dialog of settingsDialogs) {
       dialog.removeEventListener("close", onSettingsClose);
       dialog.removeEventListener("toggle", syncSettingsTabs);

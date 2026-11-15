@@ -40,3 +40,11 @@ void test("remote image media is lazy and decoded off the main path", () => {
   assert.match(imageMarkup, /loading="lazy"/u);
   assert.match(imageMarkup, /decoding="async"/u);
 });
+
+void test("image and video messages carry no visible caption", () => {
+  const image = message("d4");
+  const video = message("d9");
+  assert.doesNotMatch(image, /media-caption/u);
+  assert.doesNotMatch(image, /The new layout/u);
+  assert.doesNotMatch(video, /video-title/u);
+});

@@ -68,7 +68,52 @@
   }
 
   #surface-viewer {
-    inline-size: min(100% - 2 * var(--space-4), 64rem);
+    inline-size: min(100% - 2 * var(--space-4), 56rem);
+    max-inline-size: none;
+    block-size: fit-content;
+    max-block-size: calc(100dvh - 2 * var(--overlay-inset));
+    margin: auto;
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--card-bg) 72%, var(--page) 28%);
+    backdrop-filter: blur(var(--dialog-blur));
+  }
+
+  #surface-viewer::backdrop {
+    background: var(--scrim);
+    backdrop-filter: blur(18px);
+  }
+
+  #surface-viewer .surface-head {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    z-index: 2;
+    padding: var(--space-3);
+    background: none;
+  }
+
+  #surface-viewer .surface-head h2 {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  #surface-viewer .surface-close {
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    border-radius: 50%;
+    background: var(--media-bg);
+    color: var(--media-ink);
+    font-size: var(--text-lg);
+  }
+
+  #surface-viewer .surface-close:focus-visible {
+    background: color-mix(in srgb, var(--media-bg) 82%, var(--media-ink) 18%);
+    outline-color: var(--media-ink);
   }
 
   #surface-settings .surface-head,
@@ -1086,19 +1131,32 @@
   }
 
   #surface-viewer .surface-body {
-    overflow: auto;
+    block-size: auto;
+    max-block-size: calc(100dvh - 2 * var(--overlay-inset));
+    padding: 0;
+    overflow: hidden;
   }
 
   .viewer-preview {
+    position: relative;
     display: grid;
-    min-block-size: 12rem;
+    min-block-size: 10rem;
+    max-block-size: calc(100dvh - 2 * var(--overlay-inset));
     place-items: center;
     gap: var(--space-3);
+    overflow: auto;
+    color: var(--media-ink);
+  }
+
+  .viewer-preview.is-missing {
+    min-block-size: 18rem;
+    padding: var(--space-5);
   }
 
   .viewer-zoom {
     display: block;
     max-inline-size: 100%;
+    max-block-size: 100%;
     padding: 0;
     border: 0;
     background: none;
@@ -1109,13 +1167,19 @@
   .viewer-preview video,
   .viewer-zoom img {
     max-inline-size: 100%;
-    max-block-size: calc(100dvh - 12rem);
+    max-block-size: calc(100dvh - 2 * var(--overlay-inset));
     object-fit: contain;
-    border-radius: var(--radius-md);
+    border-radius: 0;
+  }
+
+  .viewer-preview video.viewer-media {
+    inline-size: 100%;
+    block-size: auto;
   }
 
   .viewer-zoom.is-zoomed {
     max-inline-size: none;
+    max-block-size: none;
     cursor: zoom-out;
   }
 
@@ -1124,10 +1188,33 @@
     max-block-size: none;
   }
 
+  .viewer-preview:has(.viewer-zoom.is-zoomed) {
+    place-items: start;
+  }
+
   .viewer-name {
-    color: var(--dialog-muted);
+    color: var(--media-ink);
     font-size: var(--text-sm);
     text-align: center;
+    opacity: 0.72;
+  }
+
+  .viewer-preview .note {
+    color: var(--media-ink);
+    opacity: 0.72;
+  }
+
+  .viewer-missing {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-2);
+    text-align: center;
+  }
+
+  .viewer-missing .icon {
+    inline-size: 2rem;
+    block-size: 2rem;
+    opacity: 0.7;
   }
 
   @starting-style {

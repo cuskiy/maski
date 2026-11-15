@@ -66,7 +66,7 @@ void test("the color palette keeps the backup values", () => {
     "--scrollbar": "light-dark(rgb(20 20 20 / 22%), rgb(228 225 220 / 20%))",
     "--code": "light-dark(rgb(20 20 20 / 6%), rgb(228 225 220 / 8%))",
     "--media-ink": "rgb(255 255 255)",
-    "--media-bg": "rgb(0 0 0 / 55%)",
+    "--media-bg": "light-dark(rgb(78 78 78 / 62%), rgb(88 87 84 / 62%))",
   };
   for (const [name, value] of Object.entries(palette)) {
     assert.equal(definitions.get(name), value, name);
@@ -169,4 +169,8 @@ void test("the switch knob starts left and the dialog has a weaker blur", () => 
 void test("media previews stay compact and the viewer can zoom", () => {
   assert.match(css, /\.message-media\.is-video\s*\{[^}]*var\(--media-video-width\)/u);
   assert.match(css, /\.viewer-zoom\.is-zoomed\s*\{/u);
+  assert.match(css, /\.message-media\.is-sticker \.media-footer\s*\{[^}]*position:\s*static/u);
+  assert.match(css, /#surface-viewer\s*\{[^}]*56rem/u);
+  assert.match(css, /#surface-viewer \.surface-head\s*\{[^}]*position:\s*absolute/u);
+  assert.match(css, /#surface-viewer \.surface-head h2\s*\{[^}]*clip-path:\s*inset\(50%\)/u);
 });
