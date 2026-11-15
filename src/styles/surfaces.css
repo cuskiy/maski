@@ -474,6 +474,12 @@
     background: var(--nav-menu-bg);
   }
 
+  #surface-nav-menu .surface-item:hover,
+  #surface-nav-menu .surface-item:active {
+    background: color-mix(in srgb, var(--ink) 8%, var(--nav-menu-bg));
+    color: var(--menu-ink);
+  }
+
   #surface-room-menu,
   #surface-message-menu {
     inline-size: max-content;
@@ -1180,6 +1186,12 @@
     justify-content: flex-end;
     gap: var(--space-2);
     padding-block-start: var(--space-2);
+  }
+
+  .confirm-actions :is(.button-quiet, .button-primary) {
+    flex: none;
+    inline-size: auto;
+    white-space: nowrap;
   }
 
   .sas-emoji {

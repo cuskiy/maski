@@ -901,9 +901,15 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (target !== null) composer.showReply(target);
   };
 
+  const onConfirmRequest = (event: Event): void => {
+    const detail = (event as CustomEvent<{ message?: string; action?: () => void }>).detail;
+    if (detail?.message !== undefined && typeof detail.action === "function") askConfirm(detail.message, detail.action);
+  };
+
   document.addEventListener("click", onClick);
   document.addEventListener("maski:forward-open", onForwardOpen);
   document.addEventListener("maski:reply-message", onReplyMessage);
+  document.addEventListener("maski:confirm", onConfirmRequest);
   document.addEventListener("submit", onSubmit);
   document.addEventListener("change", onChange);
   document.addEventListener("contextmenu", onContextMenu);
@@ -921,6 +927,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     document.removeEventListener("click", onClick);
     document.removeEventListener("maski:forward-open", onForwardOpen);
     document.removeEventListener("maski:reply-message", onReplyMessage);
+    document.removeEventListener("maski:confirm", onConfirmRequest);
     document.removeEventListener("submit", onSubmit);
     document.removeEventListener("change", onChange);
     document.removeEventListener("contextmenu", onContextMenu);

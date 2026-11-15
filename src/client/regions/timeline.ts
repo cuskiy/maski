@@ -69,7 +69,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let rendered = new Map<string, MessageRow>();
   let readOnLoad = false;
 
-  const selectionBar = wrap.querySelector<HTMLElement>("[data-selection-bar]");
+  const selectionBar = region.querySelector<HTMLElement>("[data-selection-bar]");
   const selectionCount = selectionBar?.querySelector<HTMLElement>("[data-selection-count]") ?? null;
   const selected = new Set<string>();
   let selecting = false;
@@ -127,27 +127,27 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       paintSelection();
       return;
     }
-    if (action === "copy") {
-      const text = state.messages
-        .filter((message) => selected.has(message.id))
-        .map((message) => message.body)
-        .filter(Boolean)
-        .join("\n\n");
-      if (text !== "") void navigator.clipboard?.writeText(text).catch(() => {});
-      stopSelection();
-      return;
-    }
-    if (action === "delete") {
-      const ids = selectedIds();
-      stopSelection();
-      for (const id of ids) actions.redact(id);
-      return;
-    }
-    if (action === "forward") {
+    if (action === "share") {
       const ids = selectedIds();
       if (ids.length > 0) {
         document.dispatchEvent(new CustomEvent("maski:forward-open", { detail: { ids } }));
       }
+      return;
+    }
+    if (action === "delete") {
+      const ids = selectedIds();
+      if (ids.length === 0) return;
+      document.dispatchEvent(
+        new CustomEvent("maski:confirm", {
+          detail: {
+            message: t(c, "selection.deleteConfirm", { count: String(ids.length) }),
+            action: () => {
+              stopSelection();
+              for (const id of ids) actions.redact(id);
+            },
+          },
+        }),
+      );
     }
   };
 

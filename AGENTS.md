@@ -290,8 +290,9 @@ Raising one is a change to this file with the reason.
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
 - 输入区的图片缩略图单击即可打开预览。
-- 消息右键菜单提供多选；多选后顶栏下方出现工具栏，左侧取消和计数，中间全选，右侧转发、复制、删除。转发选择一个目标房间并写入该房间。
+- 消息右键菜单提供多选；多选后顶栏下方出现独立按钮：左取消，中计数，右全选、删除、分享，分享最右。按钮不再共用一条有颜色的栏；删除先弹确认，顶栏房间菜单仍在最上层。
 - 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。
+- 粘贴图片作为图片类型进入缓冲区；只有通过附件按钮选择的图片才是文件类型。附件缓冲区与输入框的间距略大。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
@@ -430,9 +431,10 @@ A sticker places its time at the bottom-right in the same small translucent wate
 media, with no blur. An opened image or video is a compact
 36rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
 button floats on the window, image previews shrink to the image, and video uses its native controls. Selection starts
-from the message menu or a left swipe; the toolbar below the topbar shows cancel and the count on the left,
-select all in the middle, and forward, copy, and delete on the right. Forwarding writes the selected rows into a
-chosen room; escape, a room switch, or an action leaves selection. Room rows swipe right to mark read and
+from the message menu or a left swipe; the toolbar sits directly below the topbar as separate controls: cancel on
+the left, count in the middle, and select all, delete, share on the right, with share last. The topbar room menu
+stays above it, delete opens the confirm dialog, and share writes the selected rows into the chosen room; escape,
+a room switch, or an action leaves selection. Room rows swipe right to mark read and
 left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
 threshold while the row moves. The first unread message is scrolled into view
 without a row background. The message avatar is a complete circle on the last message of a sender group, aligned to the
@@ -450,7 +452,9 @@ a toast: when the viewport is away from the bottom, the jump control names the u
 bottom or using it marks the room read. Other rooms use the navigation badge. Backfill prepends a page and
 restores the recorded row, so the reader stays in place and can continue upward.
 
-**Composer** owns its draft, its tray, its height and its selection. The send button's long-press or
+**Composer** owns its draft, its tray, its height and its selection. A pasted image enters the tray as an image;
+only an image chosen from the attachment button enters as a file. The tray keeps a little more distance from
+the bar when it is visible. The send button's long-press or
 context menu offers normal text and Markdown; choosing an option sends immediately, with no visible
 format switch. Only rich-text bubbles render Markdown; normal text stays plain. The dialogs never cover
 it; the overlays never steal its caret. The bar fills the content column. The sticker picker has one fixed

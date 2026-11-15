@@ -83,45 +83,42 @@
   }
 
   .selection-bar {
-    position: sticky;
+    position: absolute;
     inset-block-start: calc(var(--topbar-height) + var(--space-1));
-    z-index: 6;
+    inset-inline: var(--timeline-pad);
+    z-index: 3;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-2);
-    margin-block-end: var(--space-2);
-    padding: var(--space-1);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--card-bg) 92%, transparent);
     color: var(--card-ink);
-    backdrop-filter: blur(10px);
+    pointer-events: none;
   }
 
   .selection-bar[hidden] {
     display: none;
   }
 
-  .selection-start,
-  .selection-end {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-
-  .selection-end {
-    justify-content: flex-end;
+  .selection-bar > * {
+    pointer-events: auto;
   }
 
   .selection-count {
     overflow: hidden;
-    padding-inline: var(--space-1);
-    color: var(--card-ink);
+    padding-inline: var(--space-2);
+    color: var(--ink-2);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
+    text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .selection-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
   }
 
   .selection-button {
@@ -131,7 +128,8 @@
     min-block-size: 2rem;
     padding: 0 var(--space-2);
     border-radius: var(--radius-sm);
-    color: var(--card-muted);
+    background: none;
+    color: var(--ink-2);
     font-size: var(--text-sm);
     line-height: 1;
     white-space: nowrap;
@@ -140,15 +138,15 @@
 
   .selection-button:hover,
   .selection-button:focus-visible {
-    background: var(--card-hover-bg);
-    color: var(--card-ink);
+    background: var(--surface-hover);
+    color: var(--ink);
   }
 
   .selection-button.is-danger {
     color: var(--danger);
   }
 
-  .selection-start .selection-button {
+  .selection-bar > .selection-button {
     inline-size: 2rem;
     padding: 0;
     justify-content: center;

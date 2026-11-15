@@ -16,6 +16,13 @@ interface ComposerInput {
   readonly account: string;
 }
 
+type TrayKind = "image" | "file";
+
+interface TrayEntry {
+  readonly file: File;
+  readonly kind: TrayKind;
+}
+
 export class Composer {
   private readonly actions: Actions;
   private readonly c: Catalog;
@@ -24,7 +31,7 @@ export class Composer {
   private readonly textarea: HTMLTextAreaElement | null;
   private readonly trayRegion: HTMLElement | null;
   private readonly replyRegion: HTMLElement | null;
-  private tray: File[] = [];
+  private tray: TrayEntry[] = [];
   private readonly previews = new Map<File, string>();
   private replyTo: MessageRow | null = null;
   private editing: MessageRow | null = null;
@@ -91,7 +98,7 @@ export class Composer {
         }
         if (files.length === 0) return;
         event.preventDefault();
-        this.addFiles(files);
+        this.addFiles(files, "paste");
       },
       { signal },
     );
@@ -215,12 +222,16 @@ export class Composer {
       this.trayRegion.replaceChildren();
       return;
     }
-    this.trayRegion.innerHTML = html`${this.tray.map((file, index) => {
+    this.trayRegion.innerHTML = html`${this.tray.map(({ file, kind }, index) => {
       const preview = this.previews.get(file);
       return html`<div class="tray-item${preview === undefined ? "" : " has-thumb"}">
         ${preview === undefined ? icons.file : html`<img class="tray-thumb" src="${preview}" alt="" data-tray-preview="${preview}" data-tray-name="${file.name}" />`}
         <span class="tray-text"
-          ><span class="tray-name">${file.name}</span><span class="tray-size">${formatBytes(file.size)}</span></span
+          ><span class="tray-name">${file.name}</span
+          ><span class="tray-size"
+            >${t(this.c, kind === "image" ? "chat.media.image" : "chat.media.file")} ·
+            ${formatBytes(file.size)}</span
+          ></span
         >
         <button
           class="tray-remove"
@@ -234,14 +245,18 @@ export class Composer {
     })}`.value;
   }
 
-  addFiles(files: readonly File[]): void {
+  addFiles(files: readonly File[], source: "paste" | "picker"): void {
     if (files.length === 0) return;
-    for (const file of files) {
-      if (!this.previews.has(file) && file.type.startsWith("image/")) {
+    const entries = files.map((file): TrayEntry => ({
+      file,
+      kind: source === "paste" && file.type.startsWith("image/") ? "image" : "file",
+    }));
+    for (const { file, kind } of entries) {
+      if (kind === "image" && !this.previews.has(file)) {
         this.previews.set(file, URL.createObjectURL(file));
       }
     }
-    this.tray = [...this.tray, ...files];
+    this.tray = [...this.tray, ...entries];
     this.renderTray();
     this.textarea?.focus();
   }
@@ -250,8 +265,8 @@ export class Composer {
     const removeButton = this.trayRegion?.querySelector<HTMLElement>(`[data-tray-index="${String(index)}"]`);
     const hadFocus = removeButton !== null && removeButton !== undefined && document.activeElement === removeButton;
     const removed = this.tray[index];
-    if (removed !== undefined) this.releasePreview(removed);
-    this.tray = this.tray.filter((_file, position) => position !== index);
+    if (removed !== undefined) this.releasePreview(removed.file);
+    this.tray = this.tray.filter((_entry, position) => position !== index);
     this.renderTray();
     if (hadFocus) {
       const buttons = this.trayRegion?.querySelectorAll<HTMLElement>("[data-tray-index]");
@@ -348,15 +363,28 @@ export class Composer {
 
     const now = Date.now();
     const rows: MessageRow[] = [];
-    for (const [index, file] of tray.entries()) {
-      rows.push(
-        this.actions.createRow(roomId, "", {
-          kind: "file",
-          media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
-          ts: now + index,
-          status: "sending",
-        }),
-      );
+    for (const [index, entry] of tray.entries()) {
+      const file = entry.file;
+      if (entry.kind === "image") {
+        const url = await readFileDataUrl(file);
+        rows.push(
+          this.actions.createRow(roomId, "", {
+            kind: "image",
+            media: { kind: "image", name: file.name, width: null, height: null, size: file.size, url },
+            ts: now + index,
+            status: "sending",
+          }),
+        );
+      } else {
+        rows.push(
+          this.actions.createRow(roomId, "", {
+            kind: "file",
+            media: { kind: "file", name: file.name, width: null, height: null, size: file.size, url: null },
+            ts: now + index,
+            status: "sending",
+          }),
+        );
+      }
     }
     if (text !== "") {
       rows.push(
@@ -417,7 +445,7 @@ export class Composer {
 
   handleFileInput(input: HTMLInputElement): void {
     const files = input.files;
-    if (files !== null) this.addFiles(Array.from(files));
+    if (files !== null) this.addFiles(Array.from(files), "picker");
     input.value = "";
     this.hide(SURFACE.attach);
     this.textarea?.focus();
@@ -468,4 +496,13 @@ function formatBytes(size: number): string {
   if (size < 1000) return `${String(size)} B`;
   if (size >= 1_000_000) return `${Math.round(size / 100_000) / 10} MB`;
   return `${Math.round(size / 1000)} kB`;
+}
+
+function readFileDataUrl(file: File): Promise<string | null> {
+  const { promise, resolve } = Promise.withResolvers<string | null>();
+  const reader = new FileReader();
+  reader.addEventListener("load", () => resolve(typeof reader.result === "string" ? reader.result : null));
+  reader.addEventListener("error", () => resolve(null));
+  reader.readAsDataURL(file);
+  return promise;
 }
