@@ -191,6 +191,7 @@ export const zhCN = {
   "selection.delete": "删除",
   "selection.share": "分享",
   "selection.deleteConfirm": "删除选中的 {count} 条消息？",
+  "selection.select": "选择消息",
   "surface.forward": "分享消息",
   "surface.forward.hint": "选择房间。",
   "surface.forward.empty": "没有可用的房间。",

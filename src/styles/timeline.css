@@ -162,17 +162,20 @@
   }
 
   .message.is-selected .message-inner {
+    border-radius: var(--radius-xs);
     background: var(--surface-hover);
   }
 
   .message-select-mark {
     position: absolute;
-    inset-block-start: 2px;
-    inset-inline-end: 2px;
-    z-index: 1;
+    inset-block-end: 2px;
+    inset-inline-start: calc((var(--avatar) - 1rem) / 2);
+    z-index: 2;
     display: none;
     inline-size: 1rem;
     block-size: 1rem;
+    padding: 0;
+    border: 0;
     place-items: center;
     border-radius: 50%;
     background: var(--card-bg);

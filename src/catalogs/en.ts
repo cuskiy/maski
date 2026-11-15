@@ -191,6 +191,7 @@ export const en = {
   "selection.delete": "Delete",
   "selection.share": "Share",
   "selection.deleteConfirm": "Delete {count} selected messages?",
+  "selection.select": "Select message",
   "surface.forward": "Share messages",
   "surface.forward.hint": "Choose a room.",
   "surface.forward.empty": "No rooms available.",

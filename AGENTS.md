@@ -288,10 +288,12 @@ Raising one is a change to this file with the reason.
 - 贴纸和 emoji 弹窗的 section 标题与 nav 增加上下间距。
 - 图片附件的删除 X 叠在右上角，不占一列；默认无背景，仅 hover 有背景。
 - 关闭控件默认无背景，只有 hover / focus 时显示 ink-based overlay 背景，不固定黑色。
-- 账号弹出的菜单在暗色模式使用比普通浮层更亮的纸面，便于和背景分开；浅色模式不变。
+- 账号弹出的菜单在暗色模式使用与账号卡 hover 相同的纸面值，但用独立 token 书写；浅色模式不变。
 - 账号卡默认与 hover 的背景色对调。
 - 图片和视频打开后是有窗口的预览/播放器，不是全屏页，也不显示“附件”标题；关闭按钮浮在窗口右上角，sticker 时间在 sticker 右下角，用半透明水印气泡。
-- 输入区的图片缩略图单击即可打开预览。
+- 多选勾选按钮出现在左侧头像空隙、消息底部，绝对定位，不改变任何元素位置；点击整行或复选框都切换选中，选中背景圆角很小。
+- 图片预览窗口再缩到 30rem 高约 20rem；放大在窗口内部滚动，不再撑大窗口。
+- 账号弹出菜单使用与账号卡 hover 相同的独立纸面值，但两者不共享变量。
 - 消息右键菜单提供多选；多选后顶栏下方出现独立按钮：左取消，中计数，右全选、删除、分享，分享最右。按钮不再共用一条有颜色的栏；删除先弹确认，顶栏房间菜单仍在最上层。
 - 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。
 - 粘贴图片作为图片类型进入缓冲区；只有通过附件按钮选择的图片才是文件类型。附件缓冲区与输入框的间距略大。
@@ -434,12 +436,14 @@ spacing is `space-3`; media timestamps sit inside the media at the bottom right 
 messages carry no visible filename; their time is a gray chip over a soft, blurred ambient placeholder.
 A sticker places its time at the bottom-right in the same small translucent watermark chip as image and video
 media, with no blur. An opened image or video is a compact
-36rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
-button floats on the window, image previews shrink to the image, and video uses its native controls. Selection starts
+30rem media window, not a full-screen page or an attachment card: the dialog title is visually hidden, the close
+button floats on the window, image previews shrink to the image and zoom inside the fixed box, and video uses its native controls. Selection starts
 from the message menu or a left swipe; the toolbar sits directly below the topbar as separate controls: cancel on
 the left, count in the middle, and select all, delete, share on the right, with share last. The topbar room menu
 stays above it, delete opens the confirm dialog, and share writes the selected rows into the chosen room; escape,
-a room switch, or an action leaves selection. Room rows swipe right to mark read and
+a room switch, or an action leaves selection. A selection check appears in the left gutter at the row bottom,
+absolutely positioned so no element moves; the full row toggles it, and a selected row gets a small radius.
+Room rows swipe right to mark read and
 left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
 threshold while the row moves. The first unread message is scrolled into view
 without a row background. The message avatar is a complete circle on the last message of a sender group, aligned to the

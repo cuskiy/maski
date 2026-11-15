@@ -259,7 +259,7 @@
   }
 
   #surface-viewer {
-    inline-size: min(100% - 2 * var(--space-4), 36rem);
+    inline-size: min(100% - 2 * var(--space-4), 30rem);
     max-inline-size: none;
     block-size: fit-content;
     max-block-size: calc(100dvh - 2 * var(--overlay-inset));
@@ -276,11 +276,21 @@
 
   #surface-viewer:has(.viewer-preview.is-image) {
     inline-size: fit-content;
-    max-inline-size: calc(100% - 2 * var(--space-4));
+    max-inline-size: min(100% - 2 * var(--space-4), 30rem);
+    block-size: min(60dvh, 20rem);
   }
 
   #surface-viewer:has(.viewer-preview.is-image) .viewer-preview {
     min-block-size: 0;
+    block-size: 100%;
+  }
+
+  #surface-viewer .viewer-preview.is-image img {
+    max-block-size: 100%;
+  }
+
+  #surface-viewer .viewer-preview.is-image .viewer-zoom.is-zoomed img {
+    max-block-size: none;
   }
 
   #surface-viewer .surface-head {

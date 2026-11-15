@@ -196,7 +196,13 @@ function messageRow(
           <div class="message-line">${content}</div>
         </div>
         ${reactionsView(message, c)}
-        <span class="message-select-mark" aria-hidden="true">${icons.check}</span>
+        <button
+          class="message-select-mark"
+          type="button"
+          aria-label="${t(c, "selection.select")}"
+        >
+          ${icons.check}
+        </button>
       </article>
       <span class="message-swipe-hint is-start" aria-hidden="true">${icons.reply}</span>
       <span class="message-swipe-hint is-end" aria-hidden="true">${icons.check}</span>
