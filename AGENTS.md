@@ -447,10 +447,10 @@ The reaction picker is a compact manual popover anchored at the message. It foll
 positioning and cleanup rules: outside pointer or Escape closes it, and keyboard focus returns to the
 message.
 
-The dialogs and floating menus share one translucent glass style; dialogs use the weaker
-`--dialog-blur`, while the topbar, navigation and menus use `--float-blur`. There is no second glass
-style. The entrance of either uses `@starting-style` and `transition-behavior: allow-discrete`, never a
-skeleton and never a fade on the initial page load.
+The dialogs and floating menus share one glass language; the dialog paper is opaque with the weaker
+`--dialog-blur`, while the topbar, navigation and menus use the translucent `--float-blur` paper. There is
+no second glass style. The entrance of either uses `@starting-style` and `transition-behavior:
+allow-discrete`, never a skeleton and never a fade on the initial page load.
 
 ## 3.6 First paint
 
@@ -522,8 +522,8 @@ badge and destructive actions.
 
 Surfaces: the page uses `--page`; the topbar uses `--chrome`; the navigation uses `--nav`; the account card
 uses `--account-bg`; raised cards use `--card-bg`; bubbles use `--bubble-bg`; floating menus use
-`--menu-bg`; dialogs use `--dialog-bg`; fields use `--field-bg`. Text, muted text and hover/active states
-come from that paper's own roles. The topbar, navigation and floating menus share the 8px glass blur;
+`--menu-bg`; dialogs use the opaque `--dialog-bg`; fields use `--field-bg`. Text, muted text and hover/active
+states come from that paper's own roles. The topbar, navigation and floating menus share the 8px glass blur;
 dialogs use a weaker `--dialog-blur` of 4px so the card stays readable. The dialog backdrop uses the scrim
 plus a 6px blur. No shadow, no gradient, no visible border.
 

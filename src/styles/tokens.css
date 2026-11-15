@@ -63,7 +63,7 @@
     --menu-hover-bg: var(--menu-hover);
     --menu-active-bg: var(--menu-active);
 
-    --dialog-bg: var(--float);
+    --dialog-bg: light-dark(rgb(253 253 253), rgb(32 31 29));
     --dialog-ink: var(--ink);
     --dialog-muted: var(--ink-3);
     --dialog-hover-bg: var(--surface-hover);

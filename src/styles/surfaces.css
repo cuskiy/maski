@@ -234,8 +234,13 @@
   }
 
   #surface-settings .settings-panels .profile-line {
-    background: var(--card-bg);
-    color: var(--card-ink);
+    padding: var(--space-2) 0;
+    background: transparent;
+    color: var(--dialog-ink);
+  }
+
+  #surface-settings .settings-panels .profile-line .note {
+    color: var(--dialog-muted);
   }
 
   .settings-panels .profile-line {
