@@ -263,10 +263,17 @@
     color: var(--danger);
   }
 
-  #surface-settings .settings-panels > .surface-section {
+  #surface-settings .settings-panels > .surface-section,
+  #surface-room-settings .settings-panels > .surface-section {
     padding: 0;
     background: transparent;
     color: var(--dialog-ink);
+  }
+
+  #surface-room-settings .settings-panels .member-list {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   #surface-settings .settings-panels .profile-line {
