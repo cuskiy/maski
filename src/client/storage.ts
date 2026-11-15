@@ -9,6 +9,7 @@ export const STORAGE = {
   draft: (account: string, roomId: string) => `maski.draft.${account}.${roomId}`,
   notifications: (account: string) => `maski.notifications.${account}`,
   recentEmoji: (account: string) => `maski.recent-emoji.${account}`,
+  recentStickers: (account: string) => `maski.recent-stickers.${account}`,
   legacySections: "maski.sections",
   legacySpaces: "maski.spaces",
   legacyDraft: (roomId: string) => `maski.draft.${roomId}`,

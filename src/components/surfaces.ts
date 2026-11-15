@@ -5,6 +5,7 @@ import type { ChatState } from "../core/types.ts";
 import { config } from "../config.ts";
 import { SURFACE } from "../core/regions.ts";
 import { field, submit } from "../components/form.ts";
+import { stickerPickerBody } from "../components/stickers.ts";
 import { icons } from "../components/icons.ts";
 
 function textForm(c: Catalog, id: string, labelKey: CatalogKey, submitKey: CatalogKey): Html {
@@ -14,7 +15,6 @@ function textForm(c: Catalog, id: string, labelKey: CatalogKey, submitKey: Catal
   </form>`;
 }
 
-const STICKERS = ["👋", "🎉", "🐱", "🌿", "✨", "🫡"] as const;
 const REACTIONS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥", "👀", "🙏", "💯", "🤔", "💔"] as const;
 const MENU_ICONS = {
   "roomMenu.settings": icons.settings,
@@ -115,21 +115,9 @@ export function surfaceBodyFor(c: Catalog, id: string, state: ChatState): Html {
           aria-label="${t(c, "composer.attach")}"
         />`;
     case SURFACE.sticker:
-      return html`<div class="picker">
-        <p class="pack-head">${t(c, "surface.sticker")}</p>
-        <div class="pack-grid">
-          ${
-            state.phase === "boot"
-              ? html``
-              : STICKERS.map(
-                  (sticker) =>
-                    html`<button class="pack-item" type="button" data-sticker="${sticker}" aria-label="${sticker}">
-                      ${sticker}
-                    </button>`,
-                )
-          }
-        </div>
-      </div>`;
+      return state.phase === "boot"
+        ? html`<div class="sticker-picker"></div>`
+        : stickerPickerBody(c, state.recentStickers);
     case SURFACE.emoji:
       return html`<div class="emoji-picker" data-emoji-picker></div>`;
     case SURFACE.reaction:

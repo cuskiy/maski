@@ -4,6 +4,7 @@ import { emptyChatState } from "../src/core/state.ts";
 import { SURFACE } from "../src/core/regions.ts";
 import { CHAT_SURFACES } from "../src/core/surfaces.ts";
 import { surfaceBodyFor } from "../src/components/surfaces.ts";
+import { ALL_EMOJI } from "../src/components/emoji.ts";
 import { en } from "../src/catalogs/en.ts";
 
 void test("chat surfaces are unique and come from the shared id registry", () => {
@@ -37,4 +38,18 @@ void test("the reaction picker offers a useful choice set", () => {
 void test("the booted sticker picker is filled by the client, not the shell", () => {
   const markup = surfaceBodyFor(en, SURFACE.sticker, emptyChatState()).value;
   assert.doesNotMatch(markup, /data-sticker=/u);
+});
+
+void test("the sticker picker includes every emoji and the recent stickers", () => {
+  const state = {
+    ...emptyChatState(),
+    phase: "ready" as const,
+    recentStickers: ["👋", "🐱"],
+  };
+  const markup = surfaceBodyFor(en, SURFACE.sticker, state).value;
+  assert.match(markup, /data-sticker-tab="emoji"/u);
+  assert.match(markup, /data-sticker-tab="surface.sticker.pack1"/u);
+  assert.match(markup, /data-sticker-panel="emoji"/u);
+  assert.match(markup, /sticker-recent-grid/u);
+  assert.equal((markup.match(/data-emoji=/gu) ?? []).length, ALL_EMOJI.length);
 });

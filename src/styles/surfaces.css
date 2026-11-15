@@ -380,6 +380,94 @@
   #surface-sticker {
     position-anchor: --composer-sticker;
     inline-size: min(100% - 2 * var(--space-4), 18rem);
+    block-size: min(52dvh, 22rem);
+  }
+
+  #surface-sticker:popover-open {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #surface-sticker .surface-body {
+    display: block;
+    flex: 1;
+    min-block-size: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .sticker-picker {
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    padding: var(--space-2);
+  }
+
+  .sticker-recents {
+    flex: none;
+  }
+
+  #surface-sticker .sticker-recent-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  #surface-sticker .sticker-recent-grid .pack-item {
+    font-size: clamp(1rem, 3vi, 1.25rem);
+  }
+
+  .sticker-tabs {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: var(--space-1);
+    scrollbar-width: none;
+  }
+
+  .sticker-tab {
+    flex: none;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--menu-muted);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    line-height: 1.5;
+    white-space: nowrap;
+    transition: var(--control-transition);
+  }
+
+  .sticker-tab:hover {
+    background: var(--menu-hover-bg);
+    color: var(--menu-ink);
+  }
+
+  .sticker-tab[aria-current="true"] {
+    background: var(--menu-active-bg);
+    color: var(--menu-ink);
+  }
+
+  .sticker-scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-block: var(--space-1);
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+  }
+
+  .sticker-panel[hidden] {
+    display: none;
+  }
+
+  #surface-sticker .sticker-panel[data-sticker-panel="emoji"] .pack-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  #surface-sticker .sticker-panel[data-sticker-panel="emoji"] .pack-item {
+    font-size: clamp(1.25rem, 3.5vi, 1.5rem);
   }
 
   #surface-emoji {
@@ -873,13 +961,8 @@
     font-size: clamp(1.25rem, 3.5vi, 1.5rem);
   }
 
-  #surface-sticker .pack-grid {
+  #surface-sticker .sticker-panel .pack-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .picker {
-    display: grid;
-    gap: var(--space-2);
   }
 
   .pack-section + .pack-section {

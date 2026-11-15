@@ -277,6 +277,8 @@ Raising one is a change to this file with the reason.
 - 设置侧栏只比 dialog 纸略亮或略深；激活项使用很淡的 tint，不加侧边竖线，也不做过亮的整块填充。
 - 房间设置复用同一套左侧纸、右侧 dialog 纸、激活 tab 和 flat section；不额外套 section 卡片。
 - 房间设置与设置使用同一固定尺寸；切换 tab 时顶部关闭按钮和导航位置不移动。
+- 贴纸面板固定尺寸：上方最近使用过的贴纸，中间是 emoji 与贴纸包的横向滚动 tab，下方是纵向滚动内容；切换贴纸包不改变外框。
+- 贴纸面板的 emoji tab 放全部 emoji，不再只放最近使用。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
 - 文本选中的高亮改成浅灰蓝色；要更浅一些，有一点透明感，但不明显。
 - 亮色模式气泡背景更浅。
@@ -427,7 +429,9 @@ restores the recorded row, so the reader stays in place and can continue upward.
 **Composer** owns its draft, its tray, its height and its selection. The send button's long-press or
 context menu offers normal text and Markdown; choosing an option sends immediately, with no visible
 format switch. Only rich-text bubbles render Markdown; normal text stays plain. The dialogs never cover
-it; the overlays never steal its caret. The bar fills the content column.
+it; the overlays never steal its caret. The bar fills the content column. The sticker picker has one fixed
+frame: recently used stickers, a horizontally scrollable row of emoji and sticker packs, and a vertically
+scrolling panel; the Emoji panel carries every emoji.
 
 **Overlays are two kinds.**
 

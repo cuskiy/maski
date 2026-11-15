@@ -606,6 +606,7 @@ export function mockChatState(): ChatState {
     messages,
     hasOlder: true,
     openSpaces: ["product"],
+    recentStickers: ["👋", "🐱", "✨"],
     devices: mockDevices,
     invites: mockInvites,
     members: mockMembers,

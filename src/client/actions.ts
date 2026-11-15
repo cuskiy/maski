@@ -46,6 +46,7 @@ export interface Actions {
   discardMessage(messageId: string): void;
   retryMessage(messageId: string): void;
   recordEmoji(emoji: string): void;
+  recordSticker(sticker: string): void;
   acceptInvite(roomId: string): void;
   declineInvite(roomId: string): void;
   setPref(key: keyof NotificationPrefs, value: boolean): void;
@@ -289,6 +290,12 @@ export function createActions({ store, source, c, account }: Context): Actions {
       const next = [emoji, ...store.read("recentEmoji").filter((entry) => entry !== emoji)].slice(0, 18);
       store.write("recentEmoji", next);
       prefs.saveRecentEmoji(account, next);
+    },
+    recordSticker(sticker) {
+      if (sticker === "") return;
+      const next = [sticker, ...store.read("recentStickers").filter((entry) => entry !== sticker)].slice(0, 6);
+      store.write("recentStickers", next);
+      prefs.saveRecentStickers(account, next);
     },
     acceptInvite(roomId) {
       const invite = store.read("invites").find((entry) => entry.roomId === roomId);

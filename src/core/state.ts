@@ -14,6 +14,7 @@ export function emptyChatState(): ChatState {
     olderLoading: false,
     typing: [],
     recentEmoji: [],
+    recentStickers: [],
     openSpaces: [],
     sections: {
       favorites: { open: false },

@@ -76,7 +76,9 @@ export const EMOJI_GROUPS: readonly EmojiGroup[] = [
   },
 ] as const;
 
-function emojiButtons(glyphsInGroup: readonly string[]): Html {
+export const ALL_EMOJI: readonly string[] = [...new Set(EMOJI_GROUPS.flatMap((group) => group.glyphs))];
+
+export function emojiButtons(glyphsInGroup: readonly string[]): Html {
   return html`${glyphsInGroup.map(
     (emoji) =>
       html`<button class="pack-item" type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`,

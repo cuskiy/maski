@@ -172,6 +172,20 @@ function jumpToEmojiSection(button: HTMLElement): void {
   });
 }
 
+function selectStickerTab(button: HTMLElement): void {
+  const picker = button.closest<HTMLElement>("[data-sticker-picker]");
+  const key = button.dataset["stickerTab"];
+  if (picker === null || key === undefined) return;
+  for (const tab of picker.querySelectorAll<HTMLElement>("[data-sticker-tab]")) {
+    tab.setAttribute("aria-current", String(tab === button));
+  }
+  for (const panel of picker.querySelectorAll<HTMLElement>("[data-sticker-panel]")) {
+    panel.hidden = panel.dataset["stickerPanel"] !== key;
+  }
+  const scroll = picker.querySelector<HTMLElement>("[data-sticker-scroll]");
+  if (scroll !== null) scroll.scrollTop = 0;
+}
+
 function clearSettingsHash(): void {
   if (!location.hash.startsWith("#settings-") && !location.hash.startsWith("#room-settings-")) return;
   history.replaceState(null, "", `${location.pathname}${location.search}`);
@@ -464,6 +478,12 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     }
     if (composer.handleClick(target)) {
       event.preventDefault();
+      return;
+    }
+
+    const stickerTab = target.closest<HTMLElement>("[data-sticker-tab]");
+    if (stickerTab !== null) {
+      selectStickerTab(stickerTab);
       return;
     }
 

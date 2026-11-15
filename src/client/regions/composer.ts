@@ -268,11 +268,13 @@ export class Composer {
     this.saveDraft();
     textarea.focus();
     this.hide(SURFACE.emoji);
+    this.hide(SURFACE.sticker);
   }
 
   sendSticker(sticker: string): void {
     const roomId = this.roomId;
     if (sticker === "" || roomId === null) return;
+    this.actions.recordSticker(sticker);
     this.actions.appendRows(roomId, [
       this.actions.createRow(roomId, sticker, {
         kind: "sticker",

@@ -181,6 +181,7 @@ export interface ChatState {
   readonly olderLoading: boolean;
   readonly typing: readonly string[];
   readonly recentEmoji: readonly string[];
+  readonly recentStickers: readonly string[];
   readonly openSpaces: readonly string[];
   readonly sections: Readonly<Record<SectionId, SectionState>>;
   readonly notifications: NotificationPrefs;
