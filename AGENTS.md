@@ -295,7 +295,7 @@ Raising one is a change to this file with the reason.
 - 媒体与文件弹窗中的媒体按钮不显示文件名，像 emoji tile 一样带独立背景并缩小为六列小方块。
 - 图片预览窗口再缩到 30rem 高约 20rem；放大在窗口内部滚动，不再撑大窗口。
 - 账号弹出菜单使用与账号卡 hover 相同的独立纸面值，但两者不共享变量。
-- 消息右键菜单提供多选；多选后顶栏下方出现固定的独立按钮：左取消，中计数，右全选、删除、分享，分享最右，与输入区左右对齐并留一个小间距。按钮不再共用一条有颜色的栏；删除先弹确认，顶栏房间菜单仍在最上层。
+- 消息右键菜单提供多选；多选后顶栏下方出现固定的独立按钮：左取消，中计数，右全选、删除、分享，分享最右，与输入区左右对齐并留一个小间距。按钮不再共用一条有颜色的栏，每个控件都有自己的浅色气泡背景；删除先弹确认，顶栏房间菜单仍在最上层。
 - 房间行右滑标记已读，左滑切换静音；消息右滑回复，左滑进入多选。滑过阈值时显示对应动作图标，点击不会被误触发。
 - 粘贴图片作为图片类型进入缓冲区；只有通过附件按钮选择的图片才是文件类型，但仍保留缩略图和预览。附件缓冲区与输入框的间距略大。
 - 设置 tab 任意时刻只有一个激活；hover 使用很淡的 ink overlay，不再出现第二个深色块。
@@ -445,7 +445,7 @@ inline start, count in the middle, and select all, delete, share at the inline e
 stays above it, delete opens the confirm dialog, and share writes the selected rows into the chosen room; escape,
 a room switch, or an action leaves selection. A selection check appears in the gutter opposite the avatar at the row bottom,
 absolutely positioned so no element moves: incoming messages on the right, own messages on the left. The full row toggles it, the selected message body gets a small
-radius and a four percent ink wash, and the check stays outside that wash. Media tiles in the media dialog
+radius and a two percent ink wash over the page, and the check stays outside that wash. Each toolbar control has its own card bubble. Media tiles in the media dialog
 hide names, use the emoji tile paper, and sit in six small columns.
 Room rows swipe right to mark read and
 left to mute; message rows swipe right to reply and left to select, with the action icon revealed past the
@@ -814,5 +814,5 @@ Every layout refactor re-checks these against the before crop. They have regress
 - **2026-11-15, `/review/` selection.** The check sat in one gutter for both alignments, the toolbar scrolled
   with the timeline and clipped under the chrome, and attachment-picker images lost their preview. Resolved:
   the check sits opposite the avatar (incoming right, own left), the toolbar is fixed below the topbar and
-  aligned with the composer, the wash is four percent, and picker images keep a thumbnail and preview while
-  remaining files. Verified at 390 and 1280, and under a simulated `dir="rtl"`.
+  aligned with the composer, the wash is two percent over the page, and picker images keep a thumbnail and preview while
+  remaining files. Each toolbar control has its own card bubble. Verified at 390 and 1280, and under a simulated `dir="rtl"`.

@@ -105,9 +105,15 @@
   }
 
   .selection-count {
+    display: inline-flex;
+    align-items: center;
+    justify-self: center;
+    min-block-size: 2rem;
     overflow: hidden;
     padding-inline: var(--space-2);
-    color: var(--ink-2);
+    border-radius: var(--radius-sm);
+    background: var(--card-bg);
+    color: var(--card-ink);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
     text-align: center;
@@ -119,7 +125,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 2px;
+    gap: var(--space-2);
   }
 
   .selection-button {
@@ -129,8 +135,8 @@
     min-block-size: 2rem;
     padding: 0 var(--space-2);
     border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-2);
+    background: var(--card-bg);
+    color: var(--card-muted);
     font-size: var(--text-sm);
     line-height: 1;
     white-space: nowrap;
@@ -139,8 +145,12 @@
 
   .selection-button:hover,
   .selection-button:focus-visible {
-    background: var(--surface-hover);
-    color: var(--ink);
+    background: var(--card-hover-bg);
+    color: var(--card-ink);
+  }
+
+  .selection-button:active {
+    background: var(--card-active-bg);
   }
 
   .selection-button.is-danger {
@@ -164,7 +174,7 @@
 
   .message.is-selected .message-body {
     border-radius: var(--radius-xs);
-    background: color-mix(in srgb, var(--ink) 4%, transparent);
+    background: color-mix(in srgb, var(--ink) 2%, var(--page));
   }
 
   .message-select-mark {
