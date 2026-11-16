@@ -250,6 +250,12 @@ function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat,
   return html`<span class="bubble-meta">${stamp}${status}</span>`;
 }
 
+function mediaDimensions(media: Media): Html {
+  return media.width === null || media.height === null
+    ? html``
+    : html`width="${String(media.width)}" height="${String(media.height)}"`;
+}
+
 function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
   const media = message.media;
   if (media === null) return html``;
@@ -268,8 +274,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             src="${mediaUrl}"
             alt="${media.name}"
             data-media-image
-            width="${String(media.width ?? 16)}"
-            height="${String(media.height ?? 16)}"
+            ${mediaDimensions(media)}
             loading="lazy"
             decoding="async"
           />`;
@@ -360,8 +365,7 @@ function mediaView(message: MessageRow, c: Catalog, meta: Html): Html {
             src="${mediaUrl}"
             alt="${media.name}"
             data-media-image
-            width="${String(media.width ?? 16)}"
-            height="${String(media.height ?? 9)}"
+            ${mediaDimensions(media)}
             loading="lazy"
             decoding="async"
           />

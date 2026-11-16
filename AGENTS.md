@@ -1324,6 +1324,8 @@ old commits are evidence, not status.
 - Media is worker-owned: upload validates/sanitizes/EXIF-strips, encrypts in encrypted rooms, uploads once,
   sends with a txn id, downloads authenticated with no-store, hash-verifies before decrypt, allowlists MIME,
   caches by content address and emits only `blob:` URLs. The projection never emits mxc/token/key.
+  Room, account and sender avatars resolve in the worker; sender avatars patch already-painted rows
+  instead of delaying the local window.
 - Recovery key/passphrase derivation now uses PBKDF2-SHA-512 with a UTF-8 salt, validates the candidate
   against `secretStorage.checkKey`, and refuses to create a new cross-signing identity during recovery.
   The device list is read-only and reports `getDeviceVerificationStatus(...).isVerified()`.

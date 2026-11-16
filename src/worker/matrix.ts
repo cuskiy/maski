@@ -2369,13 +2369,18 @@ export class MatrixSession implements SessionPort {
     const room = client.getRoom(roomId);
     const account = this.account;
     if (room === null || account === null) return;
+    const backend = Reflect.get(client, "cryptoBackend");
     const rows = await account.readLatest(roomId, WINDOW_LIMIT);
     for (const row of rows) {
       if (row.eventId === null || row.encryption.state !== "undecryptable") continue;
       const event = room.findEventById(row.eventId);
       if (event === undefined) continue;
+      const attempt = Reflect.get(event, "attemptDecryption");
+      if (typeof attempt !== "function" || backend === null || typeof backend !== "object") continue;
       try {
-        await client.decryptEventIfNeeded(event);
+        // `decryptEventIfNeeded` refuses an event that already holds a failure tombstone; a
+        // forced retry is required after the room key becomes available.
+        await Reflect.apply(attempt, event, [backend, { isRetry: true }]);
       } catch {
         // The row stays undecryptable and the next sync/room open retries it.
       }
