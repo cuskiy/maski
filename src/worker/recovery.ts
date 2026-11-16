@@ -1,3 +1,5 @@
+import { normalizeRecoveryKey } from "../lib/recoveryKey.ts";
+
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const PREFIX = [0x8b, 0x01] as const;
 const KEY_SIZE = 32;
@@ -27,7 +29,7 @@ function decodeBase58(value: string): Uint8Array {
 
 /** Decode the Matrix cryptographic key representation into the raw 32-byte key. */
 export function decodeRecoveryKey(value: string): Uint8Array<ArrayBuffer> {
-  const decoded = decodeBase58(value.replace(/\s/gu, ""));
+  const decoded = decodeBase58(normalizeRecoveryKey(value));
   if (decoded.length !== PREFIX.length + KEY_SIZE + 1) throw new Error("invalid recovery key length");
   let parity = 0;
   for (const byte of decoded) parity ^= byte;

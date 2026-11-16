@@ -98,9 +98,6 @@ function harness(): Harness {
   const port: SessionPort = {
     start: () => Promise.resolve(START),
     login: () => Promise.resolve(SESSION),
-    loginToken: () => Promise.resolve(SESSION),
-    ssoUrl: () => Promise.resolve("https://example.org/sso"),
-    register: () => Promise.resolve({ session: SESSION, recoveryKey: null, key: "needs-recovery" }),
     logout: () => Promise.resolve(null),
     keyStatus: () => Promise.resolve<KeyStatus>("missing"),
     recover: () => Promise.resolve<KeyStatus>("missing"),

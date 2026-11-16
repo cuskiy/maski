@@ -87,7 +87,12 @@ export function emojiButtons(glyphsInGroup: readonly string[], mode: "emoji" | "
   )}`;
 }
 
-export function emojiPickerBody(c: Catalog, recent: readonly string[], mode: "emoji" | "reaction" = "emoji"): Html {
+export function emojiPickerBody(
+  c: Catalog,
+  recent: readonly string[],
+  mode: "emoji" | "reaction" = "emoji",
+  extra: Html = html``,
+): Html {
   const recents = recent.filter(Boolean).slice(0, 18);
   const recentJump =
     recents.length === 0
@@ -117,6 +122,7 @@ export function emojiPickerBody(c: Catalog, recent: readonly string[], mode: "em
           <div class="pack-grid">${emojiButtons(group.glyphs, mode)}</div>
         </section>`,
       )}
+      ${extra}
     </div>
     <nav class="emoji-nav" aria-label="${t(c, "surface.emoji.categories")}">
       ${recentJump}

@@ -55,7 +55,7 @@ function run(): void {
     return;
   }
 
-  if (page === "login" || page === "register") {
+  if (page === "login") {
     if (session.server === null) {
       location.replace(`${root}server/`);
       return;

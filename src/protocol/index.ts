@@ -37,9 +37,6 @@ export const PROTOCOL_VERSION = 1;
 export type CommandName =
   | "start"
   | "login"
-  | "loginToken"
-  | "ssoUrl"
-  | "register"
   | "logout"
   | "keyStatus"
   | "recover"
@@ -103,15 +100,8 @@ export interface MediaReply {
 }
 
 export interface CommandMap {
-  readonly start: { readonly wasmUrl: string };
+  readonly start: { readonly wasmUrl: string; readonly unlocked?: boolean };
   readonly login: {
-    readonly homeserver: string;
-    readonly username: string;
-    readonly password: string;
-  };
-  readonly loginToken: { readonly homeserver: string; readonly token: string };
-  readonly ssoUrl: { readonly homeserver: string; readonly redirectUrl: string };
-  readonly register: {
     readonly homeserver: string;
     readonly username: string;
     readonly password: string;
@@ -138,7 +128,7 @@ export interface CommandMap {
   readonly devices: Record<string, never>;
   readonly backupStatus: Record<string, never>;
   readonly backupSetup: Record<string, never>;
-  readonly resetIdentity: { readonly password: string };
+  readonly resetIdentity: Record<string, never>;
   readonly react: { readonly roomId: string; readonly eventId: string; readonly key: string };
   readonly edit: {
     readonly roomId: string;
@@ -215,12 +205,6 @@ export interface CommandMap {
   readonly sasCancel: { readonly id: string };
 }
 
-export interface RegisterResult {
-  readonly session: SessionSummary;
-  readonly recoveryKey: string | null;
-  readonly key: KeyStatus;
-}
-
 export interface StartData {
   readonly session: SessionSummary | null;
   readonly connection: Connection;
@@ -230,9 +214,6 @@ export interface StartData {
 export interface ReplyData {
   readonly start: StartData;
   readonly login: SessionSummary;
-  readonly loginToken: SessionSummary;
-  readonly ssoUrl: string;
-  readonly register: RegisterResult;
   readonly logout: null;
   readonly keyStatus: KeyStatus;
   readonly recover: KeyStatus;
@@ -336,9 +317,6 @@ export type Event = {
 const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "start",
   "login",
-  "loginToken",
-  "ssoUrl",
-  "register",
   "logout",
   "keyStatus",
   "recover",
@@ -648,15 +626,6 @@ function isStartData(value: unknown): value is StartData {
     isRecord(value) &&
     (value["session"] === null || isSessionSummary(value["session"])) &&
     isConnection(value["connection"]) &&
-    isKeyStatus(value["key"])
-  );
-}
-
-function isRegisterResult(value: unknown): value is RegisterResult {
-  return (
-    isRecord(value) &&
-    isSessionSummary(value["session"]) &&
-    isStringOrNull(value["recoveryKey"]) &&
     isKeyStatus(value["key"])
   );
 }
@@ -985,9 +954,6 @@ export const REPLY_DATA_GUARDS: {
 } = {
   start: isStartData,
   login: isSessionSummary,
-  loginToken: isSessionSummary,
-  ssoUrl: isString,
-  register: isRegisterResult,
   logout: isNull,
   keyStatus: isKeyStatus,
   recover: isKeyStatus,
@@ -1084,7 +1050,7 @@ function isRoomId(value: unknown): value is string {
 }
 
 function validStart(fields: Record<string, unknown>): fields is CommandMap["start"] {
-  return isString(fields["wasmUrl"]);
+  return isString(fields["wasmUrl"]) && (fields["unlocked"] === undefined || isBoolean(fields["unlocked"]));
 }
 
 function validLogin(fields: Record<string, unknown>): fields is CommandMap["login"] {
@@ -1095,24 +1061,6 @@ function validLogin(fields: Record<string, unknown>): fields is CommandMap["logi
     fields["username"].length <= 255 &&
     fields["password"].length <= 4096 &&
     fields["homeserver"].length <= 2048
-  );
-}
-
-function validLoginToken(fields: Record<string, unknown>): fields is CommandMap["loginToken"] {
-  return (
-    isString(fields["homeserver"]) &&
-    fields["homeserver"].length <= 2048 &&
-    isString(fields["token"]) &&
-    fields["token"].length <= 8192
-  );
-}
-
-function validSsoUrl(fields: Record<string, unknown>): fields is CommandMap["ssoUrl"] {
-  return (
-    isString(fields["homeserver"]) &&
-    fields["homeserver"].length <= 2048 &&
-    isString(fields["redirectUrl"]) &&
-    fields["redirectUrl"].length <= 2048
   );
 }
 
@@ -1352,33 +1300,12 @@ export function parseCommand(value: unknown): Command | null {
   switch (type) {
     case "start":
       if (!validStart(fields)) return null;
-      return { id, type, payload: { wasmUrl: fields.wasmUrl } };
+      return {
+        id,
+        type,
+        payload: { wasmUrl: fields.wasmUrl, ...(fields.unlocked === true ? { unlocked: true } : {}) },
+      };
     case "login":
-      if (!validLogin(fields)) return null;
-      return {
-        id,
-        type,
-        payload: {
-          homeserver: fields.homeserver,
-          username: fields.username,
-          password: fields.password,
-        },
-      };
-    case "loginToken":
-      if (!validLoginToken(fields)) return null;
-      return {
-        id,
-        type,
-        payload: { homeserver: fields.homeserver, token: fields.token },
-      };
-    case "ssoUrl":
-      if (!validSsoUrl(fields)) return null;
-      return {
-        id,
-        type,
-        payload: { homeserver: fields.homeserver, redirectUrl: fields.redirectUrl },
-      };
-    case "register":
       if (!validLogin(fields)) return null;
       return {
         id,
@@ -1436,8 +1363,8 @@ export function parseCommand(value: unknown): Command | null {
       if (!validMarkRead(fields)) return null;
       return { id, type, payload: { roomId: fields.roomId, eventId: fields.eventId } };
     case "resetIdentity":
-      if (!isString(fields["password"]) || fields["password"].length > 4096) return null;
-      return { id, type, payload: { password: fields["password"] } };
+      if (!empty(fields)) return null;
+      return { id, type, payload: {} };
     case "react":
       if (!validReact(fields)) return null;
       return {

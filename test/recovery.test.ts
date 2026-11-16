@@ -43,6 +43,8 @@ void test("decodes the Matrix recovery key representation", () => {
   assert.deepEqual(decodeRecoveryKey(encodeRecovery(raw)), raw);
   const spaced = encodeRecovery(raw).replace(/.{4}/gu, "$& ");
   assert.deepEqual(decodeRecoveryKey(spaced), raw);
+  const pasted = encodeRecovery(raw).replace(/.{4}/gu, "$& ").replaceAll(" ", " \u200b\u00ad\n\t");
+  assert.deepEqual(decodeRecoveryKey(pasted), raw);
 });
 
 void test("rejects a wrong prefix, parity or length", () => {

@@ -17,7 +17,6 @@ import {
   RoomEvent,
   RoomMemberEvent,
   RoomStateEvent,
-  SSOAction,
   SyncState,
   Visibility,
   type MatrixClient,
@@ -40,7 +39,7 @@ import type {
   SessionSummary,
   StickerPack,
 } from "../core/types.ts";
-import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
+import type { CommandMap, Event, KeyStatus, MediaReply, StartData } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
 import {
   parseGlobalPackReferences,
@@ -86,6 +85,7 @@ import {
   spaceParents,
 } from "./project.ts";
 import { decodeRecoveryKey, derivePassphraseKey } from "./recovery.ts";
+import { normalizeRecoveryKey } from "../lib/recoveryKey.ts";
 import { SasSessions, type SasEvents } from "./sas.ts";
 import { clearSession, readSession, writeSession, type StoredSession } from "./sessionDb.ts";
 
@@ -427,7 +427,7 @@ export class MatrixSession implements SessionPort {
       return { session: null, connection: "offline", key: "missing" };
     }
     this.secretStorageKeys.clear();
-    if (stored.secretStorageKeyId !== null && stored.secretStorageKeyId !== undefined && stored.secretStorageKey) {
+    if (input.unlocked === true && stored.secretStorageKeyId && stored.secretStorageKey) {
       const key = fromBase64(stored.secretStorageKey);
       if (key !== null && key.length === 32) this.secretStorageKeys.set(stored.secretStorageKeyId, key);
     }
@@ -484,85 +484,6 @@ export class MatrixSession implements SessionPort {
     return this.beginSession(baseUrl, response, false);
   }
 
-  async loginToken(input: CommandMap["loginToken"]): Promise<SessionSummary> {
-    if (this.wasmUrl === null) throw new WorkerFailure("unavailable");
-    const baseUrl = await discoverHomeserver(input.homeserver);
-    if (baseUrl === null) throw new WorkerFailure("auth");
-    let response;
-    try {
-      const provisional = createClient({ baseUrl, logger: silentLogger });
-      response = await provisional.loginRequest({
-        type: "m.login.token",
-        token: input.token,
-        refresh_token: true,
-        initial_device_display_name: "maski",
-      });
-    } catch {
-      throw new WorkerFailure("auth");
-    }
-    return this.beginSession(baseUrl, response, false);
-  }
-
-  async ssoUrl(input: CommandMap["ssoUrl"]): Promise<string> {
-    const baseUrl = await discoverHomeserver(input.homeserver);
-    if (baseUrl === null) throw new WorkerFailure("auth");
-    try {
-      const provisional = createClient({ baseUrl, logger: silentLogger });
-      return provisional.getSsoLoginUrl(input.redirectUrl, "sso", undefined, SSOAction.LOGIN);
-    } catch {
-      throw new WorkerFailure("auth");
-    }
-  }
-
-  async register(input: CommandMap["register"]): Promise<RegisterResult> {
-    if (this.wasmUrl === null) throw new WorkerFailure("unavailable");
-    const baseUrl = await discoverHomeserver(input.homeserver);
-    if (baseUrl === null) throw new WorkerFailure("auth");
-    let response;
-    const request = {
-      username: input.username,
-      password: input.password,
-      inhibit_login: false,
-      refresh_token: true,
-      initial_device_display_name: "maski",
-    };
-    try {
-      const provisional = createClient({ baseUrl, logger: silentLogger });
-      try {
-        response = await provisional.registerRequest(request);
-      } catch (error) {
-        const data = isRecord(error) ? error["data"] : undefined;
-        const sessionId = isRecord(data) ? data["session"] : undefined;
-        const flows = isRecord(data) ? data["flows"] : undefined;
-        const dummy =
-          typeof sessionId === "string" &&
-          Array.isArray(flows) &&
-          flows.some(
-            (flow: unknown) =>
-              isRecord(flow) &&
-              Array.isArray(flow["stages"]) &&
-              flow["stages"].length === 1 &&
-              flow["stages"][0] === "m.login.dummy",
-          );
-        if (!dummy) throw error;
-        response = await provisional.registerRequest({
-          ...request,
-          auth: { type: "m.login.dummy", session: sessionId },
-        });
-      }
-    } catch {
-      throw new WorkerFailure("auth");
-    }
-    const session = await this.beginSession(baseUrl, response);
-    let recoveryKey: string | null = null;
-    try {
-      recoveryKey = await this.resetIdentity(input.password);
-    } catch {
-      // Registration succeeded; the key page still has to explain a manual reset.
-    }
-    return { session, recoveryKey, key: this.keyReady };
-  }
-
   async logout(): Promise<null> {
     await this.teardown(this.client);
     await clearSession();
@@ -603,41 +524,55 @@ export class MatrixSession implements SessionPort {
     const client = this.requireClient();
     const crypto = client.getCrypto();
     if (crypto === undefined) throw new WorkerFailure("unavailable");
-    const recoveryKey = input.recoveryKey.trim();
-    let candidate: Uint8Array<ArrayBuffer>;
+    const rawRecovery = input.recoveryKey.trim();
+    const recoveryKey = normalizeRecoveryKey(rawRecovery);
+    const passphrase = input.passphrase.trim();
+    if (recoveryKey === "" && passphrase === "") throw new WorkerFailure("auth");
+    const candidates = await this.secretStorageCandidates(client);
+    const attempts: Uint8Array<ArrayBuffer>[] = [];
+    let malformed = false;
     if (recoveryKey !== "") {
       try {
-        candidate = decodeRecoveryKey(recoveryKey);
+        attempts.push(decodeRecoveryKey(recoveryKey));
       } catch {
-        throw new WorkerFailure("invalid");
+        malformed = true;
       }
-    } else if (input.passphrase !== "") {
-      const keyTuple = await client.secretStorage.getKey();
-      const derivation = keyTuple?.[1].passphrase;
-      if (derivation === undefined) throw new WorkerFailure("auth");
-      candidate = await derivePassphraseKey(input.passphrase, derivation);
-    } else {
+    }
+    let passphraseAttempts = 0;
+    for (const source of passphrase === "" ? [rawRecovery] : [passphrase]) {
+      if (source === "") continue;
+      for (const info of candidates.values()) {
+        const derivation = info.passphrase;
+        if (derivation === undefined) continue;
+        attempts.push(await derivePassphraseKey(source, derivation));
+        passphraseAttempts += 1;
+      }
+    }
+    let matched: string | null = null;
+    let candidate: Uint8Array<ArrayBuffer> | null = null;
+    for (const attempt of attempts) {
+      for (const [id, info] of candidates) {
+        try {
+          if (await client.secretStorage.checkKey(attempt, info)) {
+            matched = id;
+            candidate = attempt;
+            break;
+          }
+        } catch {
+          // A malformed key description is not a usable candidate.
+        }
+      }
+      if (matched !== null) break;
+    }
+    if (matched === null || candidate === null) {
+      if (malformed && passphraseAttempts === 0) throw new WorkerFailure("invalid");
       throw new WorkerFailure("auth");
     }
-    const candidates = await this.secretStorageCandidates(client);
-    let matched: string | null = null;
-    for (const [id, info] of candidates) {
-      try {
-        if (await client.secretStorage.checkKey(candidate, info)) {
-          matched = id;
-          break;
-        }
-      } catch {
-        // A malformed key description is not a usable candidate.
-      }
-    }
-    if (matched === null) throw new WorkerFailure("auth");
     this.pendingSecret = { key: candidate, passphrase: "" };
     this.secretStorageKeys.set(matched, candidate);
-    const stored = this.stored;
-    if (stored !== null) {
+    if (this.stored !== null) {
       const updated: StoredSession = {
-        ...stored,
+        ...this.stored,
         secretStorageKeyId: matched,
         secretStorageKey: toBase64(candidate),
       };
@@ -787,58 +722,48 @@ export class MatrixSession implements SessionPort {
     return sas.cancel(id);
   }
 
-  async resetIdentity(password: string): Promise<string | null> {
+  async resetIdentity(): Promise<string | null> {
+    const task = this.startTask;
+    if (task !== null) await task;
     const client = this.requireClient();
     const crypto = client.getCrypto();
-    const userId = client.getUserId();
-    if (crypto === undefined || userId === null) throw new WorkerFailure("unavailable");
-
-    const auth = async (makeRequest: (authData: Record<string, unknown> | null) => Promise<void>): Promise<void> => {
-      try {
-        await makeRequest(null);
-      } catch (error) {
-        if (typeof error !== "object" || error === null || !("data" in error)) throw error;
-        const data = error.data;
-        if (typeof data !== "object" || data === null || !("session" in data)) throw error;
-        const session = data.session;
-        if (typeof session !== "string") throw error;
-        await makeRequest({
-          type: "m.login.password",
-          identifier: { type: "m.id.user", user: userId },
-          password,
-          session,
-        });
-      }
-    };
+    if (crypto === undefined) throw new WorkerFailure("unavailable");
 
     try {
-      await crypto.resetEncryption(auth);
       this.secretStorageKeys.clear();
       const key = await crypto.createRecoveryKeyFromPassphrase();
       this.pendingSecret = { key: key.privateKey, passphrase: "" };
       try {
         await crypto.bootstrapSecretStorage({
           setupNewSecretStorage: true,
-          setupNewKeyBackup: true,
           createSecretStorageKey: () => Promise.resolve(key),
         });
+      } catch {
+        throw new WorkerFailure("network");
       } finally {
         this.pendingSecret = null;
       }
-      const defaultKeyId = await client.secretStorage.getDefaultKeyId();
-      if (defaultKeyId !== null) this.secretStorageKeys.set(defaultKeyId, key.privateKey);
-      const stored = this.stored;
-      if (stored !== null && defaultKeyId !== null) {
+      const defaultKey = await client.secretStorage.getKey();
+      if (defaultKey === null || !(await client.secretStorage.checkKey(key.privateKey, defaultKey[1]))) {
+        throw new WorkerFailure("auth");
+      }
+      const defaultKeyId = defaultKey[0];
+      this.secretStorageKeys.set(defaultKeyId, key.privateKey);
+      if (this.stored !== null) {
         const updated: StoredSession = {
-          ...stored,
+          ...this.stored,
           secretStorageKeyId: defaultKeyId,
           secretStorageKey: toBase64(key.privateKey),
         };
         this.stored = updated;
         await writeSession(updated).catch(() => undefined);
       }
-      await this.activateBackup(client);
-      this.keyReady = await this.refreshGate();
+      try {
+        await this.activateBackup(client);
+      } catch {
+        // The one-time key is already valid even when backup setup fails.
+      }
+      this.keyReady = await this.refreshGate().catch(() => "needs-recovery" as const);
       this.emit({ type: "keys", payload: this.keyReady });
       const encoded = key.encodedPrivateKey ?? null;
       // A library error string must never be shown as the one-time key.

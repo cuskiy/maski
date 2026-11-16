@@ -25,10 +25,14 @@ const types: Record<string, string> = {
 
 export interface ServeOptions {
   readonly reload?: boolean;
+  readonly port?: number;
+  readonly host?: string;
 }
 
 export interface Served {
   readonly notify: () => void;
+  readonly port: number;
+  readonly close: () => Promise<void>;
 }
 
 export function serve(options: ServeOptions = {}): Served {
@@ -91,13 +95,25 @@ export function serve(options: ServeOptions = {}): Served {
     }
   });
 
-  server.listen(Number(process.env["PORT"] ?? "5172"), process.env["HOST"] ?? "127.0.0.1", () => {
-    process.stdout.write(
-      `maski static → http://${process.env["HOST"] ?? "127.0.0.1"}:${process.env["PORT"] ?? "5172"}/\n`,
-    );
+  const port = options.port ?? Number(process.env["PORT"] ?? "5172");
+  const host = options.host ?? process.env["HOST"] ?? "127.0.0.1";
+  server.listen(port, host, () => {
+    const address = server.address();
+    const actual = typeof address === "object" && address !== null ? address.port : port;
+    process.stdout.write(`maski static → http://${host}:${String(actual)}/\n`);
   });
 
-  return { notify };
+  return {
+    notify,
+    get port() {
+      const address = server.address();
+      return typeof address === "object" && address !== null ? address.port : port;
+    },
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  };
 }
 
 if (import.meta.main) serve();

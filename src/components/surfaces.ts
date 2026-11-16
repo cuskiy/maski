@@ -718,13 +718,6 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
       ${
         capabilities.resetIdentity
           ? html`<form class="settings-group setting-stack" method="post" data-surface="reset-identity">
-            ${field({
-              id: "reset-identity-password",
-              label: t(c, "auth.password"),
-              type: "password",
-              autocomplete: "current-password",
-              required: true,
-            })}
             <p class="field-hint">${t(c, "settings.resetIdentityConfirm")}</p>
             <button class="button-quiet is-danger" type="submit">${t(c, "settings.resetIdentity")}</button>
           </form>`

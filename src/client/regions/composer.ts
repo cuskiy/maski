@@ -797,6 +797,15 @@ export class Composer {
     this.hide(SURFACE.sticker);
   }
 
+  insertStickerText(text: string): void {
+    const input = this.input;
+    if (input === null || text === "") return;
+    insertAtCaret(input, document.createTextNode(text));
+    this.saveDraft();
+    input.focus();
+    this.hide(SURFACE.emoji);
+  }
+
   private stickerBlocked(): boolean {
     return !this.actions.capabilities.stickers || !this.store.read("stickersEnabled");
   }
@@ -1030,6 +1039,11 @@ export class Composer {
     }
     if (target.closest("[data-clear-reply]") !== null) {
       this.cancelReply();
+      return true;
+    }
+    const stickerText = target.closest<HTMLElement>("[data-sticker-text]");
+    if (stickerText !== null && stickerText.closest(`#${SURFACE.emoji}`) !== null) {
+      this.insertStickerText(stickerText.dataset["stickerText"] ?? "");
       return true;
     }
     const emoji = target.closest<HTMLElement>("[data-emoji]");

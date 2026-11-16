@@ -41,18 +41,6 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("login");
       return session;
     },
-    async loginToken(_input: CommandMap["loginToken"]) {
-      calls.push("loginToken");
-      return session;
-    },
-    async ssoUrl(_input: CommandMap["ssoUrl"]) {
-      calls.push("ssoUrl");
-      return "https://example.org/sso";
-    },
-    async register(_input: CommandMap["register"]) {
-      calls.push("register");
-      return { session, recoveryKey: null, key: "needs-recovery" };
-    },
     async logout() {
       calls.push("logout");
       return null;
@@ -280,7 +268,7 @@ void test("the worker dispatcher covers every command and preserves order", asyn
     ok: true,
     data: [],
   });
-  assert.deepEqual(await api.handle({ id: 11, type: "resetIdentity", payload: { password: "pw" } }), {
+  assert.deepEqual(await api.handle({ id: 11, type: "resetIdentity", payload: {} }), {
     id: 11,
     ok: true,
     data: null,

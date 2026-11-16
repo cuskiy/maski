@@ -18,6 +18,7 @@ import { surfaceBodyFor, mediaFilesBody } from "../components/surfaces.ts";
 import { isActiveSas, sasBody } from "../components/sas.ts";
 import { replaceHtml } from "./dom.ts";
 import { emojiPickerBody } from "../components/emoji.ts";
+import { stickerSections } from "../components/stickers.ts";
 import { icons } from "../components/icons.ts";
 import { CHAT_SURFACES } from "../core/surfaces.ts";
 import type { Actions } from "./actions.ts";
@@ -547,9 +548,18 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (body === null) return;
     if (id === SURFACE.emoji || id === SURFACE.reaction) {
       const reaction = id === SURFACE.reaction;
+      const extra =
+        !reaction && state().stickersEnabled && capabilities.stickers
+          ? stickerSections(c, state().session?.stickerPacks ?? [])
+          : html``;
       replaceHtml(
         body,
-        emojiPickerBody(c, reaction ? state().recentReactions : state().recentEmoji, reaction ? "reaction" : "emoji"),
+        emojiPickerBody(
+          c,
+          reaction ? state().recentReactions : state().recentEmoji,
+          reaction ? "reaction" : "emoji",
+          extra,
+        ),
       );
       body.scrollTop = 0;
       for (const jump of body.querySelectorAll<HTMLElement>("[data-emoji-jump]")) {
@@ -1388,13 +1398,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       });
     } else if (id === "reset-identity") {
       if (!capabilities.resetIdentity) return;
-      const input = form.querySelector<HTMLInputElement>("#reset-identity-password");
-      const password = input?.value ?? "";
-      if (input === null || password === "") return;
-      input.value = "";
       askConfirm(t(c, "settings.resetIdentityConfirm"), () => {
         pendingResetKey = true;
-        actions.resetIdentity(password);
+        actions.resetIdentity();
       });
     } else if (id === "join") {
       const input = form.querySelector<HTMLInputElement>("#join-field");

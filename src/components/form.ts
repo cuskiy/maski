@@ -38,13 +38,6 @@ export function submit(label: string): Html {
   return html`<button class="button-primary" type="submit">${label}</button>`;
 }
 
-export function links(items: ReadonlyArray<{ label: string; href: string }>, label: string): Html {
-  if (items.length === 0) return html``;
-  return html`<nav class="auth-links" aria-label="${label}">
-    ${items.map((item) => html`<a class="link" href="${item.href}">${item.label}</a>`)}
-  </nav>`;
-}
-
 export interface SelectOption {
   readonly value: string;
   readonly label: string;

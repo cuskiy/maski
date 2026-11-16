@@ -569,7 +569,7 @@ export const mockSession: SessionSummary = {
   stickerPacks: [
     {
       id: "user:legacy",
-      name: "My stickers",
+      name: "Demo stickers",
       images: [
         {
           shortcode: "demo",

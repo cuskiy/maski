@@ -6,7 +6,7 @@ export interface StoredSession {
   readonly deviceId: string;
   readonly accessToken: string;
   readonly refreshToken: string | null;
-  /** Worker-only secret-storage key material; never exposed through the port. */
+  /** Worker-only key material; loaded only for a one-tab post-unlock handoff. */
   readonly secretStorageKeyId?: string | null;
   readonly secretStorageKey?: string | null;
 }

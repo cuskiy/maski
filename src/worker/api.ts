@@ -32,12 +32,6 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
         return { id, ok: true, data: await session.start(command.payload) };
       case "login":
         return { id, ok: true, data: await session.login(command.payload) };
-      case "loginToken":
-        return { id, ok: true, data: await session.loginToken(command.payload) };
-      case "ssoUrl":
-        return { id, ok: true, data: await session.ssoUrl(command.payload) };
-      case "register":
-        return { id, ok: true, data: await session.register(command.payload) };
       case "logout":
         return { id, ok: true, data: await session.logout() };
       case "keyStatus":
@@ -108,7 +102,7 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
       case "sasCancel":
         return { id, ok: true, data: await session.sasCancel(command.payload.id) };
       case "resetIdentity":
-        return { id, ok: true, data: await session.resetIdentity(command.payload.password) };
+        return { id, ok: true, data: await session.resetIdentity() };
       case "react":
         return {
           id,

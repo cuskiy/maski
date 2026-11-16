@@ -10,7 +10,7 @@ export function start(): void {
   if (c === undefined) throw new Error("The page locale has no catalog");
 
   if (page === "chat") initChat(c, locale);
-  else if (page === "server" || page === "login" || page === "register" || page === "key") {
+  else if (page === "server" || page === "login" || page === "key") {
     initAuth(page, c, locale);
   }
 }

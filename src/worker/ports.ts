@@ -7,14 +7,11 @@ import type {
   SasState,
   SessionSummary,
 } from "../core/types.ts";
-import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
+import type { CommandMap, Event, KeyStatus, MediaReply, StartData } from "../protocol/index.ts";
 
 export interface SessionPort {
   start(input: CommandMap["start"]): Promise<StartData>;
   login(input: CommandMap["login"]): Promise<SessionSummary>;
-  loginToken(input: CommandMap["loginToken"]): Promise<SessionSummary>;
-  ssoUrl(input: CommandMap["ssoUrl"]): Promise<string>;
-  register(input: CommandMap["register"]): Promise<RegisterResult>;
   logout(): Promise<null>;
   keyStatus(): Promise<KeyStatus>;
   recover(input: CommandMap["recover"]): Promise<KeyStatus>;
@@ -45,7 +42,7 @@ export interface SessionPort {
   sasConfirm(id: string): Promise<null>;
   sasMismatch(id: string): Promise<null>;
   sasCancel(id: string): Promise<null>;
-  resetIdentity(password: string): Promise<string | null>;
+  resetIdentity(): Promise<string | null>;
   react(roomId: string, eventId: string, key: string): Promise<null>;
   edit(roomId: string, eventId: string, body: string, html: string | null): Promise<null>;
   redact(roomId: string, eventId: string): Promise<null>;

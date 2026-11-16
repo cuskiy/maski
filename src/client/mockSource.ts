@@ -468,7 +468,7 @@ export class MockSource implements ChatSource {
     });
   }
 
-  resetIdentity(_password: string): void {
+  resetIdentity(): void {
     this.emit("recoveryKey", {
       value: `maski-recovery-key-${crypto.randomUUID()}`,
       copy: true,

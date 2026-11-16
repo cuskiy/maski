@@ -22,9 +22,6 @@ import { parseEvent, parseReply, REPLY_DATA_GUARDS } from "../protocol/index.ts"
 const DEFAULT_TIMEOUT = 30_000;
 const TIMEOUTS: Partial<Record<CommandName, number>> = {
   login: 60_000,
-  loginToken: 60_000,
-  ssoUrl: 60_000,
-  register: 120_000,
   recover: 120_000,
   backupSetup: 120_000,
   resetIdentity: 120_000,
@@ -76,24 +73,12 @@ export class MatrixTransport {
     };
   }
 
-  async start(): Promise<StartData> {
-    return this.request("start", { wasmUrl: this.wasmUrl });
+  async start(unlocked = false): Promise<StartData> {
+    return this.request("start", { wasmUrl: this.wasmUrl, ...(unlocked ? { unlocked: true } : {}) });
   }
 
   async login(input: CommandMap["login"]): Promise<SessionSummary> {
     return this.request("login", input);
-  }
-
-  async loginToken(input: CommandMap["loginToken"]): Promise<SessionSummary> {
-    return this.request("loginToken", input);
-  }
-
-  async ssoUrl(input: CommandMap["ssoUrl"]): Promise<string> {
-    return this.request("ssoUrl", input);
-  }
-
-  async register(input: CommandMap["register"]): Promise<ReplyData["register"]> {
-    return this.request("register", input);
   }
 
   async logout(): Promise<null> {
@@ -224,8 +209,8 @@ export class MatrixTransport {
     return this.request("sasCancel", { id });
   }
 
-  resetIdentity(password: string): Promise<string | null> {
-    return this.request("resetIdentity", { password });
+  resetIdentity(): Promise<string | null> {
+    return this.request("resetIdentity", {});
   }
 
   react(roomId: string, eventId: string, key: string): Promise<null> {

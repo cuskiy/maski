@@ -6,7 +6,6 @@ import { base } from "../src/layouts/base.ts";
 import { chatView } from "../src/pages/chat.ts";
 import { keyView } from "../src/pages/key.ts";
 import { loginView } from "../src/pages/login.ts";
-import { registerView } from "../src/pages/register.ts";
 import { routerView } from "../src/pages/router.ts";
 import { serverView } from "../src/pages/server.ts";
 import { REGION, SURFACE } from "../src/core/regions.ts";
@@ -30,7 +29,6 @@ const views = {
   chat: chatView,
   server: serverView,
   login: loginView,
-  register: registerView,
   key: keyView,
 };
 
@@ -96,10 +94,10 @@ void test("chat context menus are manual popovers", () => {
 
 void test("generated locale pages carry their real addresses", () => {
   const emitted = renderPages(assets);
-  const register = emitted.find((page) => page.file === "zh-CN/register/index.html");
-  assert.ok(register !== undefined);
-  assert.match(register.content, /<link rel="canonical" href="\/zh-CN\/register\/"/u);
-  assert.match(register.content, /<link rel="alternate" hreflang="en" href="\/en\/register\/"/u);
+  const login = emitted.find((page) => page.file === "zh-CN/login/index.html");
+  assert.ok(login !== undefined);
+  assert.match(login.content, /<link rel="canonical" href="\/zh-CN\/login\/"/u);
+  assert.match(login.content, /<link rel="alternate" hreflang="en" href="\/en\/login\/"/u);
 });
 
 void test("surfaces have a close control and an accessible title", () => {

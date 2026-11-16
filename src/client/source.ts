@@ -149,7 +149,7 @@ export interface ChatSource {
   setRoomTag?(roomId: string, tag: "m.favourite" | "m.lowpriority", enabled: boolean): void;
   setNotification?(roomId: string, mode: RoomSummary["notification"]): void;
   resetRecoveryKey?(): void;
-  resetIdentity?(password: string): void;
+  resetIdentity?(): void;
   /** SAS starts own-user verification when `deviceId` is null; events carry every transition. */
   startSas?(deviceId: string | null): Promise<void>;
   acceptSas?(id: string): Promise<void>;

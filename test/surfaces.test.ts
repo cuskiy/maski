@@ -11,6 +11,7 @@ import { surfaceHead } from "../src/components/surface.ts";
 import { reactionsView } from "../src/components/timeline.ts";
 import { timeline } from "../src/components/timeline.ts";
 import { ALL_EMOJI, emojiPickerBody } from "../src/components/emoji.ts";
+import { stickerSections } from "../src/components/stickers.ts";
 import { LICENSES } from "../src/core/licenses.ts";
 import { en } from "../src/catalogs/en.ts";
 import { mockChatState } from "../src/core/mock.ts";
@@ -118,6 +119,29 @@ void test("the sticker picker renders resolved user packs", () => {
   assert.match(markup, /<img class="pack-image"/u);
 });
 
+void test("the emoji picker lists named packs and inserts sticker text", () => {
+  const markup = stickerSections(en, [
+    {
+      id: "user:stable",
+      name: "Favourites",
+      images: [
+        {
+          shortcode: "wave",
+          body: "Waving cat",
+          url: "blob:http://localhost/cat",
+          width: 512,
+          height: 512,
+          mime: "image/png",
+        },
+      ],
+    },
+  ]).value;
+  assert.match(markup, />Favourites</u);
+  assert.match(markup, /data-sticker-text="Waving cat"/u);
+  assert.match(markup, />Maski stickers</u);
+  assert.doesNotMatch(markup, /My stickers|Sticker pack 1/u);
+});
+
 void test("encrypted rooms keep sticker packs available with a warning", () => {
   const base = mockChatState();
   const state = {
@@ -202,7 +226,7 @@ void test("settings expose notification levels, keys, devices, reset and license
   assert.match(markup, /data-setting="desktop"/u);
   assert.match(markup, /data-settings-action="reset-key"/u);
   assert.match(markup, /data-surface="reset-identity"/u);
-  assert.match(markup, /id="reset-identity-password"/u);
+  assert.doesNotMatch(markup, /id="reset-identity-password"/u);
   assert.match(markup, /id="reset-key-dialog"/u);
   assert.match(markup, /commandfor="reset-key-dialog"/u);
   assert.match(markup, /data-reset-key-value/u);

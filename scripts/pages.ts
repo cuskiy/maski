@@ -6,7 +6,6 @@ import { base } from "../src/layouts/base.ts";
 import { chatView } from "../src/pages/chat.ts";
 import { keyView } from "../src/pages/key.ts";
 import { loginView } from "../src/pages/login.ts";
-import { registerView } from "../src/pages/register.ts";
 import { routerView } from "../src/pages/router.ts";
 import { serverView } from "../src/pages/server.ts";
 import type { Alternate, PageContext, PageView } from "../src/pages/kit.ts";
@@ -22,7 +21,6 @@ export const PAGES: readonly Page[] = [
   { id: "chat", path: "/", view: chatView },
   { id: "server", path: "/server/", view: serverView },
   { id: "login", path: "/login/", view: loginView },
-  { id: "register", path: "/register/", view: registerView },
   { id: "key", path: "/key/", view: keyView },
 ];
 

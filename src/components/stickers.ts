@@ -46,6 +46,50 @@ function packImageButtons(pack: StickerPack): Html {
   })}`;
 }
 
+function packLabel(c: Catalog, pack: StickerPack): string {
+  if (pack.name !== "") return pack.name;
+  return t(c, pack.id.startsWith("user:") ? "surface.sticker.userPack" : "surface.sticker.unnamed");
+}
+
+/** Sticker sections appended to the emoji picker; a click inserts text into the composer. */
+export function stickerSections(c: Catalog, packs: readonly StickerPack[]): Html {
+  return html`${packs.map(
+    (pack) => html`<section class="pack-section" data-emoji-section="sticker-${pack.id}">
+      <p class="pack-head">${packLabel(c, pack)}</p>
+      <div class="pack-grid">
+        ${pack.images.flatMap((image) => {
+          const url = safeMediaUrl(image.url, "sticker");
+          if (url === null) return [];
+          return [
+            html`<button
+              class="pack-item pack-image-item"
+              type="button"
+              data-sticker-text="${image.body}"
+              title="${image.body}"
+              aria-label="${image.body}"
+            >
+              <img class="pack-image" src="${url}" alt="" loading="lazy" decoding="async" />
+            </button>`,
+          ];
+        })}
+      </div>
+    </section>`,
+  )}
+  ${STICKER_PACKS.map(
+    (pack) => html`<section class="pack-section" data-emoji-section="sticker-${pack.key}">
+      <p class="pack-head">${t(c, pack.key)}</p>
+      <div class="pack-grid">
+        ${pack.stickers.map(
+          (sticker) =>
+            html`<button class="pack-item" type="button" data-emoji="${sticker}" aria-label="${sticker}">
+              ${sticker}
+            </button>`,
+        )}
+      </div>
+    </section>`,
+  )}`;
+}
+
 export function stickerPickerBody(
   c: Catalog,
   recent: readonly string[],
@@ -88,11 +132,7 @@ export function stickerPickerBody(
           tabindex="-1"
           data-sticker-tab="user-${String(index)}"
         >
-          ${
-            pack.name === ""
-              ? t(c, pack.id.startsWith("user:") ? "surface.sticker.userPack" : "surface.sticker.unnamed")
-              : pack.name
-          }
+          ${packLabel(c, pack)}
         </button>`,
       )}
       ${builtIn.map(

@@ -7,7 +7,7 @@ import { isActiveSas, sasBody } from "../components/sas.ts";
 import { config } from "../config.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { replaceHtml } from "./dom.ts";
-import { mockSession, setAccount, setGate, setServer } from "./session.ts";
+import { markUnlocked, mockSession, setAccount, setGate, setServer } from "./session.ts";
 import { keepStorage } from "./persist.ts";
 
 function navigate(path: string): void {
@@ -53,10 +53,6 @@ function initServer(c: Catalog, locale: LocaleId): void {
     setServer(server);
     navigate(`${localeRoot(locale)}login/`);
   });
-}
-
-function destination(gate: string, locale: LocaleId): string {
-  return gate === "ready" ? localeRoot(locale) : `${localeRoot(locale)}key/`;
 }
 
 function finishLogin(transport: MatrixTransport, session: { readonly userId: string }, locale: LocaleId): void {
@@ -112,153 +108,6 @@ function initLogin(c: Catalog, locale: LocaleId): void {
         });
     });
   }
-
-  const token = new URL(location.href).searchParams.get("loginToken");
-  if (token !== null) {
-    const clean = new URL(location.href);
-    clean.searchParams.delete("loginToken");
-    history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
-    const transport = keyTransport();
-    if (transport === null) {
-      if (passwordField !== null) {
-        passwordField.setCustomValidity(t(c, "auth.login.unavailable"));
-        passwordField.reportValidity();
-      }
-    } else {
-      void transport
-        .start()
-        .then(() =>
-          transport.loginToken({
-            homeserver: mockSession().server ?? config.homeserver.default,
-            token,
-          }),
-        )
-        .then((session) => finishLogin(transport, session, locale))
-        .catch((error: unknown) => {
-          transport.dispose();
-          if (passwordField !== null) {
-            passwordField.setCustomValidity(loginError(c, error));
-            passwordField.reportValidity();
-          }
-        });
-    }
-  }
-
-  const sso = document.querySelector<HTMLButtonElement>("[data-sso]");
-  sso?.addEventListener("click", () => {
-    const transport = keyTransport();
-    if (transport === null) {
-      if (passwordField !== null) {
-        passwordField.setCustomValidity(t(c, "auth.login.unavailable"));
-        passwordField.reportValidity();
-      }
-      return;
-    }
-    sso.disabled = true;
-    void transport
-      .start()
-      .then(() =>
-        transport.ssoUrl({
-          homeserver: mockSession().server ?? config.homeserver.default,
-          redirectUrl: `${location.origin}${localeRoot(locale)}login/`,
-        }),
-      )
-      .then((url) => location.assign(url))
-      .catch(() => {
-        transport.dispose();
-        sso.disabled = false;
-        if (passwordField !== null) {
-          passwordField.setCustomValidity(t(c, "auth.login.ssoFailed"));
-          passwordField.reportValidity();
-        }
-      });
-  });
-}
-
-function initRegister(c: Catalog, locale: LocaleId): void {
-  const registerForm = form("register");
-  if (registerForm === null) return;
-  const username = input("username");
-  const password = input("password");
-  const confirm = input("confirm");
-  const dialog = document.querySelector<HTMLDialogElement>("#register-key-dialog");
-  const keyValue = document.querySelector<HTMLElement>("[data-register-key]");
-  let currentKey: string | null = null;
-  let gate: string = "unknown";
-  for (const field of [username, password, confirm]) {
-    field?.addEventListener("input", () => field.setCustomValidity(""));
-  }
-  dialog?.addEventListener("cancel", (event) => event.preventDefault());
-  dialog?.querySelector("[data-register-copy]")?.addEventListener("click", () => {
-    if (currentKey !== null) void navigator.clipboard.writeText(currentKey).catch(() => undefined);
-  });
-  dialog?.querySelector("[data-register-download]")?.addEventListener("click", () => {
-    if (currentKey === null) return;
-    const url = URL.createObjectURL(new Blob([currentKey], { type: "text/plain" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "maski-recovery-key.txt";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  });
-  dialog?.addEventListener("close", () => {
-    if (currentKey !== null) navigate(destination(gate, locale));
-  });
-  dialog?.querySelector("[data-register-continue]")?.addEventListener("click", () => {
-    dialog.close();
-  });
-
-  registerForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (username === null || password === null || confirm === null || !registerForm.reportValidity()) return;
-    if (password.value !== confirm.value) {
-      confirm.setCustomValidity(t(c, "auth.register.mismatch"));
-      confirm.reportValidity();
-      return;
-    }
-    confirm.setCustomValidity("");
-    const submit = registerForm.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (submit !== null) submit.disabled = true;
-    const transport = keyTransport();
-    if (transport === null) {
-      confirm.setCustomValidity(t(c, "auth.register.failed"));
-      confirm.reportValidity();
-      if (submit !== null) submit.disabled = false;
-      return;
-    }
-    void transport
-      .start()
-      .then(() =>
-        transport.register({
-          homeserver: mockSession().server ?? config.homeserver.default,
-          username: username.value.trim(),
-          password: password.value,
-        }),
-      )
-      .then((result) => {
-        setAccount(result.session.userId);
-        setGate(result.key);
-        gate = result.key;
-        if (result.recoveryKey === null || dialog === null || keyValue === null) {
-          transport.dispose();
-          navigate(destination(result.key, locale));
-          return;
-        }
-        currentKey = result.recoveryKey;
-        keyValue.textContent = result.recoveryKey;
-        dialog.showModal();
-      })
-      .catch((error: unknown) => {
-        transport.dispose();
-        confirm.setCustomValidity(
-          error instanceof Error && error.message === "network"
-            ? t(c, "auth.login.network")
-            : t(c, "auth.register.failed"),
-        );
-        confirm.reportValidity();
-        if (submit !== null) submit.disabled = false;
-      });
-  });
 }
 
 function keyTransport(): MatrixTransport | null {
@@ -335,6 +184,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
     if (completed) return;
     completed = true;
     setGate("ready");
+    markUnlocked();
     transport.dispose();
     navigate(localeRoot(locale));
   };
@@ -475,8 +325,31 @@ function initKey(c: Catalog, locale: LocaleId): void {
   keyDialog?.addEventListener("close", () => {
     if (currentKey === null) return;
     resetPending = false;
-    transport.dispose();
-    navigate(localeRoot(locale));
+    const key = currentKey;
+    const unlockReset = (attempt: number): void => {
+      void transport
+        .recover({ recoveryKey: key, passphrase: "" })
+        .then((gate) => {
+          if (gate === "ready") {
+            completeKey();
+            return;
+          }
+          if (attempt < 3) {
+            showStatus(t(c, "auth.key.waiting"));
+            window.setTimeout(() => unlockReset(attempt + 1), 1500);
+            return;
+          }
+          showStatus(t(c, "auth.key.resetFailed"));
+        })
+        .catch(() => {
+          if (attempt < 3) {
+            window.setTimeout(() => unlockReset(attempt + 1), 1500);
+            return;
+          }
+          showStatus(t(c, "auth.key.resetFailed"));
+        });
+    };
+    unlockReset(0);
   });
   keyDialog?.querySelector("[data-key-reset-copy]")?.addEventListener("click", () => {
     if (currentKey !== null) void navigator.clipboard.writeText(currentKey).catch(() => undefined);
@@ -495,14 +368,12 @@ function initKey(c: Catalog, locale: LocaleId): void {
   });
   reset?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const password = input("reset-password");
-    if (password === null || !reset.reportValidity()) return;
-    password.setCustomValidity("");
+    if (!reset.reportValidity()) return;
     const submit = reset.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (submit !== null) submit.disabled = true;
     resetPending = true;
     void transport
-      .resetIdentity(password.value)
+      .resetIdentity()
       .then((key) => {
         if (key === null || keyDialog === null || keyValue === null) {
           resetPending = false;
@@ -516,8 +387,6 @@ function initKey(c: Catalog, locale: LocaleId): void {
       .catch(() => {
         resetPending = false;
         showStatus(t(c, "auth.key.resetFailed"));
-        password.setCustomValidity(t(c, "auth.key.resetFailed"));
-        password.reportValidity();
       })
       .finally(() => {
         if (submit !== null) submit.disabled = false;
@@ -526,12 +395,11 @@ function initKey(c: Catalog, locale: LocaleId): void {
 }
 
 export function initAuth(page: string, c: Catalog, locale: LocaleId): void {
-  if (page === "login" || page === "register") {
+  if (page === "login") {
     const target = document.querySelector<HTMLElement>("[data-auth-server]");
     if (target !== null) target.textContent = mockSession().server ?? config.homeserver.default;
   }
   if (page === "server") initServer(c, locale);
   else if (page === "login") initLogin(c, locale);
-  else if (page === "register") initRegister(c, locale);
   else if (page === "key") initKey(c, locale);
 }

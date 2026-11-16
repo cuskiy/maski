@@ -6,7 +6,7 @@ import type { ChatSource, ForwardSource, SourceEvent, SourceEvents } from "./sou
 import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { localeForPath, localeRoot } from "../core/locales.ts";
-import { clearAccount, mockSession, setGate } from "./session.ts";
+import { clearAccount, mockSession, setGate, takeUnlocked } from "./session.ts";
 import { keepStorage } from "./persist.ts";
 
 function loginPath(): string {
@@ -67,7 +67,8 @@ export class WorkerSource implements ChatSource {
   }
 
   start(): void {
-    void this.transport.start().then(
+    const unlocked = takeUnlocked();
+    void this.transport.start(unlocked).then(
       (data) => {
         if (data.session === null) {
           clearAccount();
@@ -258,9 +259,9 @@ export class WorkerSource implements ChatSource {
     void this.transport.backupSetup().catch(() => undefined);
   }
 
-  resetIdentity(password: string): void {
+  resetIdentity(): void {
     void this.transport
-      .resetIdentity(password)
+      .resetIdentity()
       .then((value) => {
         if (value !== null) this.emit("recoveryKey", { value, copy: true, download: true });
       })
