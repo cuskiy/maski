@@ -797,18 +797,13 @@ export class Composer {
     this.hide(SURFACE.sticker);
   }
 
-  private stickerBlocked(roomId: string): boolean {
-    if (!this.actions.capabilities.stickers || !this.store.read("stickersEnabled")) return true;
-    if (this.store.read("rooms").find((room) => room.roomId === roomId)?.encryption === "encrypted") {
-      this.showMediaError();
-      return true;
-    }
-    return false;
+  private stickerBlocked(): boolean {
+    return !this.actions.capabilities.stickers || !this.store.read("stickersEnabled");
   }
 
   async sendSticker(sticker: string): Promise<void> {
     const roomId = this.roomId;
-    if (sticker === "" || roomId === null || this.sending || this.stickerBlocked(roomId)) return;
+    if (sticker === "" || roomId === null || this.sending || this.stickerBlocked()) return;
     this.hide(SURFACE.sticker);
     this.setBusy(true);
     this.clearError();
@@ -825,7 +820,7 @@ export class Composer {
 
   async sendPackSticker(packId: string, shortcode: string): Promise<void> {
     const roomId = this.roomId;
-    if (packId === "" || shortcode === "" || roomId === null || this.sending || this.stickerBlocked(roomId)) {
+    if (packId === "" || shortcode === "" || roomId === null || this.sending || this.stickerBlocked()) {
       return;
     }
     this.hide(SURFACE.sticker);

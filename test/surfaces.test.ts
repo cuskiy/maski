@@ -118,6 +118,21 @@ void test("the sticker picker renders resolved user packs", () => {
   assert.match(markup, /<img class="pack-image"/u);
 });
 
+void test("encrypted rooms keep sticker packs available with a warning", () => {
+  const base = mockChatState();
+  const state = {
+    ...base,
+    roomId: "design",
+    rooms: base.rooms.map((room) =>
+      room.roomId === "design" ? Object.assign({}, room, { encryption: "encrypted" as const }) : room,
+    ),
+  };
+  const markup = surfaceBodyFor(en, SURFACE.sticker, state).value;
+  assert.match(markup, /Sticker images are not end-to-end encrypted/u);
+  assert.match(markup, /data-sticker-tab="surface.sticker.pack1"/u);
+  assert.match(markup, /data-sticker="👋"/u);
+});
+
 void test("the sticker picker includes every emoji and the recent stickers", () => {
   const state = {
     ...emptyChatState(),

@@ -52,19 +52,18 @@ export function stickerPickerBody(
   packs: readonly StickerPack[] = [],
   encryptedRoom = false,
 ): Html {
-  const recents = encryptedRoom ? [] : recent.filter(Boolean).slice(0, 6);
-  const visiblePacks = encryptedRoom ? [] : packs;
-  const builtIn = encryptedRoom ? [] : STICKER_PACKS;
+  const recents = recent.filter(Boolean).slice(0, 6);
+  const visiblePacks = packs;
+  const builtIn = STICKER_PACKS;
   return html`<div class="sticker-picker" data-sticker-picker>
+    ${encryptedRoom ? html`<p class="field-hint sticker-note">${t(c, "surface.sticker.encrypted")}</p>` : html``}
     ${
-      encryptedRoom
-        ? html`<p class="field-hint sticker-note">${t(c, "surface.sticker.encrypted")}</p>`
-        : recents.length === 0
-          ? html``
-          : html`<section class="sticker-recents" aria-label="${t(c, "surface.sticker.recent")}">
-              <p class="pack-head">${t(c, "surface.sticker.recent")}</p>
-              <div class="pack-grid sticker-recent-grid">${stickerButtons(recents)}</div>
-            </section>`
+      recents.length === 0
+        ? html``
+        : html`<section class="sticker-recents" aria-label="${t(c, "surface.sticker.recent")}">
+            <p class="pack-head">${t(c, "surface.sticker.recent")}</p>
+            <div class="pack-grid sticker-recent-grid">${stickerButtons(recents)}</div>
+          </section>`
     }
     <nav class="sticker-tabs" role="tablist" aria-label="${t(c, "surface.sticker.packs")}">
       <button

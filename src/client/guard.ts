@@ -73,7 +73,7 @@ function run(): void {
       location.replace(`${root}login/`);
       return;
     }
-    if (session.gate === "ready") location.replace(root);
+    // The cached gate is only a paint hint. The worker must decide whether this session has a key.
     return;
   }
 

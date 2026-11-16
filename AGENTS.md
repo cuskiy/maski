@@ -1260,8 +1260,8 @@ Measured on 2026-11-16 on the working tree with user image packs, mentions and t
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **204 tests**, 11 generated pages, 355 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.7 KiB, client 322.4 KiB, matrix worker 1.26 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **205 tests**, 11 generated pages, 353 catalog keys, 2 languages.
+- Build sizes: stylesheet 84.7 KiB, client 322.0 KiB, matrix worker 1.27 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass; the client
   ceiling is 336 KiB by the user's 2026-11-16 decision.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
@@ -1283,7 +1283,9 @@ old commits are evidence, not status.
   a browser; avatar resolution also waits on a real mxc avatar. The pack parser follows the official
   `m.room.image_pack` + `m.image_pack.rooms` model with the legacy `im.ponies` fallbacks and usage
   filtering. A pack send goes through the worker-owned outbox and sends the original mxc URI; only
-  display blob URLs cross to the main thread, never the pack mxc URI or image bytes.
+  display blob URLs cross to the main thread, never the pack mxc URI or image bytes. Chromium also
+  verified the real-session key page keeps its recovery form and has no Open-chat control, and that an
+  encrypted review room shows the packs with the unencrypted-media warning and sends a selected sticker.
 - Chromium measured a 10-room cached start at 57 ms for the worker `start` reply and 86 ms to the
   first navigation row; crypto continued in the background. The test account had no stored events, so
   message-window first paint was not measured.
@@ -1300,8 +1302,9 @@ old commits are evidence, not status.
   send uses `sendSticker` with the pack id and shortcode, so the worker sends the original mxc URI and
   info without an upload. The built-in emoji demo pack still rasterizes a 512×512 PNG in the client and
   uses `sendMedia`; picker emoji does not enter the composer. Settings has a sticker-pack toggle and the
-  built-in pack; disabling hides the sticker button. Encrypted rooms expose only the emoji panel because
-  image-pack media is unencrypted.
+  built-in pack; disabling hides the sticker button. Encrypted rooms still expose packs with a visible
+  warning: the `m.sticker` event is encrypted by the room, but the referenced image is not; the worker
+  uploads built-in sticker bytes as plain media rather than pretending to seal them.
 - Send appends the worker-visible row immediately with a sending spinner; the worker outbox echo replaces
   it and a failure marks it failed/retryable. Edit and reaction update the visible row immediately and
   restore it on a typed failure; redact shows the tombstone immediately and restores on failure. Mark-read
@@ -1332,7 +1335,9 @@ old commits are evidence, not status.
   status/setup is worker-owned (`resetKeyBackup` + `checkKeyBackupAndEnable`) and emits version/trust/
   matches/enabled plus a typed failure; the settings button reflects it. Device sign-out remains absent.
   The SAS messages follow `spec/content/client-server-api/modules/end_to_end_encryption.md:671` and
-  `:827`; backup follows the key-backup section of the same module.
+  `:827`; backup follows the key-backup section of the same module. The accepted secret-storage key is
+  persisted only in the worker's session database, tied to that account and device; startup validates it
+  against secret storage before `ready`, loads the backup key, and retries cached undecryptable rows.
 - The shell service worker is written at `/service-worker.js` with the hashed manifest inlined: install
   precaches the 11 generated pages and 9 shell assets, navigation is cache-first with background
   revalidation, and `/sync`, media, API, avatar, token and account responses never enter the cache. A real
@@ -1363,11 +1368,14 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
      imports cross-signing and signs this device. SAS is a worker state machine for own-user and per-device
      verification, including incoming and post-restart adoption, with confirm/mismatch/cancel and a
      projected state; the key page and settings device rows drive it. The gate is recomputed from crypto
-     device events and SAS completion, never by the UI. `keyStatus` waits for the background startup;
-     `unknown` locks, and only a cached `ready` hint may paint chat before verification. The device list
-     is read-only and verification state comes from `getDeviceVerificationStatus(...).isVerified()`.
-     Backup status/setup is wired; failures are surfaced and one-time keys are shown at registration and
-     gate reset. A reset keeps the key page open until the one-time key dialog closes.
+     device events and SAS completion, never by the UI. Login always lands on the key page; an accepted
+     key is persisted only in the worker session record and is validated against secret storage before
+     `ready`; the key page then enters chat automatically, with no extra Open-chat control. A cached
+     `ready` hint only routes; the chat worker recomputes and redirects when the key is absent. Startup
+     loads the backup key and retries cached undecryptable rows. The device list is read-only and
+     verification state comes from `getDeviceVerificationStatus(...).isVerified()`. Backup status/setup
+     is wired; failures are surfaced and one-time keys are shown at registration and gate reset. A reset
+     keeps the key page open until the one-time key dialog closes.
    - Ruled out: a local key flag, `setKeyReady`, fake unlock/register, a wrong KDF, treating the cached
      gate hint as authority, sending request/verifier objects over the port, and resetting the gate from
      the SAS UI. All were deleted or never added.
@@ -1471,8 +1479,9 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
     - Known: stable `m.room.image_pack` takes precedence per room/state key over
       `im.ponies.room_emotes`; stable `m.image_pack.rooms` takes precedence over legacy
       `im.ponies.emote_rooms`; image `usage` filters `sticker` versus `emoticon`; media resolves to
-      verified `blob:` URLs. Packs are hidden in encrypted rooms because image-pack media is
-      unencrypted. The client ceiling is 336 KiB at the user's request; current use is below 323 KiB.
+      verified `blob:` URLs. Packs remain available in encrypted rooms with a visible warning because the
+      event is encrypted but the image-pack media is not. The client ceiling is 336 KiB at the user's
+      request; current use is below 323 KiB.
     - Ruled out: deriving packs from the visible message window, putting mxc URLs on the main
       thread, treating an emoji sticker as an image pack, or reading a non-spec user account-data pack.
     - Next: traverse the canonical space hierarchy with a depth/cycle bound, then add custom emote

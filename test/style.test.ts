@@ -175,6 +175,7 @@ void test("media previews stay compact and the viewer can zoom", () => {
   assert.match(css, /\.viewer-zoom\.is-zoomed\s*\{/u);
   assert.match(css, /\.media-footer\s*\{[^}]*position:\s*absolute/u);
   assert.match(css, /\.media-footer \.bubble-meta\s*\{[^}]*var\(--media-watermark-bg\)/u);
+  assert.match(css, /\.media-element\s*\{[^}]*object-fit:\s*contain/u);
   assert.match(css, /\.reactions\s*\{[^}]*grid-row:\s*2/u);
   assert.match(css, /\.tray-item\.has-thumb \.tray-remove\s*\{[^}]*position:\s*absolute/u);
   assert.match(css, /#surface-viewer \.surface-close:hover,[\s\S]*?background:\s*color-mix\(/u);

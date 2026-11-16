@@ -62,9 +62,9 @@ function destination(gate: string, locale: LocaleId): string {
 function finishLogin(transport: MatrixTransport, session: { readonly userId: string }, locale: LocaleId): void {
   setAccount(session.userId);
   void keepStorage();
-  const cached = mockSession().gate;
   transport.dispose();
-  navigate(destination(cached, locale));
+  // The worker just started, so it does not hold a secret-storage key yet.
+  navigate(`${localeRoot(locale)}key/`);
 }
 
 function loginError(c: Catalog, error: unknown): string {
@@ -290,7 +290,6 @@ function initKey(c: Catalog, locale: LocaleId): void {
 
   let resetPending = false;
   const verifyButton = document.querySelector<HTMLButtonElement>("[data-key-verify]");
-  const continueButton = document.querySelector<HTMLButtonElement>("[data-key-continue]");
   const sasDialog = document.querySelector<HTMLDialogElement>("#key-sas-dialog");
   const sasRegion = document.querySelector<HTMLElement>('[data-region="key-sas-dialog-body"]');
   let sas: SasState | null = null;
@@ -329,20 +328,16 @@ function initKey(c: Catalog, locale: LocaleId): void {
   const revealVerify = (gate: string): void => {
     if (verifyButton === null) return;
     verifyButton.hidden = gate !== "needs-verification";
-    if (continueButton !== null) continueButton.hidden = true;
   };
 
-  const showReady = (): void => {
+  let completed = false;
+  const completeKey = (): void => {
+    if (completed) return;
+    completed = true;
     setGate("ready");
-    if (verifyButton !== null) verifyButton.hidden = true;
-    if (continueButton !== null) continueButton.hidden = false;
-    showStatus(t(c, "auth.key.ready"));
-  };
-
-  continueButton?.addEventListener("click", () => {
     transport.dispose();
     navigate(localeRoot(locale));
-  });
+  };
 
   transport.onEvent((event) => {
     if (event.type === "sas") {
@@ -362,7 +357,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
     revealVerify(event.payload);
     if (event.payload === "ready") {
       if (resetPending) return;
-      showReady();
+      completeKey();
       return;
     }
     showStatus(keyStatusText(c, event.payload));
@@ -419,7 +414,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
         setGate(gate);
         revealVerify(gate);
         if (gate === "ready") {
-          showReady();
+          completeKey();
           return;
         }
         showStatus(keyStatusText(c, gate));
@@ -455,7 +450,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
         setGate(gate);
         revealVerify(gate);
         if (gate === "ready") {
-          showReady();
+          completeKey();
           return;
         }
         showStatus(keyStatusText(c, gate) ?? t(c, "auth.key.invalid"));

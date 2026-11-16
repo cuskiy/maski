@@ -148,6 +148,7 @@ void test("the key lock status is outside the hidden form container", () => {
   const paths = page.content.indexOf("data-key-paths");
   assert.ok(status >= 0 && paths >= 0);
   assert.ok(status < paths, "the status would be hidden with the forms");
+  assert.doesNotMatch(page.content, /data-key-continue|Open chat/u);
 });
 
 void test("login offers a change-server link without leaving the form", () => {

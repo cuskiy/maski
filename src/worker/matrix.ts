@@ -60,7 +60,7 @@ import {
 } from "./outbox.ts";
 import type { SessionPort } from "./ports.ts";
 import { buildMediaContent, MAX_UPLOAD_BYTES, prepareUpload, type MediaContent } from "./mediaFormat.ts";
-import { encryptAttachment, encryptedFile } from "./mediaCrypto.ts";
+import { encryptAttachment, encryptedFile, fromBase64, toBase64 } from "./mediaCrypto.ts";
 import { createMediaResolver, type MediaResolver } from "./mediaResolver.ts";
 import type { EncryptedFileData, MediaReference, MediaSource } from "./mediaTypes.ts";
 import {
@@ -402,6 +402,8 @@ export class MatrixSession implements SessionPort {
   private roomsAgain = false;
   private readonly directoryPublished = new Map<string, boolean>();
   private readonly roomAvatars = new Map<string, string>();
+  private readonly senderAvatars = new Map<string, string | null>();
+  private readonly senderAvatarRequests = new Map<string, Promise<string | null>>();
   private readonly avatarRequests = new Set<string>();
   private avatarQueue: Promise<void> = Promise.resolve();
   private readonly reactionTransactions = new Map<string, string>();
@@ -419,7 +421,13 @@ export class MatrixSession implements SessionPort {
     this.wasmUrl = input.wasmUrl;
     const stored = await readSession();
     if (stored === null) {
+      this.secretStorageKeys.clear();
       return { session: null, connection: "offline", key: "missing" };
+    }
+    this.secretStorageKeys.clear();
+    if (stored.secretStorageKeyId !== null && stored.secretStorageKeyId !== undefined && stored.secretStorageKey) {
+      const key = fromBase64(stored.secretStorageKey);
+      if (key !== null && key.length === 32) this.secretStorageKeys.set(stored.secretStorageKeyId, key);
     }
     this.stored = stored;
     await this.acquireLock(stored.userId);
@@ -607,6 +615,17 @@ export class MatrixSession implements SessionPort {
     } finally {
       this.pendingSecret = null;
     }
+    const stored = this.stored;
+    if (stored !== null) {
+      const updated: StoredSession = {
+        ...stored,
+        secretStorageKeyId: keyTuple[0],
+        secretStorageKey: toBase64(candidate),
+      };
+      this.stored = updated;
+      await writeSession(updated).catch(() => undefined);
+    }
+    await this.activateBackup(client);
     this.keyReady = await this.refreshGate();
     this.emit({ type: "keys", payload: this.keyReady });
     return this.keyReady;
@@ -777,6 +796,17 @@ export class MatrixSession implements SessionPort {
       }
       const defaultKeyId = await client.secretStorage.getDefaultKeyId();
       if (defaultKeyId !== null) this.secretStorageKeys.set(defaultKeyId, key.privateKey);
+      const stored = this.stored;
+      if (stored !== null && defaultKeyId !== null) {
+        const updated: StoredSession = {
+          ...stored,
+          secretStorageKeyId: defaultKeyId,
+          secretStorageKey: toBase64(key.privateKey),
+        };
+        this.stored = updated;
+        await writeSession(updated).catch(() => undefined);
+      }
+      await this.activateBackup(client);
       this.keyReady = await this.refreshGate();
       this.emit({ type: "keys", payload: this.keyReady });
       const encoded = key.encodedPrivateKey ?? null;
@@ -803,6 +833,7 @@ export class MatrixSession implements SessionPort {
     void this.refreshStickerPacks().catch(() => undefined);
     const window = await this.windowState(roomId);
     if (window.messages.length === 0) await this.ingestRoom(roomId);
+    await this.retryDecryption(roomId);
     await this.persistBackfill(roomId);
     const current = await this.windowState(roomId);
     this.emit({
@@ -815,6 +846,7 @@ export class MatrixSession implements SessionPort {
         patch: false,
       },
     });
+    void this.refreshSenderAvatars(roomId, current.messages).catch(() => undefined);
     return null;
   }
 
@@ -858,6 +890,7 @@ export class MatrixSession implements SessionPort {
         patch: false,
       },
     });
+    void this.refreshSenderAvatars(roomId, page).catch(() => undefined);
     return null;
   }
 
@@ -920,10 +953,6 @@ export class MatrixSession implements SessionPort {
     if (room.getMyMembership() !== "join" || !room.currentState.maySendMessage(own)) {
       throw new WorkerFailure("unavailable");
     }
-    if (input.kind === "sticker" && (await this.encryptionEnabled(client, input.roomId))) {
-      // `m.sticker` has no encrypted `file`; sending one would leak an unencrypted image.
-      throw new WorkerFailure("unsupported");
-    }
     const prepared = await prepareUpload(input.file, input.name, input.kind, await this.uploadLimitFor(client));
     const local = await media.cacheLocal(prepared.blob, prepared.mime, prepared.width, prepared.height, prepared.hash);
     await account.writeMediaSource({
@@ -975,10 +1004,7 @@ export class MatrixSession implements SessionPort {
     if (room.getMyMembership() !== "join" || !room.currentState.maySendMessage(own)) {
       throw new WorkerFailure("unavailable");
     }
-    if (await this.encryptionEnabled(client, input.roomId)) {
-      // `m.sticker` carries an unencrypted mxc URI; never send one into an encrypted room.
-      throw new WorkerFailure("unsupported");
-    }
+    // The m.sticker event is encrypted by the room; the referenced image is not.
     const pack = this.packSources.get(`${input.packId}\u0000${input.shortcode}`);
     if (pack === undefined) throw new WorkerFailure("unavailable");
     const outbox = this.requireOutbox();
@@ -1573,6 +1599,80 @@ export class MatrixSession implements SessionPort {
     return images.length === 0 ? null : { id: pack.id, name: pack.name, images };
   }
 
+  private senderAvatar(room: Room, userId: string): Promise<string | null> {
+    const key = `${room.roomId}\n${userId}`;
+    if (this.senderAvatars.has(key)) return Promise.resolve(this.senderAvatars.get(key) ?? null);
+    const pending = this.senderAvatarRequests.get(key);
+    if (pending !== undefined) return pending;
+    const loading = this.loadSenderAvatar(room, userId, key).finally(() => {
+      this.senderAvatarRequests.delete(key);
+    });
+    this.senderAvatarRequests.set(key, loading);
+    return loading;
+  }
+
+  private async loadSenderAvatar(room: Room, userId: string, key: string): Promise<string | null> {
+    const media = this.mediaResolver;
+    const client = this.client;
+    if (media === null || client === null) return null;
+    const mxc = room.getMember(userId)?.getMxcAvatarUrl();
+    if (mxc === undefined) {
+      this.senderAvatars.set(key, null);
+      return null;
+    }
+    try {
+      const reply = await media.resolve(
+        client,
+        {
+          roomId: room.roomId,
+          messageId: `avatar:${room.roomId}:${userId}`,
+          kind: "image",
+          name: "",
+          caption: "",
+          width: null,
+          height: null,
+          size: null,
+          duration: null,
+          mime: null,
+          source: { kind: "mxc", url: mxc },
+          thumbnail: null,
+        },
+        "thumbnail",
+      );
+      this.senderAvatars.set(key, reply.url);
+      return reply.url;
+    } catch {
+      return null;
+    }
+  }
+
+  private async enrichAvatars(room: Room, rows: readonly MessageRow[]): Promise<readonly MessageRow[]> {
+    return Promise.all(
+      rows.map(async (row) => {
+        if (row.senderAvatar !== null && row.senderAvatar !== undefined) return row;
+        const avatar = await this.senderAvatar(room, row.sender);
+        return avatar === null ? row : { ...row, senderAvatar: avatar };
+      }),
+    );
+  }
+
+  private async refreshSenderAvatars(roomId: string, rows: readonly MessageRow[]): Promise<void> {
+    const room = this.client?.getRoom(roomId);
+    if (room === null || room === undefined) return;
+    const candidates = rows.filter((row) => row.eventId !== null && row.senderAvatar === null);
+    const enriched = await this.enrichAvatars(room, candidates);
+    const updates = enriched.filter((row) => row.senderAvatar !== null);
+    if (updates.length === 0) return;
+    const account = this.requireAccount();
+    for (const row of updates) await account.writeEvent(row);
+    if (this.activeRoomId === roomId) {
+      this.emit({
+        type: "window",
+        payload: { roomId, messages: updates, hasOlder: false, older: false, patch: true },
+      });
+    }
+  }
+
   private async refreshAccountAvatar(): Promise<void> {
     const client = this.client;
     const stored = this.stored;
@@ -1688,6 +1788,21 @@ export class MatrixSession implements SessionPort {
     this.emit({ type: "session", payload: summary(client, stored, packs, this.accountAvatar) });
   }
 
+  private async activateBackup(client: MatrixClient): Promise<void> {
+    const crypto = client.getCrypto();
+    if (crypto === undefined) return;
+    try {
+      await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+    } catch {
+      // No backup, or the backup key is not in secret storage; new sessions still decrypt.
+    }
+    try {
+      await crypto.checkKeyBackupAndEnable();
+    } catch {
+      // A backup failure must not turn an accepted recovery key into a gate failure.
+    }
+  }
+
   private async refreshGate(): Promise<KeyStatus> {
     const client = this.client;
     const userId = client?.getUserId();
@@ -1702,6 +1817,23 @@ export class MatrixSession implements SessionPort {
       deviceId === undefined
     ) {
       return "unknown";
+    }
+    // Secret-storage metadata can be ready while this worker has no key, which makes old
+    // room keys undecryptable. A gate that cannot decrypt is not ready.
+    if (this.secretStorageKeys.size === 0) return "needs-recovery";
+    const keyTuple = await client.secretStorage.getKey();
+    const key = keyTuple === null ? undefined : this.secretStorageKeys.get(keyTuple[0]);
+    let matches = false;
+    if (key !== undefined && keyTuple !== null) {
+      try {
+        matches = await client.secretStorage.checkKey(key, keyTuple[1]);
+      } catch {
+        matches = false;
+      }
+    }
+    if (!matches) {
+      this.secretStorageKeys.clear();
+      return "needs-recovery";
     }
     const secretStorage = await crypto.isSecretStorageReady();
     const status = await crypto.getDeviceVerificationStatus(userId, deviceId);
@@ -1881,11 +2013,13 @@ export class MatrixSession implements SessionPort {
     const media = record.media;
     if (media === null) throw new WorkerFailure("unavailable");
     let source: MediaReference;
-    if (await this.encryptionEnabled(client, record.roomId)) {
+    if (media.kind !== "sticker" && (await this.encryptionEnabled(client, record.roomId))) {
       const sealed = await encryptAttachment(media.blob);
       const url = await uploadBlob(client, sealed.ciphertext, "application/octet-stream");
       source = { kind: "encrypted", file: encryptedFile(url, sealed) };
     } else {
+      // Image-pack media is not encrypted. The m.sticker event itself is still encrypted
+      // by the room, but the image remains visible to the homeserver.
       source = { kind: "mxc", url: await uploadBlob(client, media.blob, media.mime) };
     }
     await this.recordUploadSource(record, source);
@@ -1954,6 +2088,7 @@ export class MatrixSession implements SessionPort {
         patch: false,
       },
     });
+    void this.refreshSenderAvatars(roomId, window.messages).catch(() => undefined);
   }
 
   private async windowState(roomId: string): Promise<{ messages: readonly MessageRow[]; hasOlder: boolean }> {
@@ -2228,6 +2363,25 @@ export class MatrixSession implements SessionPort {
     await this.refreshEvent(room, targetId);
   }
 
+  private async retryDecryption(roomId: string | null): Promise<void> {
+    const client = this.client;
+    if (client === null || roomId === null) return;
+    const room = client.getRoom(roomId);
+    const account = this.account;
+    if (room === null || account === null) return;
+    const rows = await account.readLatest(roomId, WINDOW_LIMIT);
+    for (const row of rows) {
+      if (row.eventId === null || row.encryption.state !== "undecryptable") continue;
+      const event = room.findEventById(row.eventId);
+      if (event === undefined) continue;
+      try {
+        await client.decryptEventIfNeeded(event);
+      } catch {
+        // The row stays undecryptable and the next sync/room open retries it.
+      }
+    }
+  }
+
   private async refreshEvent(room: Room, eventId: string): Promise<void> {
     const event = room.findEventById(eventId);
     if (event === undefined) return;
@@ -2261,6 +2415,7 @@ export class MatrixSession implements SessionPort {
         },
       });
     }
+    void this.refreshSenderAvatars(room.roomId, [stored]).catch(() => undefined);
   }
 
   private async handleTimeline(event: MatrixEvent, room: Room, toStartOfTimeline: boolean): Promise<void> {
@@ -2285,6 +2440,9 @@ export class MatrixSession implements SessionPort {
           patch: true,
         },
       });
+    }
+    if (stored.length > 0) {
+      void this.refreshSenderAvatars(room.roomId, stored).catch(() => undefined);
     }
     this.scheduleRooms();
   }
@@ -2367,6 +2525,9 @@ export class MatrixSession implements SessionPort {
         void this.devices().catch(() => undefined);
         void this.refreshAccountAvatar().catch(() => undefined);
         void this.refreshStickerPacks().catch(() => undefined);
+        void this.activateBackup(client)
+          .then(() => this.retryDecryption(this.activeRoomId))
+          .catch(() => undefined);
         this.refreshBackup();
         this.emitInvites();
       }
@@ -2513,10 +2674,11 @@ export class MatrixSession implements SessionPort {
         : {
             refreshToken: stored.refreshToken,
             onTokenRefresh: (tokens: { readonly accessToken: string; readonly refreshToken?: string }) => {
+              const current = this.stored ?? stored;
               const next: StoredSession = {
-                ...stored,
+                ...current,
                 accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken ?? stored.refreshToken,
+                refreshToken: tokens.refreshToken ?? current.refreshToken,
               };
               this.stored = next;
               void writeSession(next).catch(() => undefined);
@@ -2581,8 +2743,12 @@ export class MatrixSession implements SessionPort {
     this.accountAvatar = null;
     this.stickerPacks = [];
     this.packSources.clear();
+    this.senderAvatars.clear();
+    this.senderAvatarRequests.clear();
     this.roomAvatars.clear();
     this.avatarRequests.clear();
+    this.pendingSecret = null;
+    this.secretStorageKeys.clear();
     const client = this.client;
     this.sas?.dispose();
     this.sas = null;
@@ -2617,6 +2783,8 @@ export class MatrixSession implements SessionPort {
     this.accountAvatar = null;
     this.stickerPacks = [];
     this.packSources.clear();
+    this.senderAvatars.clear();
+    this.senderAvatarRequests.clear();
     this.roomAvatars.clear();
     this.avatarRequests.clear();
     const prefix = this.cryptoPrefix;

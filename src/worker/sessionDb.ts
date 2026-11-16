@@ -6,6 +6,9 @@ export interface StoredSession {
   readonly deviceId: string;
   readonly accessToken: string;
   readonly refreshToken: string | null;
+  /** Worker-only secret-storage key material; never exposed through the port. */
+  readonly secretStorageKeyId?: string | null;
+  readonly secretStorageKey?: string | null;
 }
 
 const DB_NAME = "maski:matrix";
@@ -59,6 +62,8 @@ export async function readSession(): Promise<StoredSession | null> {
       deviceId: value["deviceId"],
       accessToken: value["accessToken"],
       refreshToken: typeof value["refreshToken"] === "string" ? value["refreshToken"] : null,
+      secretStorageKeyId: typeof value["secretStorageKeyId"] === "string" ? value["secretStorageKeyId"] : null,
+      secretStorageKey: typeof value["secretStorageKey"] === "string" ? value["secretStorageKey"] : null,
     };
   } catch {
     return null;

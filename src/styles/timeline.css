@@ -677,7 +677,7 @@
     inline-size: auto;
     max-inline-size: 100%;
     max-block-size: var(--media-max-block);
-    object-fit: cover;
+    object-fit: contain;
   }
 
   .media-element[data-media-image] {
