@@ -1298,8 +1298,9 @@ old commits are evidence, not status.
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM
   create, forward, member actions, `sendMedia`, `media`, read-only `devices`, `backupStatus`,
   `backupSetup` and SAS (`sasStart`, `sasAccept`, `sasConfirm`, `sasMismatch`, `sasCancel`).
-  Pure tests cover protocol shapes, reaction aggregation/removal, edit/redaction projection, search,
-  the mock patch path and the dispatcher.
+  Text delivery now computes the joined members named in the body and sends `m.mentions`; edit does the
+  same for newly added names. Pure tests cover protocol shapes, reaction aggregation/removal,
+  edit/redaction projection, search, the mock patch path and the dispatcher.
 - `PRODUCTION_CAPABILITIES` is true for media, search, react, edit, redact, forward, typing, memberAction,
   inviteUser, addRoom, leaveRoom, setRoomState, setRoomTag, setNotification, answerInvite, resetIdentity
   and backupSetup. It stays false for stickers, resetRecoveryKey, signOutDevice, signOutOthers and
@@ -1448,6 +1449,19 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Ruled out: treating a timeout as an empty result, a successful sign-out or a successful edit.
    - Next: extend the typed failure event to the remaining commands, render a retry in the member and
      action surfaces, and cover a forced rejection in the browser harness.
+
+10. **User image packs are not synced.**
+    - Symptom: the sticker picker offers only the built-in demo pack; custom packs stored in
+      `m.image_pack` or the legacy `im.ponies.user_emotes` account data never appear.
+    - Known: the spec defines user, room and space image packs; the client picker is still a
+      component fixture and the worker has no pack command or projection. The client bundle is
+      319.6 KiB of its 320 KiB budget, so this needs a budget decision or a real split of the
+      locale/surface bundles before a full picker can land.
+    - Ruled out: deriving packs from the visible message window, putting mxc URLs on the main
+      thread, or treating an emoji sticker as an image pack.
+    - Next: project stable and legacy account data in the worker, resolve pack media to verified
+      `blob:` URLs, warn that image-pack media is unencrypted, then add the picker with a browser
+      test and a budget decision recorded in this file.
 
 ## 6.5 Migration order
 

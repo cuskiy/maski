@@ -1549,6 +1549,9 @@ export class MatrixSession implements SessionPort {
           return response.event_id;
         }
         const msgtype = row.kind === "notice" ? MsgType.Notice : row.kind === "emote" ? MsgType.Emote : MsgType.Text;
+        const room = client.getRoom(row.roomId);
+        const ownUserId = client.getUserId();
+        const mentions = room === null || ownUserId === null ? [] : mentionedUserIds(room, ownUserId, row.body);
         const response = await client.sendMessage(
           row.roomId,
           {
@@ -1556,6 +1559,7 @@ export class MatrixSession implements SessionPort {
             body: row.body,
             ...(row.html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: row.html }),
             ...(record.replyTo === null ? {} : { "m.relates_to": { "m.in_reply_to": { event_id: record.replyTo } } }),
+            ...(mentions.length === 0 ? {} : { "m.mentions": { user_ids: mentions } }),
           },
           row.transactionId ?? undefined,
         );
