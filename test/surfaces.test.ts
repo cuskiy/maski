@@ -82,6 +82,40 @@ void test("the booted sticker picker is filled by the client, not the shell", ()
   assert.doesNotMatch(markup, /data-sticker=/u);
 });
 
+void test("the sticker picker renders resolved user packs", () => {
+  const state = {
+    ...emptyChatState(),
+    phase: "ready" as const,
+    session: {
+      userId: "@you:example.org",
+      displayName: "You",
+      avatar: null,
+      capabilities: { recoveryKey: false, backup: true, signOut: true, signOutOthers: true },
+      stickerPacks: [
+        {
+          id: "user:stable",
+          name: "Favourites",
+          images: [
+            {
+              shortcode: "wave",
+              body: "Waving cat",
+              url: "blob:http://localhost/cat",
+              width: 512,
+              height: 512,
+              mime: "image/png",
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const markup = surfaceBodyFor(en, SURFACE.sticker, state).value;
+  assert.match(markup, /data-sticker-tab="user-0"[\s\S]{0,100}>[\s\S]{0,30}Favourites/u);
+  assert.match(markup, /data-sticker-image="blob:http:\/\/localhost\/cat"/u);
+  assert.match(markup, /data-sticker-body="Waving cat"/u);
+  assert.match(markup, /<img class="pack-image"/u);
+});
+
 void test("the sticker picker includes every emoji and the recent stickers", () => {
   const state = {
     ...emptyChatState(),

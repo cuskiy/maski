@@ -136,11 +136,27 @@ export interface SectionState {
   readonly open: boolean;
 }
 
+export interface StickerImage {
+  readonly shortcode: string;
+  readonly body: string;
+  readonly url: string;
+  readonly width: number | null;
+  readonly height: number | null;
+  readonly mime: string | null;
+}
+
+export interface StickerPack {
+  readonly id: string;
+  readonly name: string;
+  readonly images: readonly StickerImage[];
+}
+
 export interface SessionSummary {
   readonly userId: string;
   readonly displayName: string;
   readonly avatar: string | null;
   readonly capabilities: SessionCapabilities;
+  readonly stickerPacks: readonly StickerPack[];
 }
 
 export interface SessionCapabilities {

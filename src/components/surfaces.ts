@@ -567,9 +567,9 @@ export function surfaceBodyFor(
         />`;
     case SURFACE.sticker:
       if (!capabilities.stickers) return html``;
-      return state.phase === "boot"
-        ? html`<div class="sticker-picker"></div>`
-        : stickerPickerBody(c, state.recentStickers);
+      if (state.phase === "boot") return html`<div class="sticker-picker"></div>`;
+      const encryptedRoom = state.rooms.find((room) => room.roomId === state.roomId)?.encryption === "encrypted";
+      return stickerPickerBody(c, state.recentStickers, state.session?.stickerPacks ?? [], encryptedRoom);
     case SURFACE.emoji:
       return html`<div class="emoji-picker" data-emoji-picker></div>`;
     case SURFACE.reaction:

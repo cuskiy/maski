@@ -12,6 +12,7 @@ const session: SessionSummary = {
   displayName: "Alice",
   avatar: null,
   capabilities: { recoveryKey: false, backup: false, signOut: true, signOutOthers: true },
+  stickerPacks: [],
 };
 
 const startData: StartData = { session: null, connection: "offline", key: "missing" };

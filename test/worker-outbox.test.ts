@@ -15,6 +15,7 @@ const SESSION: SessionSummary = {
   displayName: "Alice",
   avatar: null,
   capabilities: { recoveryKey: false, backup: false, signOut: true, signOutOthers: true },
+  stickerPacks: [],
 };
 const START: StartData = { session: null, connection: "offline", key: "missing" };
 

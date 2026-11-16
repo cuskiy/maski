@@ -38,9 +38,11 @@ import type {
   RoomSummary,
   SasState,
   SessionSummary,
+  StickerPack,
 } from "../core/types.ts";
 import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
+import { parseUserImagePacks, type ImagePackReference } from "./imagePacks.ts";
 import { AccountDatabase, type RoomRecord } from "./accountDb.ts";
 import { createOutbox, type Outbox, type OutboxEvent, type OutboxRecord, type UploadedMedia } from "./outbox.ts";
 import type { SessionPort } from "./ports.ts";
@@ -184,7 +186,11 @@ function accountKey(userId: string): string {
   return encodeURIComponent(userId);
 }
 
-function summary(client: MatrixClient | null, stored: StoredSession): SessionSummary {
+function summary(
+  client: MatrixClient | null,
+  stored: StoredSession,
+  stickerPacks: readonly StickerPack[] = [],
+): SessionSummary {
   const user = client?.getUser(stored.userId);
   return {
     userId: stored.userId,
@@ -196,6 +202,7 @@ function summary(client: MatrixClient | null, stored: StoredSession): SessionSum
       signOut: true,
       signOutOthers: true,
     },
+    stickerPacks,
   };
 }
 
@@ -363,6 +370,7 @@ export class MatrixSession implements SessionPort {
   private stored: StoredSession | null = null;
   private activeRoomId: string | null = null;
   private keyReady: KeyStatus = "unknown";
+  private stickerPacks: readonly StickerPack[] = [];
   private startTask: Promise<SessionSummary> | null = null;
   private syncReady = false;
   private sas: SasSessions | null = null;
@@ -1448,6 +1456,81 @@ export class MatrixSession implements SessionPort {
     await this.devices().catch(() => undefined);
   }
 
+  private accountDataContent(type: string): unknown {
+    const client = this.requireClient();
+    const read = Reflect.get(client, "getAccountData");
+    if (typeof read !== "function") return null;
+    const event: unknown = Reflect.apply(read, client, [type]);
+    if (event === null || typeof event !== "object") return null;
+    const getContent = Reflect.get(event, "getContent");
+    if (typeof getContent !== "function") return null;
+    return Reflect.apply(getContent, event, []);
+  }
+
+  private async resolveImagePack(
+    client: MatrixClient,
+    media: MediaResolver,
+    pack: ImagePackReference,
+  ): Promise<StickerPack | null> {
+    const images = (
+      await Promise.all(
+        pack.images.map(async (image) => {
+          const source: MediaSource = {
+            roomId: "",
+            messageId: `pack:${pack.id}:${image.shortcode}`,
+            kind: "sticker",
+            name: image.body,
+            caption: image.body,
+            width: image.width,
+            height: image.height,
+            size: image.size,
+            duration: null,
+            mime: image.mime,
+            source: { kind: "mxc", url: image.url },
+            thumbnail: null,
+          };
+          try {
+            const reply = await media.resolve(client, source, "thumbnail");
+            return {
+              shortcode: image.shortcode,
+              body: image.body,
+              url: reply.url,
+              width: reply.width,
+              height: reply.height,
+              mime: reply.mime,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((image) => image !== null);
+    return images.length === 0 ? null : { id: pack.id, name: pack.name, images };
+  }
+
+  private async refreshStickerPacks(): Promise<void> {
+    const client = this.client;
+    const stored = this.stored;
+    const media = this.mediaResolver;
+    if (client === null || stored === null || media === null) return;
+    const generation = this.generation;
+    let parsed: readonly ImagePackReference[];
+    try {
+      parsed = parseUserImagePacks(
+        this.accountDataContent("m.image_pack"),
+        this.accountDataContent("im.ponies.user_emotes"),
+      );
+    } catch {
+      return;
+    }
+    const packs = (await Promise.all(parsed.map((pack) => this.resolveImagePack(client, media, pack)))).filter(
+      (pack) => pack !== null,
+    );
+    if (generation !== this.generation) return;
+    this.stickerPacks = packs;
+    this.emit({ type: "session", payload: summary(client, stored, packs) });
+  }
+
   private async refreshGate(): Promise<KeyStatus> {
     const client = this.client;
     const userId = client?.getUserId();
@@ -1586,6 +1669,7 @@ export class MatrixSession implements SessionPort {
             url: null,
           },
         });
+        if (subscription.roomId === "") void this.refreshStickerPacks().catch(() => undefined);
       },
       now: () => Date.now(),
     });
@@ -2108,8 +2192,15 @@ export class MatrixSession implements SessionPort {
           this.emit({ type: "keys", payload: gate });
         });
         void this.devices().catch(() => undefined);
+        void this.refreshStickerPacks().catch(() => undefined);
         this.refreshBackup();
         this.emitInvites();
+      }
+    });
+    client.on(ClientEvent.AccountData, (event: MatrixEvent) => {
+      const type = event.getType();
+      if (type === "m.image_pack" || type === "im.ponies.user_emotes") {
+        void this.refreshStickerPacks().catch(() => undefined);
       }
     });
     client.on(RoomEvent.Timeline, (event: MatrixEvent, room: Room | undefined, toStart?: boolean) => {
@@ -2283,7 +2374,7 @@ export class MatrixSession implements SessionPort {
       threadSupport: false,
     });
     this.ensureGeneration(generation);
-    const session = summary(client, stored);
+    const session = summary(client, stored, this.stickerPacks);
     this.emit({ type: "session", payload: session });
     this.emit({ type: "keys", payload: this.keyReady });
     this.emit({ type: "connection", payload: "connecting" });
@@ -2307,6 +2398,7 @@ export class MatrixSession implements SessionPort {
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
+    this.stickerPacks = [];
     this.roomAvatars.clear();
     this.avatarRequests.clear();
     const client = this.client;
@@ -2340,6 +2432,7 @@ export class MatrixSession implements SessionPort {
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
+    this.stickerPacks = [];
     this.roomAvatars.clear();
     this.avatarRequests.clear();
     const prefix = this.cryptoPrefix;

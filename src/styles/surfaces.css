@@ -1274,6 +1274,28 @@
     font-size: clamp(2.25rem, 8vi, 3rem);
   }
 
+  #surface-sticker .pack-image-item {
+    padding: var(--space-1);
+    background: none;
+  }
+
+  #surface-sticker .pack-image-item:hover {
+    background: var(--card-hover-bg);
+  }
+
+  .pack-image {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: contain;
+  }
+
+  .sticker-note {
+    padding: var(--space-2);
+    color: var(--menu-muted);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+  }
+
   #surface-sticker .sticker-panel .pack-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

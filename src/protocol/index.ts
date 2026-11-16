@@ -26,6 +26,8 @@ import type {
   SasPhase,
   SasState,
   SessionSummary,
+  StickerImage,
+  StickerPack,
   UndecryptableReason,
 } from "../core/types.ts";
 import { isRecord } from "../lib/json.ts";
@@ -600,13 +602,33 @@ function isSessionCapabilities(value: unknown): value is SessionSummary["capabil
   );
 }
 
+function isStickerImage(value: unknown): value is StickerImage {
+  return (
+    isRecord(value) &&
+    isString(value["shortcode"]) &&
+    isString(value["body"]) &&
+    isString(value["url"]) &&
+    value["url"].startsWith("blob:") &&
+    isNumberOrNull(value["width"]) &&
+    isNumberOrNull(value["height"]) &&
+    isStringOrNull(value["mime"])
+  );
+}
+
+function isStickerPack(value: unknown): value is StickerPack {
+  return (
+    isRecord(value) && isString(value["id"]) && isString(value["name"]) && isArrayOf(value["images"], isStickerImage)
+  );
+}
+
 function isSessionSummary(value: unknown): value is SessionSummary {
   return (
     isRecord(value) &&
     isString(value["userId"]) &&
     isText(value["displayName"]) &&
     isStringOrNull(value["avatar"]) &&
-    isSessionCapabilities(value["capabilities"])
+    isSessionCapabilities(value["capabilities"]) &&
+    isArrayOf(value["stickerPacks"], isStickerPack)
   );
 }
 

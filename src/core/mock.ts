@@ -67,6 +67,7 @@ const rooms: readonly RoomSummary[] = [
     directoryPublished: true,
     aliases: ["#design:matrix.org"],
     creatorIds: [SELF, "@alice:matrix.org"],
+    encryption: "none",
     powerLevels: power(),
   }),
   room({
@@ -548,6 +549,13 @@ export function mockMessagesFor(roomId: string): readonly MessageRow[] {
   return messagesByRoom[roomId] ?? [];
 }
 
+const MOCK_STICKER_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const MOCK_STICKER_URL = URL.createObjectURL(
+  new Blob([Uint8Array.from(atob(MOCK_STICKER_PNG), (value) => value.charCodeAt(0))], {
+    type: "image/png",
+  }),
+);
+
 export const mockSession: SessionSummary = {
   userId: SELF,
   displayName: "You",
@@ -558,6 +566,22 @@ export const mockSession: SessionSummary = {
     signOut: true,
     signOutOthers: true,
   },
+  stickerPacks: [
+    {
+      id: "user:stable",
+      name: "My stickers",
+      images: [
+        {
+          shortcode: "demo",
+          body: "Demo sticker",
+          url: MOCK_STICKER_URL,
+          width: 1,
+          height: 1,
+          mime: "image/png",
+        },
+      ],
+    },
+  ],
 };
 
 export const mockDevices: readonly DeviceSession[] = [

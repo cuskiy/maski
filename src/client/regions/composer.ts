@@ -155,6 +155,13 @@ async function stickerFile(emoji: string): Promise<File> {
   return new File([blob], `${emoji}.png`, { type: "image/png" });
 }
 
+async function imageStickerFile(url: string, body: string): Promise<File> {
+  const response = await fetch(url, { credentials: "omit" });
+  if (!response.ok) throw new Error("sticker unavailable");
+  const blob = await response.blob();
+  return new File([blob], body === "" ? "sticker" : body, { type: blob.type === "" ? "image/png" : blob.type });
+}
+
 const markdownParser = new Marked({
   renderer: {
     html({ text }) {
@@ -797,17 +804,21 @@ export class Composer {
     this.hide(SURFACE.sticker);
   }
 
-  async sendSticker(sticker: string): Promise<void> {
+  async sendSticker(sticker: string, imageUrl = ""): Promise<void> {
     if (!this.actions.capabilities.stickers || !this.store.read("stickersEnabled")) return;
     const roomId = this.roomId;
     if (sticker === "" || roomId === null || this.sending) return;
+    if (this.store.read("rooms").find((room) => room.roomId === roomId)?.encryption === "encrypted") {
+      this.showMediaError();
+      return;
+    }
     this.hide(SURFACE.sticker);
     this.setBusy(true);
     this.clearError();
     try {
-      const file = await stickerFile(sticker);
+      const file = imageUrl === "" ? await stickerFile(sticker) : await imageStickerFile(imageUrl, sticker);
       await this.actions.sendMedia(roomId, file, "sticker", sticker, null, null);
-      if (this.roomId === roomId) this.actions.recordSticker(sticker);
+      if (this.roomId === roomId && imageUrl === "") this.actions.recordSticker(sticker);
     } catch {
       this.showMediaError();
     } finally {
@@ -1017,6 +1028,11 @@ export class Composer {
       const value = emoji.dataset["emoji"] ?? "";
       if (emoji.closest(`#${SURFACE.sticker}`) !== null) void this.sendSticker(value);
       else this.insertEmoji(value);
+      return true;
+    }
+    const stickerImage = target.closest<HTMLElement>("[data-sticker-image]");
+    if (stickerImage !== null) {
+      void this.sendSticker(stickerImage.dataset["stickerBody"] ?? "", stickerImage.dataset["stickerImage"] ?? "");
       return true;
     }
     const sticker = target.closest<HTMLElement>("[data-sticker]");

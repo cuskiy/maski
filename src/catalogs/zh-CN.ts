@@ -103,6 +103,7 @@ export const zhCN = {
   "surface.sticker.recent": "最近使用过的贴纸",
   "surface.sticker.packs": "贴纸包",
   "surface.sticker.pack1": "贴纸包 1",
+  "surface.sticker.encrypted": "贴纸不会被加密，因此不能发送到这个房间。",
   "surface.emoji": "表情",
   "surface.reaction": "回应",
   "surface.emoji.recent": "最近使用",

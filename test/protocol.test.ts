@@ -313,6 +313,35 @@ void test("the protocol parses SAS commands and rejects a malformed projection",
   assert.equal(REPLY_DATA_GUARDS.sasAccept("null"), false);
 });
 
+void test("session events carry validated sticker packs", () => {
+  const session = {
+    userId: "@alice:example.org",
+    displayName: "Alice",
+    avatar: null,
+    capabilities: { recoveryKey: false, backup: true, signOut: true, signOutOthers: true },
+    stickerPacks: [
+      {
+        id: "user:stable",
+        name: "Favourites",
+        images: [
+          {
+            shortcode: "wave",
+            body: "Waving cat",
+            url: "blob:http://localhost/cat",
+            width: 512,
+            height: 512,
+            mime: "image/png",
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(parseEvent({ type: "session", payload: session }), { type: "session", payload: session });
+  const remote = structuredClone(session);
+  remote.stickerPacks[0]!.images[0]!.url = "javascript:alert(1)";
+  assert.equal(parseEvent({ type: "session", payload: remote }), null);
+});
+
 void test("device events carry a list or a typed failure", () => {
   assert.deepEqual(parseEvent({ type: "devices", payload: { devices: [], error: null } }), {
     type: "devices",

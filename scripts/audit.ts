@@ -65,7 +65,7 @@ if (watermark === null) failures.push("the stylesheet has no generated watermark
 
 const budgetAssets: Array<{ readonly asset: string; readonly budget: number }> = [
   { asset: parsed.stylesheet, budget: 96 * 1024 },
-  { asset: parsed.client, budget: 320 * 1024 },
+  { asset: parsed.client, budget: 336 * 1024 },
   { asset: parsed.matrixWorker, budget: 1.5 * 1024 * 1024 },
   { asset: parsed.cryptoWasm, budget: 8.5 * 1024 * 1024 },
 ];

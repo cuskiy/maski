@@ -105,6 +105,7 @@ export const en = {
   "surface.sticker.recent": "Recently used stickers",
   "surface.sticker.packs": "Sticker packs",
   "surface.sticker.pack1": "Sticker pack 1",
+  "surface.sticker.encrypted": "Stickers are not encrypted, so they cannot be sent to this room.",
   "surface.emoji": "Emoji",
   "surface.reaction": "Reactions",
   "surface.emoji.recent": "Recent",

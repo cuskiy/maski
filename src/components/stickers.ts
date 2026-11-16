@@ -1,14 +1,16 @@
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
+import { safeMediaUrl } from "../lib/safeUrl.ts";
+import type { StickerPack } from "../core/types.ts";
 import { ALL_EMOJI, emojiButtons } from "./emoji.ts";
 
-export interface StickerPack {
+export interface BuiltInStickerPack {
   readonly key: CatalogKey;
   readonly stickers: readonly string[];
 }
 
-export const STICKER_PACKS: readonly StickerPack[] = [
+export const STICKER_PACKS: readonly BuiltInStickerPack[] = [
   {
     key: "surface.sticker.pack1",
     stickers: ["👋", "🎉", "🐱", "🌿", "✨", "🫡"],
@@ -24,16 +26,43 @@ function stickerButtons(stickers: readonly string[]): Html {
   )}`;
 }
 
-export function stickerPickerBody(c: Catalog, recent: readonly string[]): Html {
-  const recents = recent.filter(Boolean).slice(0, 6);
+function packImageButtons(pack: StickerPack): Html {
+  return html`${pack.images.flatMap((image) => {
+    const url = safeMediaUrl(image.url, "sticker");
+    if (url === null) return [];
+    return [
+      html`<button
+        class="pack-item pack-image-item"
+        type="button"
+        data-sticker-image="${url}"
+        data-sticker-body="${image.body}"
+        aria-label="${image.body}"
+      >
+        <img class="pack-image" src="${url}" alt="" loading="lazy" decoding="async" />
+      </button>`,
+    ];
+  })}`;
+}
+
+export function stickerPickerBody(
+  c: Catalog,
+  recent: readonly string[],
+  packs: readonly StickerPack[] = [],
+  encryptedRoom = false,
+): Html {
+  const recents = encryptedRoom ? [] : recent.filter(Boolean).slice(0, 6);
+  const visiblePacks = encryptedRoom ? [] : packs;
+  const builtIn = encryptedRoom ? [] : STICKER_PACKS;
   return html`<div class="sticker-picker" data-sticker-picker>
     ${
-      recents.length === 0
-        ? html``
-        : html`<section class="sticker-recents" aria-label="${t(c, "surface.sticker.recent")}">
-            <p class="pack-head">${t(c, "surface.sticker.recent")}</p>
-            <div class="pack-grid sticker-recent-grid">${stickerButtons(recents)}</div>
-          </section>`
+      encryptedRoom
+        ? html`<p class="field-hint sticker-note">${t(c, "surface.sticker.encrypted")}</p>`
+        : recents.length === 0
+          ? html``
+          : html`<section class="sticker-recents" aria-label="${t(c, "surface.sticker.recent")}">
+              <p class="pack-head">${t(c, "surface.sticker.recent")}</p>
+              <div class="pack-grid sticker-recent-grid">${stickerButtons(recents)}</div>
+            </section>`
     }
     <nav class="sticker-tabs" role="tablist" aria-label="${t(c, "surface.sticker.packs")}">
       <button
@@ -47,7 +76,21 @@ export function stickerPickerBody(c: Catalog, recent: readonly string[]): Html {
       >
         ${t(c, "surface.emoji")}
       </button>
-      ${STICKER_PACKS.map(
+      ${visiblePacks.map(
+        (pack, index) => html`<button
+          class="sticker-tab"
+          type="button"
+          role="tab"
+          id="sticker-tab-user-${String(index)}"
+          aria-controls="sticker-panel-user-${String(index)}"
+          aria-selected="false"
+          tabindex="-1"
+          data-sticker-tab="user-${String(index)}"
+        >
+          ${pack.name}
+        </button>`,
+      )}
+      ${builtIn.map(
         (pack) => html`<button
           class="sticker-tab"
           type="button"
@@ -72,7 +115,19 @@ export function stickerPickerBody(c: Catalog, recent: readonly string[]): Html {
       >
         <div class="pack-grid">${emojiButtons(ALL_EMOJI)}</div>
       </section>
-      ${STICKER_PACKS.map(
+      ${visiblePacks.map(
+        (pack, index) => html`<section
+          class="sticker-panel"
+          id="sticker-panel-user-${String(index)}"
+          role="tabpanel"
+          aria-labelledby="sticker-tab-user-${String(index)}"
+          data-sticker-panel="user-${String(index)}"
+          hidden
+        >
+          <div class="pack-grid">${packImageButtons(pack)}</div>
+        </section>`,
+      )}
+      ${builtIn.map(
         (pack) => html`<section
           class="sticker-panel"
           id="sticker-panel-${pack.key}"

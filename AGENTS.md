@@ -601,7 +601,8 @@ owning paragraph.
    cache, outbox and projection are opened only by the worker. The main thread owns UI preferences and
    the render store. Each fact has exactly one writer; the other side reads a typed projection.
 3. **CSP.** Production must deliver a response-header CSP from one policy builder. The allowlist is the
-   shell origin, the chosen homeserver origin and its websocket origin. `connect-src https:` and
+   shell origin, the chosen homeserver origin and its websocket origin. `connect-src` also admits local
+   `blob:` reads for worker-minted sticker bytes; it is not a network origin. `connect-src https:` and
    `wss:` wildcards are a migration defect. `img-src`/`media-src` allow only `'self'`, `blob:` and
    allowlisted raster `data:`; no remote `https:`. `frame-ancestors 'none'`, `base-uri 'none'`,
    `object-src 'none'`, `form-action 'self'`, `worker-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'`,
@@ -927,10 +928,12 @@ server also sends `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referr
 `Permissions-Policy`.
 
 Budgets are measured by the build and enforced by C6. Values in this contract are ceilings, not targets:
-client JS 320 KiB, stylesheet 96 KiB, matrix worker 1.5 MiB, crypto wasm 8.5 MiB, generated watermark
+client JS 336 KiB, stylesheet 96 KiB, matrix worker 1.5 MiB, crypto wasm 8.5 MiB, generated watermark
 96 KiB, no unbudgeted asset above 8 KiB. The build prints every size. A budget increase is a user
-decision, never a silent output of a refactor. Audit enforces client, stylesheet, worker, wasm and
-watermark and reports every measurement; the generated watermark is packed under its ceiling.
+decision, never a silent output of a refactor. The client ceiling changed from 320 to 336 KiB on
+2026-11-16 at the user's request so user image packs fit; the input ceiling is unchanged. Audit enforces
+client, stylesheet, worker, wasm and watermark and reports every measurement; the generated watermark is
+packed under its ceiling.
 
 ## 3.11 Testing
 
@@ -1253,13 +1256,14 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-15 on the working tree after `b01ca6f` plus SAS, backup and the current changes.
-This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
-old commits are evidence, not status.
+Measured on 2026-11-16 on the working tree after `968c587` plus user image packs, mentions and the
+current changes. This is the only current-status section; counts and claims in `advice.md`, `past/`,
+browser history and old commits are evidence, not status.
 
-- `npm run check` is green: **194 tests**, 11 generated pages, 352 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.4 KiB, client 319.6 KiB, matrix worker 1.25 MiB, crypto wasm 7.43 MiB,
-  watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass.
+- `npm run check` is green: **200 tests**, 11 generated pages, 353 catalog keys, 2 languages.
+- Build sizes: stylesheet 84.7 KiB, client 321.7 KiB, matrix worker 1.26 MiB, crypto wasm 7.43 MiB,
+  watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass; the client
+  ceiling is 336 KiB by the user's 2026-11-16 decision.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
   read markers, timeline reset, queued row before request, echo replacement, retry, discard and a
   non-retryable failed send. Media tests cover MIME sniffing/scriptable rejection, unencrypted/encrypted/
@@ -1273,7 +1277,9 @@ old commits are evidence, not status.
   room menu hides mark-read. A real send, SAS handshake, backup setup and a reload with a non-empty
   stored window were not re-run after the latest changes. Chromium also measured the app filling
   `innerHeight` at 1333x778 and 1778x1111, and the settings dialog now exposes the Stickers tab with
-  grouped security rows. The cached-room start was not re-run against the user's account.
+  grouped security rows. The cached-room start was not re-run against the user's account. User image
+  packs have pure parser/picker tests and the production CSP admits local `blob:` fetches, but no real
+  account-data pack has been resolved in a browser.
 - Chromium measured a 10-room cached start at 57 ms for the worker `start` reply and 86 ms to the
   first navigation row; crypto continued in the background. The test account had no stored events, so
   message-window first paint was not measured.
@@ -1450,18 +1456,17 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Next: extend the typed failure event to the remaining commands, render a retry in the member and
      action surfaces, and cover a forced rejection in the browser harness.
 
-10. **User image packs are not synced.**
-    - Symptom: the sticker picker offers only the built-in demo pack; custom packs stored in
-      `m.image_pack` or the legacy `im.ponies.user_emotes` account data never appear.
-    - Known: the spec defines user, room and space image packs; the client picker is still a
-      component fixture and the worker has no pack command or projection. The client bundle is
-      319.6 KiB of its 320 KiB budget, so this needs a budget decision or a real split of the
-      locale/surface bundles before a full picker can land.
+10. **Room and space image packs plus custom emotes are absent.**
+    - Symptom: the picker shows the account's own `m.image_pack` and legacy user pack, but packs
+      referenced by `m.image_pack.rooms`, packs defined in a room's `m.room.image_pack` state, and
+      space packs never appear. Custom emotes cannot be sent as inline `<img>` content.
+    - Known: user-pack account data is parsed in the worker, media is resolved to verified `blob:`
+      URLs, and the picker tabs are bounded. The client ceiling is 336 KiB at the user's request;
+      current use is below 322 KiB.
     - Ruled out: deriving packs from the visible message window, putting mxc URLs on the main
       thread, or treating an emoji sticker as an image pack.
-    - Next: project stable and legacy account data in the worker, resolve pack media to verified
-      `blob:` URLs, warn that image-pack media is unencrypted, then add the picker with a browser
-      test and a budget decision recorded in this file.
+    - Next: project `m.image_pack.rooms` and room/space state packs, add the unencrypted-media
+      warning and encrypted-room decision, then add custom emote composition with a browser test.
 
 ## 6.5 Migration order
 
