@@ -190,12 +190,13 @@ function summary(
   client: MatrixClient | null,
   stored: StoredSession,
   stickerPacks: readonly StickerPack[] = [],
+  accountAvatar: string | null = null,
 ): SessionSummary {
   const user = client?.getUser(stored.userId);
   return {
     userId: stored.userId,
     displayName: user?.displayName ?? stored.userId,
-    avatar: null,
+    avatar: accountAvatar,
     capabilities: {
       recoveryKey: false,
       backup: true,
@@ -370,6 +371,7 @@ export class MatrixSession implements SessionPort {
   private stored: StoredSession | null = null;
   private activeRoomId: string | null = null;
   private keyReady: KeyStatus = "unknown";
+  private accountAvatar: string | null = null;
   private stickerPacks: readonly StickerPack[] = [];
   private startTask: Promise<SessionSummary> | null = null;
   private syncReady = false;
@@ -425,12 +427,12 @@ export class MatrixSession implements SessionPort {
       .catch(() => {
         if (generation !== this.generation) return;
         this.emit({ type: "connection", payload: "offline" });
-        this.emit({ type: "session", payload: summary(null, stored) });
+        this.emit({ type: "session", payload: summary(null, stored, [], this.accountAvatar) });
       })
       .finally(() => {
         if (this.startTask === task) this.startTask = null;
       });
-    return { session: summary(null, stored), connection: "connecting", key: "unknown" };
+    return { session: summary(null, stored, [], this.accountAvatar), connection: "connecting", key: "unknown" };
   }
 
   async login(input: CommandMap["login"]): Promise<SessionSummary> {
@@ -1508,6 +1510,44 @@ export class MatrixSession implements SessionPort {
     return images.length === 0 ? null : { id: pack.id, name: pack.name, images };
   }
 
+  private async refreshAccountAvatar(): Promise<void> {
+    const client = this.client;
+    const stored = this.stored;
+    const media = this.mediaResolver;
+    if (client === null || stored === null || media === null) return;
+    const avatarUrl = client.getUser(stored.userId)?.avatarUrl;
+    if (avatarUrl === null || avatarUrl === undefined) return;
+    const generation = this.generation;
+    try {
+      const reply = await media.resolve(
+        client,
+        {
+          roomId: "",
+          messageId: "avatar:self",
+          kind: "image",
+          name: "",
+          caption: "",
+          width: null,
+          height: null,
+          size: null,
+          duration: null,
+          mime: null,
+          source: { kind: "mxc", url: avatarUrl },
+          thumbnail: null,
+        },
+        "thumbnail",
+      );
+      if (generation !== this.generation) return;
+      this.accountAvatar = reply.url;
+      this.emit({
+        type: "session",
+        payload: summary(client, stored, this.stickerPacks, this.accountAvatar),
+      });
+    } catch {
+      // The initials remain when an avatar cannot be fetched.
+    }
+  }
+
   private async refreshStickerPacks(): Promise<void> {
     const client = this.client;
     const stored = this.stored;
@@ -1528,7 +1568,7 @@ export class MatrixSession implements SessionPort {
     );
     if (generation !== this.generation) return;
     this.stickerPacks = packs;
-    this.emit({ type: "session", payload: summary(client, stored, packs) });
+    this.emit({ type: "session", payload: summary(client, stored, packs, this.accountAvatar) });
   }
 
   private async refreshGate(): Promise<KeyStatus> {
@@ -1669,7 +1709,13 @@ export class MatrixSession implements SessionPort {
             url: null,
           },
         });
-        if (subscription.roomId === "") void this.refreshStickerPacks().catch(() => undefined);
+        if (subscription.roomId === "") {
+          if (subscription.messageId === "avatar:self") {
+            void this.refreshAccountAvatar().catch(() => undefined);
+          } else {
+            void this.refreshStickerPacks().catch(() => undefined);
+          }
+        }
       },
       now: () => Date.now(),
     });
@@ -2192,6 +2238,7 @@ export class MatrixSession implements SessionPort {
           this.emit({ type: "keys", payload: gate });
         });
         void this.devices().catch(() => undefined);
+        void this.refreshAccountAvatar().catch(() => undefined);
         void this.refreshStickerPacks().catch(() => undefined);
         this.refreshBackup();
         this.emitInvites();
@@ -2297,7 +2344,7 @@ export class MatrixSession implements SessionPort {
     this.account = account;
     this.outbox = this.createOutbox(account);
     this.openMedia(account);
-    if (!startClient) return summary(null, stored);
+    if (!startClient) return summary(null, stored, [], this.accountAvatar);
     return this.startClient(stored, this.generation);
   }
 
@@ -2374,7 +2421,7 @@ export class MatrixSession implements SessionPort {
       threadSupport: false,
     });
     this.ensureGeneration(generation);
-    const session = summary(client, stored, this.stickerPacks);
+    const session = summary(client, stored, this.stickerPacks, this.accountAvatar);
     this.emit({ type: "session", payload: session });
     this.emit({ type: "keys", payload: this.keyReady });
     this.emit({ type: "connection", payload: "connecting" });
@@ -2398,6 +2445,7 @@ export class MatrixSession implements SessionPort {
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
+    this.accountAvatar = null;
     this.stickerPacks = [];
     this.roomAvatars.clear();
     this.avatarRequests.clear();
@@ -2432,6 +2480,7 @@ export class MatrixSession implements SessionPort {
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
+    this.accountAvatar = null;
     this.stickerPacks = [];
     this.roomAvatars.clear();
     this.avatarRequests.clear();

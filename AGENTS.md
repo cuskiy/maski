@@ -1277,9 +1277,10 @@ browser history and old commits are evidence, not status.
   room menu hides mark-read. A real send, SAS handshake, backup setup and a reload with a non-empty
   stored window were not re-run after the latest changes. Chromium also measured the app filling
   `innerHeight` at 1333x778 and 1778x1111, and the settings dialog now exposes the Stickers tab with
-  grouped security rows. The cached-room start was not re-run against the user's account. User image
-  packs have pure parser/picker tests and the production CSP admits local `blob:` fetches, but no real
-  account-data pack has been resolved in a browser.
+  grouped security rows. A real stored account reload painted its first room row at 81 ms with 9 rooms
+  and no skeleton rows, and the page stayed at full height with no console errors. User image packs
+  have pure parser/picker/send tests and the production CSP admits local `blob:` fetches, but no real
+  account-data pack has been resolved in a browser; avatar resolution also waits on a real mxc avatar.
 - Chromium measured a 10-room cached start at 57 ms for the worker `start` reply and 86 ms to the
   first navigation row; crypto continued in the background. The test account had no stored events, so
   message-window first paint was not measured.
