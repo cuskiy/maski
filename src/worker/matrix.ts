@@ -90,6 +90,8 @@ import { SasSessions, type SasEvents } from "./sas.ts";
 import { clearSession, readSession, writeSession, type StoredSession } from "./sessionDb.ts";
 
 const MAX_RESOLVED_PACK_IMAGES = 200;
+type SecretKeyTuple = Awaited<ReturnType<MatrixClient["secretStorage"]["getKey"]>>;
+type SecretKeyInfo = NonNullable<SecretKeyTuple>[1];
 
 type SilentLogger = {
   trace(...args: unknown[]): void;
@@ -581,6 +583,22 @@ export class MatrixSession implements SessionPort {
     return this.keyReady;
   }
 
+  private async secretStorageCandidates(client: MatrixClient): Promise<Map<string, SecretKeyInfo>> {
+    const candidates = new Map<string, SecretKeyInfo>();
+    for (const secret of [
+      "m.cross_signing.master",
+      "m.cross_signing.self_signing",
+      "m.cross_signing.user_signing",
+      "m.megolm_backup.v1",
+    ] as const) {
+      const keys = await client.secretStorage.isStored(secret).catch(() => null);
+      for (const [id, info] of Object.entries(keys ?? {})) candidates.set(id, info);
+    }
+    const defaultKey = await client.secretStorage.getKey().catch(() => null);
+    if (defaultKey !== null) candidates.set(defaultKey[0], defaultKey[1]);
+    return candidates;
+  }
+
   async recover(input: CommandMap["recover"]): Promise<KeyStatus> {
     const client = this.requireClient();
     const crypto = client.getCrypto();
@@ -588,7 +606,11 @@ export class MatrixSession implements SessionPort {
     const recoveryKey = input.recoveryKey.trim();
     let candidate: Uint8Array<ArrayBuffer>;
     if (recoveryKey !== "") {
-      candidate = decodeRecoveryKey(recoveryKey);
+      try {
+        candidate = decodeRecoveryKey(recoveryKey);
+      } catch {
+        throw new WorkerFailure("invalid");
+      }
     } else if (input.passphrase !== "") {
       const keyTuple = await client.secretStorage.getKey();
       const derivation = keyTuple?.[1].passphrase;
@@ -597,33 +619,42 @@ export class MatrixSession implements SessionPort {
     } else {
       throw new WorkerFailure("auth");
     }
-    const keyTuple = await client.secretStorage.getKey();
-    if (keyTuple === null || !(await client.secretStorage.checkKey(candidate, keyTuple[1]))) {
-      throw new WorkerFailure("auth");
-    }
-    this.pendingSecret = { key: candidate, passphrase: "" };
-    this.secretStorageKeys.set(keyTuple[0], candidate);
-    try {
-      await crypto.bootstrapSecretStorage({});
-      if (!(await crypto.isSecretStorageReady())) throw new WorkerFailure("auth");
-      if ((await client.secretStorage.get("m.cross_signing.master")) === undefined) {
-        throw new WorkerFailure("auth");
+    const candidates = await this.secretStorageCandidates(client);
+    let matched: string | null = null;
+    for (const [id, info] of candidates) {
+      try {
+        if (await client.secretStorage.checkKey(candidate, info)) {
+          matched = id;
+          break;
+        }
+      } catch {
+        // A malformed key description is not a usable candidate.
       }
-      await crypto.bootstrapCrossSigning({});
-    } catch {
-      throw new WorkerFailure("auth");
-    } finally {
-      this.pendingSecret = null;
     }
+    if (matched === null) throw new WorkerFailure("auth");
+    this.pendingSecret = { key: candidate, passphrase: "" };
+    this.secretStorageKeys.set(matched, candidate);
     const stored = this.stored;
     if (stored !== null) {
       const updated: StoredSession = {
         ...stored,
-        secretStorageKeyId: keyTuple[0],
+        secretStorageKeyId: matched,
         secretStorageKey: toBase64(candidate),
       };
       this.stored = updated;
       await writeSession(updated).catch(() => undefined);
+    }
+    try {
+      await crypto.bootstrapSecretStorage({});
+      await crypto.bootstrapCrossSigning({});
+    } catch {
+      // The key already matched secret storage. A failed import or signature upload
+      // leaves the verification gate to report the remaining state; it is not a wrong key.
+    } finally {
+      this.pendingSecret = null;
+    }
+    if ((await client.secretStorage.get("m.cross_signing.master").catch(() => undefined)) === undefined) {
+      return "needs-recovery";
     }
     await this.activateBackup(client);
     this.keyReady = await this.refreshGate();
@@ -1821,23 +1852,27 @@ export class MatrixSession implements SessionPort {
     // Secret-storage metadata can be ready while this worker has no key, which makes old
     // room keys undecryptable. A gate that cannot decrypt is not ready.
     if (this.secretStorageKeys.size === 0) return "needs-recovery";
-    const keyTuple = await client.secretStorage.getKey();
-    const key = keyTuple === null ? undefined : this.secretStorageKeys.get(keyTuple[0]);
+    const candidates = await this.secretStorageCandidates(client);
     let matches = false;
-    if (key !== undefined && keyTuple !== null) {
+    for (const [id, info] of candidates) {
+      const key = this.secretStorageKeys.get(id);
+      if (key === undefined) continue;
       try {
-        matches = await client.secretStorage.checkKey(key, keyTuple[1]);
+        if (await client.secretStorage.checkKey(key, info)) {
+          matches = true;
+          break;
+        }
       } catch {
-        matches = false;
+        // A malformed key description is not a usable key.
       }
     }
     if (!matches) {
       this.secretStorageKeys.clear();
       return "needs-recovery";
     }
-    const secretStorage = await crypto.isSecretStorageReady();
+    const master = await client.secretStorage.get("m.cross_signing.master").catch(() => undefined);
     const status = await crypto.getDeviceVerificationStatus(userId, deviceId);
-    if (!secretStorage) return "needs-recovery";
+    if (master === undefined) return "needs-recovery";
     if (status === null) return "unknown";
     return status.isVerified() ? "ready" : "needs-verification";
   }

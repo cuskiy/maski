@@ -1260,8 +1260,8 @@ Measured on 2026-11-16 on the working tree with user image packs, mentions and t
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **205 tests**, 11 generated pages, 353 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.7 KiB, client 322.0 KiB, matrix worker 1.27 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **205 tests**, 11 generated pages, 354 catalog keys, 2 languages.
+- Build sizes: stylesheet 84.7 KiB, client 322.3 KiB, matrix worker 1.27 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass; the client
   ceiling is 336 KiB by the user's 2026-11-16 decision.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,

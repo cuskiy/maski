@@ -455,9 +455,11 @@ function initKey(c: Catalog, locale: LocaleId): void {
         }
         showStatus(keyStatusText(c, gate) ?? t(c, "auth.key.invalid"));
       })
-      .catch(() => {
-        showStatus(t(c, "auth.key.invalid"));
-        recovery.setCustomValidity(t(c, "auth.key.invalid"));
+      .catch((error: unknown) => {
+        const malformed = error instanceof Error && error.message === "invalid";
+        const message = t(c, malformed ? "auth.key.format" : "auth.key.invalid");
+        showStatus(message);
+        recovery.setCustomValidity(message);
         recovery.reportValidity();
       })
       .finally(() => {

@@ -47,6 +47,7 @@ export const zhCN = {
   "auth.key.one": "请输入恢复密钥或口令。",
   "auth.key.recoveryNeeded": "请输入这台设备的恢复密钥或口令。",
   "auth.key.invalid": "这个恢复密钥或口令没有解锁这台设备。",
+  "auth.key.format": "这不是完整的恢复密钥。Matrix 恢复密钥由 12 组、每组 4 个字符组成。",
   "auth.key.resetFailed": "无法重置加密。请检查密码后重试。",
   "auth.key.verification": "密钥已接受，但这台设备仍需要另一台设备验证。",
   "auth.key.unavailable": "加密 worker 不可用。",

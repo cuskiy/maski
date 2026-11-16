@@ -47,6 +47,7 @@ export const en = {
   "auth.key.one": "Enter a recovery key or passphrase.",
   "auth.key.recoveryNeeded": "Enter the recovery key or passphrase for this device.",
   "auth.key.invalid": "That recovery key or passphrase did not unlock this device.",
+  "auth.key.format": "That is not a complete recovery key. A Matrix recovery key has 12 four-character groups.",
   "auth.key.resetFailed": "Could not reset encryption. Check the password and try again.",
   "auth.key.verification": "The key was accepted, but this device still needs verification from another device.",
   "auth.key.unavailable": "The encryption worker is not available.",
