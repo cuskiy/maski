@@ -33,6 +33,7 @@ export interface SessionPort {
   retrySend(roomId: string, messageId: string): Promise<MessageRow>;
   discardSend(roomId: string, messageId: string): Promise<null>;
   sendMedia(input: CommandMap["sendMedia"]): Promise<MessageRow>;
+  sendSticker(input: CommandMap["sendSticker"]): Promise<MessageRow>;
   media(input: CommandMap["media"]): Promise<MediaReply>;
   markRead(roomId: string, eventId: string): Promise<null>;
   members(roomId: string): Promise<null>;

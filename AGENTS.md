@@ -601,8 +601,7 @@ owning paragraph.
    cache, outbox and projection are opened only by the worker. The main thread owns UI preferences and
    the render store. Each fact has exactly one writer; the other side reads a typed projection.
 3. **CSP.** Production must deliver a response-header CSP from one policy builder. The allowlist is the
-   shell origin, the chosen homeserver origin and its websocket origin. `connect-src` also admits local
-   `blob:` reads for worker-minted sticker bytes; it is not a network origin. `connect-src https:` and
+   shell origin, the chosen homeserver origin and its websocket origin. `connect-src https:` and
    `wss:` wildcards are a migration defect. `img-src`/`media-src` allow only `'self'`, `blob:` and
    allowlisted raster `data:`; no remote `https:`. `frame-ancestors 'none'`, `base-uri 'none'`,
    `object-src 'none'`, `form-action 'self'`, `worker-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'`,
@@ -805,6 +804,7 @@ none is a secret or message history. The split is deliberate: drafts and message
 | `older` | one page | before oldest stored id, segment-aware |
 | `send` | queued row | text body, html, reply relation, transaction id; media bytes never use this path |
 | `sendMedia` | queued row | Blob + caption + kind; worker validates/sanitizes/encrypts/upload once |
+| `sendSticker` | queued row | pack id + shortcode; worker sends the pack image's original mxc + info, no upload |
 | `media` | blob URL | worker-only source → verified, allowlisted blob; `thumbnail`/`full` |
 | `devices` | device rows | read-only device list with verification state; no key material |
 | `retrySend`, `discardSend` | row / empty | worker-owned outbox state |
@@ -1256,12 +1256,12 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-16 on the working tree after `2dae516` plus user image packs, mentions and the
-current changes. This is the only current-status section; counts and claims in `advice.md`, `past/`,
-browser history and old commits are evidence, not status.
+Measured on 2026-11-16 on the working tree with user image packs, mentions and the current changes.
+This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
+old commits are evidence, not status.
 
-- `npm run check` is green: **200 tests**, 11 generated pages, 353 catalog keys, 2 languages.
-- Build sizes: stylesheet 84.7 KiB, client 321.7 KiB, matrix worker 1.26 MiB, crypto wasm 7.43 MiB,
+- `npm run check` is green: **204 tests**, 11 generated pages, 355 catalog keys, 2 languages.
+- Build sizes: stylesheet 84.7 KiB, client 322.4 KiB, matrix worker 1.26 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass; the client
   ceiling is 336 KiB by the user's 2026-11-16 decision.
 - Worker tests cover the command dispatcher, projection at 1/30/1,000/10,000 events, before-cursor pages,
@@ -1279,8 +1279,11 @@ browser history and old commits are evidence, not status.
   `innerHeight` at 1333x778 and 1778x1111, and the settings dialog now exposes the Stickers tab with
   grouped security rows. A real stored account reload painted its first room row at 81 ms with 9 rooms
   and no skeleton rows, and the page stayed at full height with no console errors. User image packs
-  have pure parser/picker/send tests and the production CSP admits local `blob:` fetches, but no real
-  account-data pack has been resolved in a browser; avatar resolution also waits on a real mxc avatar.
+  have pure parser/picker/send tests, but no real account-data pack or room pack has been resolved in
+  a browser; avatar resolution also waits on a real mxc avatar. The pack parser follows the official
+  `m.room.image_pack` + `m.image_pack.rooms` model with the legacy `im.ponies` fallbacks and usage
+  filtering. A pack send goes through the worker-owned outbox and sends the original mxc URI; only
+  display blob URLs cross to the main thread, never the pack mxc URI or image bytes.
 - Chromium measured a 10-room cached start at 57 ms for the worker `start` reply and 86 ms to the
   first navigation row; crypto continued in the background. The test account had no stored events, so
   message-window first paint was not measured.
@@ -1293,9 +1296,12 @@ browser history and old commits are evidence, not status.
   window still exposes the older control and scrollback yields a page.
 - Cached rooms painted under an unverified cached gate use the `verifying` phase: rows are visible, the
   composer is disabled, mark-read is blocked, and the key event either enters `ready` or redirects locked.
-- Production stickers are enabled. A sticker-picker emoji is rasterized to a 512×512 PNG in the client and
-  sent through the worker `sendMedia` path as an `m.sticker`; picker emoji does not enter the composer.
-  Settings has a sticker-pack toggle and the built-in pack; disabling hides the sticker button.
+- Production stickers are enabled. User/room pack images render from worker-resolved blob previews and a
+  send uses `sendSticker` with the pack id and shortcode, so the worker sends the original mxc URI and
+  info without an upload. The built-in emoji demo pack still rasterizes a 512×512 PNG in the client and
+  uses `sendMedia`; picker emoji does not enter the composer. Settings has a sticker-pack toggle and the
+  built-in pack; disabling hides the sticker button. Encrypted rooms expose only the emoji panel because
+  image-pack media is unencrypted.
 - Send appends the worker-visible row immediately with a sending spinner; the worker outbox echo replaces
   it and a failure marks it failed/retryable. Edit and reaction update the visible row immediately and
   restore it on a typed failure; redact shows the tombstone immediately and restores on failure. Mark-read
@@ -1303,14 +1309,14 @@ browser history and old commits are evidence, not status.
 - The production command set includes password login, one-time SSO token exchange, SSO URL, password+dummy
   registration, react (add and own-reaction redaction), edit with `m.new_content` and `m.replace`, redact,
   typing, worker search, leave, room tag, room mute, room state, invite, join, answer-invite, room/DM
-  create, forward, member actions, `sendMedia`, `media`, read-only `devices`, `backupStatus`,
+  create, forward, member actions, `sendMedia`, `sendSticker`, `media`, read-only `devices`, `backupStatus`,
   `backupSetup` and SAS (`sasStart`, `sasAccept`, `sasConfirm`, `sasMismatch`, `sasCancel`).
   Text delivery now computes the joined members named in the body and sends `m.mentions`; edit does the
   same for newly added names. Pure tests cover protocol shapes, reaction aggregation/removal,
   edit/redaction projection, search, the mock patch path and the dispatcher.
-- `PRODUCTION_CAPABILITIES` is true for media, search, react, edit, redact, forward, typing, memberAction,
-  inviteUser, addRoom, leaveRoom, setRoomState, setRoomTag, setNotification, answerInvite, resetIdentity
-  and backupSetup. It stays false for stickers, resetRecoveryKey, signOutDevice, signOutOthers and
+- `PRODUCTION_CAPABILITIES` is true for media, stickers, search, react, edit, redact, forward, typing,
+  memberAction, inviteUser, addRoom, leaveRoom, setRoomState, setRoomTag, setNotification, answerInvite,
+  resetIdentity and backupSetup. It stays false for resetRecoveryKey, signOutDevice, signOutOthers and
   saveNotifications.
 - Media is worker-owned: upload validates/sanitizes/EXIF-strips, encrypts in encrypted rooms, uploads once,
   sends with a txn id, downloads authenticated with no-store, hash-verifies before decrypt, allowlists MIME,
@@ -1457,17 +1463,20 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
    - Next: extend the typed failure event to the remaining commands, render a retry in the member and
      action surfaces, and cover a forced rejection in the browser harness.
 
-10. **Room and space image packs plus custom emotes are absent.**
-    - Symptom: the picker shows the account's own `m.image_pack` and legacy user pack, but packs
-      referenced by `m.image_pack.rooms`, packs defined in a room's `m.room.image_pack` state, and
-      space packs never appear. Custom emotes cannot be sent as inline `<img>` content.
-    - Known: user-pack account data is parsed in the worker, media is resolved to verified `blob:`
-      URLs, and the picker tabs are bounded. The client ceiling is 336 KiB at the user's request;
-      current use is below 322 KiB.
+10. **Space image packs and custom emotes are absent.**
+    - Symptom: the picker now carries the account's legacy own pack, the current room's stable and
+      legacy packs, and globally enabled `m.image_pack.rooms`/`im.ponies.emote_rooms` packs, but
+      packs from the canonical space hierarchy never appear. Custom emotes cannot be sent as inline
+      `<img>` content.
+    - Known: stable `m.room.image_pack` takes precedence per room/state key over
+      `im.ponies.room_emotes`; stable `m.image_pack.rooms` takes precedence over legacy
+      `im.ponies.emote_rooms`; image `usage` filters `sticker` versus `emoticon`; media resolves to
+      verified `blob:` URLs. Packs are hidden in encrypted rooms because image-pack media is
+      unencrypted. The client ceiling is 336 KiB at the user's request; current use is below 323 KiB.
     - Ruled out: deriving packs from the visible message window, putting mxc URLs on the main
-      thread, or treating an emoji sticker as an image pack.
-    - Next: project `m.image_pack.rooms` and room/space state packs, add the unencrypted-media
-      warning and encrypted-room decision, then add custom emote composition with a browser test.
+      thread, treating an emoji sticker as an image pack, or reading a non-spec user account-data pack.
+    - Next: traverse the canonical space hierarchy with a depth/cycle bound, then add custom emote
+      composition and a browser test; keep the encrypted-room restriction explicit.
 
 ## 6.5 Migration order
 
@@ -1506,8 +1515,9 @@ Do not pull a later UI surface forward to make the product look complete.
 
 ## 6.6 Definition of done
 
-Every line of Part 2 is present and verified at rung 5. **6.4 is empty.** `npm run check` is green with no
-budget raised and no browser harness skipped. A reader can start from this file alone. A real account can
+Every line of Part 2 is present and verified at rung 5. **6.4 is empty.** `npm run check` is green with
+every budget inside its declared ceiling (each ceiling change recorded as a user decision) and no browser
+harness skipped. A reader can start from this file alone. A real account can
 sign in, pass the gate, read, search, send, receive, react, edit, delete, load media, go offline, reload,
 and keep its place without a white flash or a layout shift. A green gate with a non-empty 6.4 is not done.
 

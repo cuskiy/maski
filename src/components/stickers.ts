@@ -34,6 +34,8 @@ function packImageButtons(pack: StickerPack): Html {
       html`<button
         class="pack-item pack-image-item"
         type="button"
+        data-sticker-pack="${pack.id}"
+        data-sticker-shortcode="${image.shortcode}"
         data-sticker-image="${url}"
         data-sticker-body="${image.body}"
         aria-label="${image.body}"
@@ -87,7 +89,11 @@ export function stickerPickerBody(
           tabindex="-1"
           data-sticker-tab="user-${String(index)}"
         >
-          ${pack.name}
+          ${
+            pack.name === ""
+              ? t(c, pack.id.startsWith("user:") ? "surface.sticker.userPack" : "surface.sticker.unnamed")
+              : pack.name
+          }
         </button>`,
       )}
       ${builtIn.map(

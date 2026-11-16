@@ -155,13 +155,6 @@ async function stickerFile(emoji: string): Promise<File> {
   return new File([blob], `${emoji}.png`, { type: "image/png" });
 }
 
-async function imageStickerFile(url: string, body: string): Promise<File> {
-  const response = await fetch(url, { credentials: "omit" });
-  if (!response.ok) throw new Error("sticker unavailable");
-  const blob = await response.blob();
-  return new File([blob], body === "" ? "sticker" : body, { type: blob.type === "" ? "image/png" : blob.type });
-}
-
 const markdownParser = new Marked({
   renderer: {
     html({ text }) {
@@ -804,21 +797,42 @@ export class Composer {
     this.hide(SURFACE.sticker);
   }
 
-  async sendSticker(sticker: string, imageUrl = ""): Promise<void> {
-    if (!this.actions.capabilities.stickers || !this.store.read("stickersEnabled")) return;
-    const roomId = this.roomId;
-    if (sticker === "" || roomId === null || this.sending) return;
+  private stickerBlocked(roomId: string): boolean {
+    if (!this.actions.capabilities.stickers || !this.store.read("stickersEnabled")) return true;
     if (this.store.read("rooms").find((room) => room.roomId === roomId)?.encryption === "encrypted") {
       this.showMediaError();
+      return true;
+    }
+    return false;
+  }
+
+  async sendSticker(sticker: string): Promise<void> {
+    const roomId = this.roomId;
+    if (sticker === "" || roomId === null || this.sending || this.stickerBlocked(roomId)) return;
+    this.hide(SURFACE.sticker);
+    this.setBusy(true);
+    this.clearError();
+    try {
+      const file = await stickerFile(sticker);
+      await this.actions.sendMedia(roomId, file, "sticker", sticker, null, null);
+      if (this.roomId === roomId) this.actions.recordSticker(sticker);
+    } catch {
+      this.showMediaError();
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  async sendPackSticker(packId: string, shortcode: string): Promise<void> {
+    const roomId = this.roomId;
+    if (packId === "" || shortcode === "" || roomId === null || this.sending || this.stickerBlocked(roomId)) {
       return;
     }
     this.hide(SURFACE.sticker);
     this.setBusy(true);
     this.clearError();
     try {
-      const file = imageUrl === "" ? await stickerFile(sticker) : await imageStickerFile(imageUrl, sticker);
-      await this.actions.sendMedia(roomId, file, "sticker", sticker, null, null);
-      if (this.roomId === roomId && imageUrl === "") this.actions.recordSticker(sticker);
+      await this.actions.sendSticker(roomId, packId, shortcode);
     } catch {
       this.showMediaError();
     } finally {
@@ -1030,9 +1044,12 @@ export class Composer {
       else this.insertEmoji(value);
       return true;
     }
-    const stickerImage = target.closest<HTMLElement>("[data-sticker-image]");
-    if (stickerImage !== null) {
-      void this.sendSticker(stickerImage.dataset["stickerBody"] ?? "", stickerImage.dataset["stickerImage"] ?? "");
+    const packSticker = target.closest<HTMLElement>("[data-sticker-pack]");
+    if (packSticker !== null) {
+      void this.sendPackSticker(
+        packSticker.dataset["stickerPack"] ?? "",
+        packSticker.dataset["stickerShortcode"] ?? "",
+      );
       return true;
     }
     const sticker = target.closest<HTMLElement>("[data-sticker]");

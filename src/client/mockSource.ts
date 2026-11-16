@@ -239,6 +239,53 @@ export class MockSource implements ChatSource {
     return this.send(roomId, row);
   }
 
+  async sendSticker(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    packId: string,
+    shortcode: string,
+  ): Promise<MessageRow> {
+    const session = this.state.session;
+    const image = session?.stickerPacks
+      .find((pack) => pack.id === packId)
+      ?.images.find((entry) => entry.shortcode === shortcode);
+    if (image === undefined) throw new Error("sticker pack");
+    const row: MessageRow = {
+      id: messageId,
+      eventId: null,
+      transactionId,
+      roomId,
+      sender: session?.userId ?? "",
+      senderName: session?.displayName ?? "You",
+      senderAvatar: session?.avatar ?? null,
+      ts: Date.now(),
+      own: true,
+      kind: "sticker",
+      body: image.body,
+      html: null,
+      media: {
+        kind: "sticker",
+        name: image.body,
+        width: image.width,
+        height: image.height,
+        size: null,
+        url: image.url,
+      },
+      reactions: [],
+      reply: null,
+      mentions: [],
+      edited: false,
+      redacted: false,
+      status: "queued",
+      error: null,
+      retryable: true,
+      system: false,
+      encryption: { state: "ok" },
+    };
+    return this.send(roomId, row);
+  }
+
   async send(roomId: string, row: MessageRow): Promise<MessageRow> {
     const queued: MessageRow = {
       ...row,

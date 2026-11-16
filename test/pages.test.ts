@@ -74,7 +74,7 @@ void test("pages keep media local and do not leak referrers", () => {
   assert.equal(csp, metaContentSecurityPolicy);
   assert.match(csp, /img-src 'self' data: blob:/u);
   assert.match(csp, /media-src 'self' data: blob:/u);
-  assert.match(csp, /connect-src 'self' blob: https: wss:/u);
+  assert.match(csp, /connect-src 'self' https: wss:/u);
   assert.doesNotMatch(csp, /connect-src[^;]*http:/u);
   assert.match(html, /<meta name="referrer" content="no-referrer"/u);
   assert.match(html, /<meta http-equiv="x-dns-prefetch-control" content="off"/u);

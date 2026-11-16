@@ -70,6 +70,7 @@ export type CommandName =
   | "forward"
   | "memberAction"
   | "sendMedia"
+  | "sendSticker"
   | "media"
   | "sasStart"
   | "sasAccept"
@@ -193,6 +194,14 @@ export interface CommandMap {
     readonly name: string;
     readonly file: Blob;
   };
+  /** Sends an image already stored in a user/room image pack; no bytes cross the port. */
+  readonly sendSticker: {
+    readonly roomId: string;
+    readonly messageId: string;
+    readonly transactionId: string;
+    readonly packId: string;
+    readonly shortcode: string;
+  };
   readonly media: {
     readonly roomId: string;
     readonly messageId: string;
@@ -254,6 +263,7 @@ export interface ReplyData {
   readonly forward: null;
   readonly memberAction: null;
   readonly sendMedia: MessageRow;
+  readonly sendSticker: MessageRow;
   readonly media: MediaReply;
   readonly sasStart: SasState;
   readonly sasAccept: null;
@@ -359,6 +369,7 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "forward",
   "memberAction",
   "sendMedia",
+  "sendSticker",
   "media",
   "sasStart",
   "sasAccept",
@@ -1007,6 +1018,7 @@ export const REPLY_DATA_GUARDS: {
   forward: isNull,
   memberAction: isNull,
   sendMedia: isMessageRow,
+  sendSticker: isMessageRow,
   media: isMediaReply,
   sasStart: isSasState,
   sasAccept: isNull,
@@ -1254,6 +1266,20 @@ function validForward(fields: Record<string, unknown>): fields is CommandMap["fo
 
 function validMemberAction(fields: Record<string, unknown>): fields is CommandMap["memberAction"] {
   return isRoomId(fields["roomId"]) && isUserId(fields["userId"]) && isMemberAction(fields["action"]);
+}
+
+function validSendSticker(fields: Record<string, unknown>): fields is CommandMap["sendSticker"] {
+  return (
+    isRoomId(fields["roomId"]) &&
+    isString(fields["messageId"]) &&
+    fields["messageId"].length <= 128 &&
+    isString(fields["transactionId"]) &&
+    fields["transactionId"].length <= 128 &&
+    isString(fields["packId"]) &&
+    fields["packId"].length <= 512 &&
+    isString(fields["shortcode"]) &&
+    fields["shortcode"].length <= 100
+  );
 }
 
 function validSendMedia(fields: Record<string, unknown>): fields is CommandMap["sendMedia"] {
@@ -1507,6 +1533,19 @@ export function parseCommand(value: unknown): Command | null {
           kind: fields.kind,
           name: fields.name,
           file: fields.file,
+        },
+      };
+    case "sendSticker":
+      if (!validSendSticker(fields)) return null;
+      return {
+        id,
+        type,
+        payload: {
+          roomId: fields.roomId,
+          messageId: fields.messageId,
+          transactionId: fields.transactionId,
+          packId: fields.packId,
+          shortcode: fields.shortcode,
         },
       };
     case "media":

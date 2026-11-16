@@ -117,6 +117,14 @@ export interface ChatSource {
     name: string,
     file: Blob,
   ): Promise<MessageRow>;
+  /** Sends an image already stored in an image pack; no bytes cross the main thread. */
+  sendSticker?(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    packId: string,
+    shortcode: string,
+  ): Promise<MessageRow>;
   /** Resolves a worker-only source to a `blob:` URL; absent means the surface is hidden. */
   media?(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply>;
   retrySend(roomId: string, messageId: string): Promise<MessageRow>;

@@ -568,7 +568,7 @@ export const mockSession: SessionSummary = {
   },
   stickerPacks: [
     {
-      id: "user:stable",
+      id: "user:legacy",
       name: "My stickers",
       images: [
         {

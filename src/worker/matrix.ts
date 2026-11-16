@@ -42,9 +42,22 @@ import type {
 } from "../core/types.ts";
 import type { CommandMap, Event, KeyStatus, MediaReply, RegisterResult, StartData } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
-import { parseUserImagePacks, type ImagePackReference } from "./imagePacks.ts";
+import {
+  parseGlobalPackReferences,
+  parsePackContent,
+  parseUserPack,
+  type ImagePackReference,
+  type PackReference,
+} from "./imagePacks.ts";
 import { AccountDatabase, type RoomRecord } from "./accountDb.ts";
-import { createOutbox, type Outbox, type OutboxEvent, type OutboxRecord, type UploadedMedia } from "./outbox.ts";
+import {
+  createOutbox,
+  type Outbox,
+  type OutboxEvent,
+  type OutboxPack,
+  type OutboxRecord,
+  type UploadedMedia,
+} from "./outbox.ts";
 import type { SessionPort } from "./ports.ts";
 import { buildMediaContent, MAX_UPLOAD_BYTES, prepareUpload, type MediaContent } from "./mediaFormat.ts";
 import { encryptAttachment, encryptedFile } from "./mediaCrypto.ts";
@@ -75,6 +88,8 @@ import {
 import { decodeRecoveryKey, derivePassphraseKey } from "./recovery.ts";
 import { SasSessions, type SasEvents } from "./sas.ts";
 import { clearSession, readSession, writeSession, type StoredSession } from "./sessionDb.ts";
+
+const MAX_RESOLVED_PACK_IMAGES = 200;
 
 type SilentLogger = {
   trace(...args: unknown[]): void;
@@ -373,6 +388,7 @@ export class MatrixSession implements SessionPort {
   private keyReady: KeyStatus = "unknown";
   private accountAvatar: string | null = null;
   private stickerPacks: readonly StickerPack[] = [];
+  private readonly packSources = new Map<string, OutboxPack>();
   private startTask: Promise<SessionSummary> | null = null;
   private syncReady = false;
   private sas: SasSessions | null = null;
@@ -784,6 +800,7 @@ export class MatrixSession implements SessionPort {
       lastOpened: Date.now(),
     });
     this.activeRoomId = roomId;
+    void this.refreshStickerPacks().catch(() => undefined);
     const window = await this.windowState(roomId);
     if (window.messages.length === 0) await this.ingestRoom(roomId);
     await this.persistBackfill(roomId);
@@ -944,6 +961,37 @@ export class MatrixSession implements SessionPort {
         blob: prepared.blob,
         previewUrl: local.url,
       },
+    });
+    void outbox.deliver(input.messageId).catch(() => undefined);
+    this.scheduleRooms();
+    return row;
+  }
+
+  async sendSticker(input: CommandMap["sendSticker"]): Promise<MessageRow> {
+    const client = this.requireClient();
+    const room = this.requireRoom(input.roomId);
+    const own = client.getUserId();
+    if (own === null) throw new WorkerFailure("not-signed-in");
+    if (room.getMyMembership() !== "join" || !room.currentState.maySendMessage(own)) {
+      throw new WorkerFailure("unavailable");
+    }
+    if (await this.encryptionEnabled(client, input.roomId)) {
+      // `m.sticker` carries an unencrypted mxc URI; never send one into an encrypted room.
+      throw new WorkerFailure("unsupported");
+    }
+    const pack = this.packSources.get(`${input.packId}\u0000${input.shortcode}`);
+    if (pack === undefined) throw new WorkerFailure("unavailable");
+    const outbox = this.requireOutbox();
+    const row = await outbox.queue({
+      roomId: input.roomId,
+      messageId: input.messageId,
+      transactionId: input.transactionId,
+      body: pack.body,
+      html: null,
+      kind: "sticker",
+      replyTo: null,
+      media: null,
+      pack,
     });
     void outbox.deliver(input.messageId).catch(() => undefined);
     this.scheduleRooms();
@@ -1473,6 +1521,7 @@ export class MatrixSession implements SessionPort {
     client: MatrixClient,
     media: MediaResolver,
     pack: ImagePackReference,
+    sources: Map<string, OutboxPack>,
   ): Promise<StickerPack | null> {
     const images = (
       await Promise.all(
@@ -1493,6 +1542,20 @@ export class MatrixSession implements SessionPort {
           };
           try {
             const reply = await media.resolve(client, source, "thumbnail");
+            const info: Record<string, unknown> = {};
+            if (image.width !== null) info["w"] = image.width;
+            if (image.height !== null) info["h"] = image.height;
+            if (image.size !== null) info["size"] = image.size;
+            if (image.mime !== null) info["mimetype"] = image.mime;
+            sources.set(`${pack.id}\u0000${image.shortcode}`, {
+              source: { kind: "mxc", url: image.url },
+              body: image.body,
+              info,
+              width: image.width,
+              height: image.height,
+              size: image.size,
+              mime: image.mime,
+            });
             return {
               shortcode: image.shortcode,
               body: image.body,
@@ -1548,25 +1611,79 @@ export class MatrixSession implements SessionPort {
     }
   }
 
+  private activeRoomPackReferences(client: MatrixClient): readonly PackReference[] {
+    const roomId = this.activeRoomId;
+    const room = roomId === null ? null : client.getRoom(roomId);
+    if (roomId === null || room === null) return [];
+    const stable = room.currentState.getStateEvents("m.room.image_pack").map((event) => event.getStateKey() ?? "");
+    const stableKeys = new Set(stable);
+    const legacy = room.currentState
+      .getStateEvents("im.ponies.room_emotes")
+      .map((event) => event.getStateKey() ?? "")
+      .filter((key) => !stableKeys.has(key));
+    return [...stable, ...legacy].slice(0, 64).map((stateKey) => ({ roomId, stateKey }));
+  }
+
+  private packFromRoom(client: MatrixClient, reference: PackReference): ImagePackReference | null {
+    const room = client.getRoom(reference.roomId);
+    if (room === null) return null;
+    const stable = room.currentState.getStateEvents("m.room.image_pack", reference.stateKey);
+    const legacy =
+      stable === null ? room.currentState.getStateEvents("im.ponies.room_emotes", reference.stateKey) : null;
+    const event = stable ?? legacy;
+    if (event === null) return null;
+    return parsePackContent(
+      event.getContent(),
+      `room:${reference.roomId}:${reference.stateKey}`,
+      room.name === "" ? reference.stateKey : room.name,
+    );
+  }
+
   private async refreshStickerPacks(): Promise<void> {
     const client = this.client;
     const stored = this.stored;
     const media = this.mediaResolver;
     if (client === null || stored === null || media === null) return;
     const generation = this.generation;
+    const references = new Map<string, PackReference>();
+    const addReferences = (items: readonly PackReference[]): void => {
+      for (const reference of items) {
+        references.set(`${reference.roomId}\n${reference.stateKey}`, reference);
+      }
+    };
     let parsed: readonly ImagePackReference[];
     try {
-      parsed = parseUserImagePacks(
-        this.accountDataContent("m.image_pack"),
-        this.accountDataContent("im.ponies.user_emotes"),
+      const own = parseUserPack(this.accountDataContent("im.ponies.user_emotes"));
+      addReferences(
+        parseGlobalPackReferences(
+          this.accountDataContent("m.image_pack.rooms"),
+          this.accountDataContent("im.ponies.emote_rooms"),
+        ),
       );
+      addReferences(this.activeRoomPackReferences(client));
+      parsed = [
+        ...(own === null ? [] : [own]),
+        ...[...references.values()]
+          .map((reference) => this.packFromRoom(client, reference))
+          .filter((pack) => pack !== null),
+      ];
     } catch {
       return;
     }
-    const packs = (await Promise.all(parsed.map((pack) => this.resolveImagePack(client, media, pack)))).filter(
-      (pack) => pack !== null,
-    );
+    const sources = new Map<string, OutboxPack>();
+    let budget = MAX_RESOLVED_PACK_IMAGES;
+    const limited = parsed.flatMap((pack) => {
+      if (budget <= 0) return [];
+      const images = pack.images.slice(0, budget);
+      budget -= images.length;
+      return images.length === 0 ? [] : [{ ...pack, images }];
+    });
+    const packs = (
+      await Promise.all(limited.map((pack) => this.resolveImagePack(client, media, pack, sources)))
+    ).filter((pack) => pack !== null);
     if (generation !== this.generation) return;
+    this.packSources.clear();
+    for (const [key, source] of sources) this.packSources.set(key, source);
     this.stickerPacks = packs;
     this.emit({ type: "session", payload: summary(client, stored, packs, this.accountAvatar) });
   }
@@ -1648,6 +1765,16 @@ export class MatrixSession implements SessionPort {
       deliver: async (record) => {
         const client = this.requireClient();
         const row = record.row;
+        const packSticker = record.pack ?? null;
+        if (packSticker !== null) {
+          const response = await client.sendEvent(
+            row.roomId,
+            EventType.Sticker,
+            { body: packSticker.body, info: packSticker.info, url: packSticker.source.url },
+            row.transactionId ?? undefined,
+          );
+          return response.event_id;
+        }
         const media = record.media ?? null;
         if (media !== null) {
           const uploaded = record.uploaded;
@@ -2246,7 +2373,7 @@ export class MatrixSession implements SessionPort {
     });
     client.on(ClientEvent.AccountData, (event: MatrixEvent) => {
       const type = event.getType();
-      if (type === "m.image_pack" || type === "im.ponies.user_emotes") {
+      if (type === "m.image_pack.rooms" || type === "im.ponies.emote_rooms" || type === "im.ponies.user_emotes") {
         void this.refreshStickerPacks().catch(() => undefined);
       }
     });
@@ -2292,7 +2419,13 @@ export class MatrixSession implements SessionPort {
     client.on(RoomMemberEvent.Typing, (_event: MatrixEvent, member: RoomMember) => {
       this.emitTyping(member.roomId);
     });
-    client.on(RoomStateEvent.Events, () => this.scheduleRooms());
+    client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
+      this.scheduleRooms();
+      const type = event.getType();
+      if (type === "m.room.image_pack" || type === "im.ponies.room_emotes") {
+        void this.refreshStickerPacks().catch(() => undefined);
+      }
+    });
   }
 
   private emitTyping(roomId: string): void {
@@ -2447,6 +2580,7 @@ export class MatrixSession implements SessionPort {
     this.syncReady = false;
     this.accountAvatar = null;
     this.stickerPacks = [];
+    this.packSources.clear();
     this.roomAvatars.clear();
     this.avatarRequests.clear();
     const client = this.client;
@@ -2482,6 +2616,7 @@ export class MatrixSession implements SessionPort {
     this.syncReady = false;
     this.accountAvatar = null;
     this.stickerPacks = [];
+    this.packSources.clear();
     this.roomAvatars.clear();
     this.avatarRequests.clear();
     const prefix = this.cryptoPrefix;

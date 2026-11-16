@@ -180,6 +180,22 @@ function harness(): Harness {
           ts: 1,
         }),
       ),
+    sendSticker: () =>
+      Promise.resolve(
+        queuedRow({
+          roomId: ROOM,
+          messageId: "m-sticker",
+          transactionId: "txn-m-sticker",
+          body: "sticker",
+          html: null,
+          kind: "sticker",
+          media: null,
+          reply: null,
+          ownUserId: SESSION.userId,
+          ownName: SESSION.displayName,
+          ts: 1,
+        }),
+      ),
     media: () => Promise.resolve({ url: "blob:https://example.org/1", mime: "image/webp", width: 1, height: 1 }),
     onEvent: () => () => {},
   };
@@ -349,4 +365,50 @@ void test("a queued row interrupted by a restart uses a typed failure", async ()
   assert.equal(backend.queued()[0]?.row.status, "failed");
   assert.equal(backend.queued()[0]?.row.error, "restart");
   assert.equal(emitted.at(-1)?.row?.error, "restart");
+});
+
+void test("a pack sticker is queued and delivered without uploading bytes", async () => {
+  const backend = new MemoryBackend();
+  let uploads = 0;
+  const delivered: { record: OutboxRecord | null } = { record: null };
+  const outbox = createOutbox({
+    backend,
+    identity: () => ({ userId: SESSION.userId, displayName: SESSION.displayName }),
+    emit: () => {},
+    upload: () => {
+      uploads += 1;
+      throw new Error("pack stickers must not upload");
+    },
+    deliver: (record) => {
+      delivered.record = record;
+      return Promise.resolve("$pack");
+    },
+    now: () => 1_000,
+  });
+  const row = await outbox.queue({
+    roomId: ROOM,
+    messageId: "m-pack",
+    transactionId: "txn-pack",
+    body: "cat",
+    html: null,
+    kind: "sticker",
+    media: null,
+    replyTo: null,
+    pack: {
+      source: { kind: "mxc", url: "mxc://example.org/cat" },
+      body: "cat",
+      info: { w: 512, h: 512, mimetype: "image/png" },
+      width: 512,
+      height: 512,
+      size: 100,
+      mime: "image/png",
+    },
+  });
+  assert.equal(row.media?.url, null);
+  await outbox.deliver("m-pack");
+  assert.equal(uploads, 0);
+  assert.equal(delivered.record?.pack?.source.url, "mxc://example.org/cat");
+  assert.equal(delivered.record?.pack?.body, "cat");
+  assert.equal(backend.queued().length, 0);
+  assert.equal(backend.events.get("m-pack")?.status, "sent");
 });

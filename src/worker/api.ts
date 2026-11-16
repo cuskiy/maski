@@ -79,6 +79,8 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
         };
       case "sendMedia":
         return { id, ok: true, data: await session.sendMedia(command.payload) };
+      case "sendSticker":
+        return { id, ok: true, data: await session.sendSticker(command.payload) };
       case "media":
         return { id, ok: true, data: await session.media(command.payload) };
       case "markRead":

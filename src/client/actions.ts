@@ -82,6 +82,8 @@ export interface Actions {
     html: string | null,
     replyTo: string | null,
   ): Promise<void>;
+  /** Sends an image already stored in a pack; no bytes cross the main thread. */
+  sendSticker(roomId: string, packId: string, shortcode: string): Promise<void>;
   /** Fire-and-forget preview resolution; the row is patched when the worker answers. */
   media(roomId: string, messageId: string, variant: MediaVariant): void;
   /** Resolves for the viewer or a download and patches the row; null means no URL. */
@@ -622,6 +624,11 @@ export function createActions({ store, source, c, account }: Context): Actions {
         file.name === "" ? kind : file.name,
         file,
       );
+    },
+    async sendSticker(roomId, packId, shortcode) {
+      if (!caps.stickers || source.sendSticker === undefined) return;
+      const id = `local-${crypto.randomUUID()}`;
+      await source.sendSticker(roomId, id, `txn-${id}`, packId, shortcode);
     },
     media(roomId, messageId, variant) {
       if (!caps.media) return;

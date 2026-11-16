@@ -166,6 +166,16 @@ export class MatrixTransport {
     });
   }
 
+  sendSticker(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    packId: string,
+    shortcode: string,
+  ): Promise<MessageRow> {
+    return this.request("sendSticker", { roomId, messageId, transactionId, packId, shortcode });
+  }
+
   media(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply> {
     return this.request("media", { roomId, messageId, variant });
   }

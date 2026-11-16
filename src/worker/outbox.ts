@@ -27,6 +27,17 @@ export interface UploadedMedia {
   readonly source: MediaReference;
 }
 
+/** A sticker whose bytes already live at a verified mxc URI in an image pack. */
+export interface OutboxPack {
+  readonly source: Extract<MediaReference, { kind: "mxc" }>;
+  readonly body: string;
+  readonly info: Readonly<Record<string, unknown>>;
+  readonly width: number | null;
+  readonly height: number | null;
+  readonly size: number | null;
+  readonly mime: string | null;
+}
+
 export interface OutboxRecord {
   readonly roomId: string;
   readonly transactionId: string;
@@ -37,6 +48,8 @@ export interface OutboxRecord {
   /** The sanitized bytes and metadata; the record is the only place they are stored. */
   readonly media: OutboxMedia | null;
   readonly uploaded: UploadedMedia | null;
+  /** A pack sticker sends an existing mxc URI and never uploads bytes. */
+  readonly pack?: OutboxPack | null;
 }
 
 export interface OutboxBackend {
@@ -65,6 +78,7 @@ export interface OutboxInput {
   readonly kind: MessageKind;
   readonly media: OutboxMedia | null;
   readonly replyTo: string | null;
+  readonly pack?: OutboxPack | null;
 }
 
 export interface OutboxIdentity {
@@ -117,10 +131,26 @@ export function isUploadedMedia(value: unknown): value is UploadedMedia {
 }
 
 /** Older records predate the media fields; an absent value reads as null. */
+export function isOutboxPack(value: unknown): value is OutboxPack {
+  if (!isRecord(value)) return false;
+  const source = value["source"];
+  return (
+    isMediaReference(source) &&
+    source.kind === "mxc" &&
+    typeof value["body"] === "string" &&
+    isRecord(value["info"]) &&
+    (value["width"] === null || typeof value["width"] === "number") &&
+    (value["height"] === null || typeof value["height"] === "number") &&
+    (value["size"] === null || typeof value["size"] === "number") &&
+    (value["mime"] === null || typeof value["mime"] === "string")
+  );
+}
+
 export function isOutboxRecord(value: unknown): value is OutboxRecord {
   if (!isRecord(value)) return false;
   const media = value["media"];
   const uploaded = value["uploaded"];
+  const pack = value["pack"];
   return (
     typeof value["roomId"] === "string" &&
     typeof value["transactionId"] === "string" &&
@@ -129,7 +159,8 @@ export function isOutboxRecord(value: unknown): value is OutboxRecord {
     isMessageRow(value["row"]) &&
     typeof value["retryable"] === "boolean" &&
     (media === null || media === undefined || isOutboxMedia(media)) &&
-    (uploaded === null || uploaded === undefined || isUploadedMedia(uploaded))
+    (uploaded === null || uploaded === undefined || isUploadedMedia(uploaded)) &&
+    (pack === null || pack === undefined || isOutboxPack(pack))
   );
 }
 
@@ -189,18 +220,33 @@ export function createOutbox(options: OutboxOptions): Outbox {
     async queue(input) {
       const account = identity();
       if (account === null) throw new WorkerFailure("not-signed-in");
-      const allowed = input.media !== null ? ATTACHMENT_KINDS.has(input.media.kind) : TEXT_KINDS.has(input.kind);
+      const pack = input.pack ?? null;
+      const allowed =
+        input.media !== null
+          ? ATTACHMENT_KINDS.has(input.media.kind)
+          : pack !== null
+            ? input.kind === "sticker"
+            : TEXT_KINDS.has(input.kind);
       const media: Media | null =
-        input.media === null
-          ? null
-          : {
+        input.media !== null
+          ? {
               kind: input.media.kind,
               name: input.media.name,
               width: input.media.width,
               height: input.media.height,
               size: input.media.size,
               url: input.media.previewUrl,
-            };
+            }
+          : pack === null
+            ? null
+            : {
+                kind: "sticker",
+                name: pack.body,
+                width: pack.width,
+                height: pack.height,
+                size: pack.size,
+                url: null,
+              };
       const row = queuedRow({
         roomId: input.roomId,
         messageId: input.messageId,
@@ -227,6 +273,7 @@ export function createOutbox(options: OutboxOptions): Outbox {
         retryable: allowed,
         media: input.media,
         uploaded: null,
+        pack,
       };
       await backend.put(record);
       emit({ roomId: input.roomId, messageId: input.messageId, row, retryable: allowed });

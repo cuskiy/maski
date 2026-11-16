@@ -138,6 +138,16 @@ export class WorkerSource implements ChatSource {
     return this.transport.sendMedia(roomId, messageId, transactionId, caption, html, replyTo, kind, name, file);
   }
 
+  sendSticker(
+    roomId: string,
+    messageId: string,
+    transactionId: string,
+    packId: string,
+    shortcode: string,
+  ): Promise<MessageRow> {
+    return this.transport.sendSticker(roomId, messageId, transactionId, packId, shortcode);
+  }
+
   media(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply> {
     return this.transport.media(roomId, messageId, variant);
   }

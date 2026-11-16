@@ -112,6 +112,8 @@ void test("the sticker picker renders resolved user packs", () => {
   const markup = surfaceBodyFor(en, SURFACE.sticker, state).value;
   assert.match(markup, /data-sticker-tab="user-0"[\s\S]{0,100}>[\s\S]{0,30}Favourites/u);
   assert.match(markup, /data-sticker-image="blob:http:\/\/localhost\/cat"/u);
+  assert.match(markup, /data-sticker-pack="user:stable"/u);
+  assert.match(markup, /data-sticker-shortcode="wave"/u);
   assert.match(markup, /data-sticker-body="Waving cat"/u);
   assert.match(markup, /<img class="pack-image"/u);
 });

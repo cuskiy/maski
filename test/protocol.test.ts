@@ -88,6 +88,38 @@ void test("the protocol parses the command set and rejects malformed input", () 
     }),
     { id: 8, type: "discardSend", payload: { roomId: "!a:example.org", messageId: "m1" } },
   );
+  assert.deepEqual(
+    parseCommand({
+      id: 9,
+      type: "sendSticker",
+      payload: {
+        roomId: "!a:example.org",
+        messageId: "m2",
+        transactionId: "t2",
+        packId: "user:legacy",
+        shortcode: "wave",
+      },
+    }),
+    {
+      id: 9,
+      type: "sendSticker",
+      payload: {
+        roomId: "!a:example.org",
+        messageId: "m2",
+        transactionId: "t2",
+        packId: "user:legacy",
+        shortcode: "wave",
+      },
+    },
+  );
+  assert.equal(
+    parseCommand({
+      id: 10,
+      type: "sendSticker",
+      payload: { roomId: "!a:example.org", messageId: "m2", transactionId: "t2", packId: "", shortcode: "wave" },
+    }),
+    null,
+  );
 });
 
 void test("the protocol parses the daily-use command shapes and rejects bad fields", () => {
