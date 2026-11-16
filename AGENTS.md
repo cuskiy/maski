@@ -1256,7 +1256,7 @@ Node major. A dependency upgrade that changes the toolchain is a user decision, 
 
 ## 6.3 Current measured truth
 
-Measured on 2026-11-16 on the working tree after `968c587` plus user image packs, mentions and the
+Measured on 2026-11-16 on the working tree after `2dae516` plus user image packs, mentions and the
 current changes. This is the only current-status section; counts and claims in `advice.md`, `past/`,
 browser history and old commits are evidence, not status.
 
