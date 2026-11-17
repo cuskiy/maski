@@ -63,6 +63,7 @@ export interface SessionPort {
   joinRoom(roomIdOrAlias: string): Promise<string>;
   answerInvite(roomId: string, accept: boolean): Promise<string | null>;
   createRoom(name: string, topic: string, directUserId: string | null): Promise<string>;
+  createSpace(name: string, topic: string): Promise<string>;
   forward(
     targetRoomId: string,
     sources: readonly { readonly roomId: string; readonly eventId: string }[],

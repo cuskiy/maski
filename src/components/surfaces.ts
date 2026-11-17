@@ -454,6 +454,14 @@ export function surfaceBodyFor(
         ${submit(t(c, "surface.create.submit"))}
       </form>`
         : html``;
+    case SURFACE.createSpace:
+      return capabilities.addRoom
+        ? html`<form class="form" method="post" data-surface="create-space">
+        ${field({ id: "space-name", label: t(c, "surface.createSpace.name"), type: "text", autocomplete: "off", required: true })}
+        ${field({ id: "space-topic", label: t(c, "surface.createSpace.topic"), type: "text", autocomplete: "off" })}
+        ${submit(t(c, "surface.createSpace.submit"))}
+      </form>`
+        : html``;
     case SURFACE.invite:
       return capabilities.answerInvite ? inviteBody(c, state) : html``;
     case SURFACE.roomInvite:

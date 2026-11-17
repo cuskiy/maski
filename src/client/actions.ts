@@ -65,6 +65,7 @@ export interface Actions {
   loadMembers(roomId: string): void;
   typing(roomId: string, typing: boolean): void;
   createRoom(name: string, topic: string): Promise<void>;
+  createSpace(name: string, topic: string): Promise<void>;
   joinRoom(value: string): Promise<"ok" | "notFound">;
   startDirect(userId: string): Promise<"ok" | "invalid" | "exists">;
   setNotification(roomId: string, mode: RoomSummary["notification"]): void;
@@ -382,6 +383,15 @@ export function createActions({ store, source, c, account }: Context): Actions {
     typing(roomId, typing) {
       if (!caps.typing) return;
       source.typing?.(roomId, typing);
+    },
+    async createSpace(name, topic) {
+      if (!caps.addRoom) return;
+      if (source.createSpace === undefined) return;
+      try {
+        await source.createSpace(name, topic);
+      } catch {
+        // A space the server refused is not a room the reader joined.
+      }
     },
     async createRoom(name, topic) {
       if (!caps.addRoom) return;

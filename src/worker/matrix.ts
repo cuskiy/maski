@@ -1407,6 +1407,25 @@ export class MatrixSession implements SessionPort {
     return null;
   }
 
+  async createSpace(name: string, topic: string): Promise<string> {
+    const client = this.requireClient();
+    let roomId: string;
+    try {
+      const created = await client.createRoom({
+        name,
+        topic,
+        preset: Preset.PrivateChat,
+        visibility: Visibility.Private,
+        creation_content: { type: "m.space" },
+      });
+      roomId = created.room_id;
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    await this.emitRooms();
+    return roomId;
+  }
+
   async createRoom(name: string, topic: string, directUserId: string | null): Promise<string> {
     const client = this.requireClient();
     let roomId: string;

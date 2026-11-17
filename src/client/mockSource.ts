@@ -4,6 +4,7 @@ import type { DeviceSession, Invite, Member, MessageRow, NotificationPrefs, Room
 import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { mockChatState, mockDevices, mockInvites, mockMembersFor, mockMessagesFor } from "../core/mock.ts";
 import { messageMatches } from "../core/search.ts";
+import { createRoom } from "../core/rooms.ts";
 import { toggledReactions } from "../core/reactions.ts";
 import { redactRow } from "../core/message.ts";
 
@@ -446,6 +447,37 @@ export class MockSource implements ChatSource {
     ];
     this.memberLog.set(roomId, members);
     this.emit("members", { roomId, members });
+  }
+
+  /** The review fixture adds the space it was asked to create, with no server behind it. */
+  createSpace(name: string, topic: string): Promise<string> {
+    const roomId = `!space-${String(this.rooms.length)}`;
+    this.addRoom(
+      createRoom({
+        roomId,
+        name,
+        topic,
+        avatar: null,
+        roomType: "m.space",
+        encryption: "none",
+      }),
+    );
+    return Promise.resolve(roomId);
+  }
+
+  createRoom(name: string, topic: string, directUserId: string | null): Promise<string> {
+    const roomId = `!room-${String(this.rooms.length)}`;
+    this.addRoom(
+      createRoom({
+        roomId,
+        name,
+        topic,
+        avatar: null,
+        directUserId,
+        encryption: "none",
+      }),
+    );
+    return Promise.resolve(roomId);
   }
 
   addRoom(room: RoomSummary): void {

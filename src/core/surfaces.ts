@@ -19,6 +19,7 @@ export const CHAT_SURFACES: readonly SurfaceDefinition[] = [
   { id: SURFACE.roomInvite, titleKey: "surface.roomInvite", kind: "modal" },
   { id: SURFACE.join, titleKey: "surface.join", kind: "modal" },
   { id: SURFACE.create, titleKey: "surface.create", kind: "modal" },
+  { id: SURFACE.createSpace, titleKey: "surface.createSpace", kind: "modal" },
   { id: SURFACE.settings, titleKey: "surface.settings", kind: "modal" },
   { id: SURFACE.roomSettings, titleKey: "surface.roomSettings", kind: "modal" },
   { id: SURFACE.sas, titleKey: "auth.key.sasTitle", kind: "modal" },

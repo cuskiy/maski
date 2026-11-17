@@ -159,6 +159,7 @@ function harness(): Harness {
     joinRoom: () => Promise.resolve(ROOM),
     answerInvite: () => Promise.resolve(null),
     createRoom: () => Promise.resolve(ROOM),
+    createSpace: () => Promise.resolve(ROOM),
     forward: () => Promise.resolve(null),
     memberAction: () => Promise.resolve(null),
     sendMedia: () =>

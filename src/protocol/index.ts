@@ -68,6 +68,7 @@ export type CommandName =
   | "joinRoom"
   | "answerInvite"
   | "createRoom"
+  | "createSpace"
   | "forward"
   | "memberAction"
   | "sendMedia"
@@ -165,6 +166,11 @@ export interface CommandMap {
   readonly inviteUser: { readonly roomId: string; readonly userId: string };
   readonly joinRoom: { readonly roomIdOrAlias: string };
   readonly answerInvite: { readonly roomId: string; readonly accept: boolean };
+  /** A space is a room whose creation content names the space type. */
+  readonly createSpace: {
+    readonly name: string;
+    readonly topic: string;
+  };
   readonly createRoom: {
     readonly name: string;
     readonly topic: string;
@@ -258,6 +264,7 @@ export interface ReplyData {
   readonly joinRoom: string;
   readonly answerInvite: string | null;
   readonly createRoom: string;
+  readonly createSpace: string;
   readonly forward: null;
   readonly memberAction: null;
   readonly sendMedia: MessageRow;
@@ -363,6 +370,7 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "joinRoom",
   "answerInvite",
   "createRoom",
+  "createSpace",
   "forward",
   "memberAction",
   "sendMedia",
@@ -1041,6 +1049,7 @@ export const REPLY_DATA_GUARDS: {
   joinRoom: isString,
   answerInvite: isStringOrNull,
   createRoom: isString,
+  createSpace: isString,
   forward: isNull,
   memberAction: isNull,
   sendMedia: isMessageRow,
@@ -1251,6 +1260,15 @@ function validJoinRoom(fields: Record<string, unknown>): fields is CommandMap["j
 
 function validAnswerInvite(fields: Record<string, unknown>): fields is CommandMap["answerInvite"] {
   return isRoomId(fields["roomId"]) && isBoolean(fields["accept"]);
+}
+
+function validCreateSpace(fields: Record<string, unknown>): fields is CommandMap["createSpace"] {
+  return (
+    isString(fields["name"]) &&
+    fields["name"].length <= 255 &&
+    isText(fields["topic"]) &&
+    fields["topic"].length <= 1024
+  );
 }
 
 function validCreateRoom(fields: Record<string, unknown>): fields is CommandMap["createRoom"] {
@@ -1493,6 +1511,9 @@ export function parseCommand(value: unknown): Command | null {
     case "answerInvite":
       if (!validAnswerInvite(fields)) return null;
       return { id, type, payload: { roomId: fields.roomId, accept: fields.accept } };
+    case "createSpace":
+      if (!validCreateSpace(fields)) return null;
+      return { id, type, payload: { name: fields.name, topic: fields.topic } };
     case "createRoom":
       if (!validCreateRoom(fields)) return null;
       return {

@@ -20,6 +20,7 @@ export const SURFACE = {
   roomInvite: "surface-room-invite",
   join: "surface-join",
   create: "surface-create",
+  createSpace: "surface-create-space",
   settings: "surface-settings",
   roomSettings: "surface-room-settings",
   sas: "surface-sas",

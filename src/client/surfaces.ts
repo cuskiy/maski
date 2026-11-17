@@ -1494,6 +1494,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       actions.addRoomAddress(current.roomId, address);
       refreshBody(SURFACE.roomSettings, roomId);
       document.querySelector<HTMLInputElement>("[data-room-address-input]")?.focus();
+    } else if (id === "create-space") {
+      const name = form.querySelector<HTMLInputElement>("#space-name")?.value.trim() ?? "";
+      const topic = form.querySelector<HTMLInputElement>("#space-topic")?.value.trim() ?? "";
+      if (name === "") return;
+      void actions.createSpace(name, topic);
+      hide(SURFACE.createSpace);
+      queueMicrotask(() => hide(SURFACE.createSpace));
     } else if (id === "create") {
       const name = form.querySelector<HTMLInputElement>("#create-name")?.value.trim() ?? "";
       const topic = form.querySelector<HTMLInputElement>("#create-topic")?.value.trim() ?? "";

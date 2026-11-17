@@ -15,6 +15,7 @@ const ACTIONS = [
   { surface: SURFACE.invite, key: "nav.invite", icon: icons.invite },
   { surface: SURFACE.join, key: "nav.join", icon: icons.join },
   { surface: SURFACE.create, key: "nav.create", icon: icons.create },
+  { surface: SURFACE.createSpace, key: "nav.newSpace", icon: icons.globe },
   { surface: SURFACE.settings, key: "nav.settings", icon: icons.settings },
 ] as const;
 
@@ -35,6 +36,7 @@ export function nav(state: ChatState, c: Catalog, capabilities: SourceCapabiliti
     if (action.surface === SURFACE.newMessage) return capabilities.addRoom && capabilities.inviteUser;
     if (action.surface === SURFACE.invite) return capabilities.answerInvite;
     if (action.surface === SURFACE.join || action.surface === SURFACE.create) return capabilities.addRoom;
+    if (action.surface === SURFACE.createSpace) return capabilities.addRoom;
     return true;
   });
   return html`<aside class="nav" data-region="${REGION.nav}" aria-label="${t(c, "nav.label")}">
