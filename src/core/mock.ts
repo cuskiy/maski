@@ -430,6 +430,17 @@ const designMessages: readonly MessageRow[] = [
     body: "",
     encryption: { state: "undecryptable", reason: "missing-key" },
   }),
+  row({
+    id: "d-loc",
+    roomId: "design",
+    sender: "@alice:matrix.org",
+    senderName: "Alice",
+    ts: at(13, 9, 6),
+    own: false,
+    kind: "text",
+    body: "Meet at the venue.",
+    location: { geoUri: "geo:35.0116,135.7681;u=35", description: "Meet at the venue." },
+  }),
 ];
 
 const aliceMessages: readonly MessageRow[] = [
@@ -475,17 +486,6 @@ const roadmapMessages: readonly MessageRow[] = [
     own: true,
     kind: "text",
     body: "The UI pass comes first.",
-  }),
-  row({
-    id: "r3",
-    roomId: "roadmap",
-    sender: "@alice:matrix.org",
-    senderName: "Alice",
-    ts: at(13, 9, 51),
-    own: false,
-    kind: "text",
-    body: "Meet at the venue.",
-    location: { geoUri: "geo:35.0116,135.7681;u=35", description: "Meet at the venue." },
   }),
 ];
 
