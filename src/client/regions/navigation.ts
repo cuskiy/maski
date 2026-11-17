@@ -59,6 +59,19 @@ function patchRow(current: HTMLElement, next: HTMLElement): HTMLElement {
   return current;
 }
 
+/** Puts the built rows in order without detaching a row that already sits where it belongs. */
+function patchChildren(list: HTMLOListElement, built: DocumentFragment): void {
+  const target = Array.from(built.children);
+  const existing = Array.from(list.children);
+  let index = 0;
+  for (const node of target) {
+    const current = existing[index];
+    if (current !== node) list.insertBefore(node, current ?? null);
+    index += 1;
+  }
+  while (list.children.length > target.length) list.lastElementChild?.remove();
+}
+
 function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void {
   const active = document.activeElement;
   const focusedRow =
@@ -91,7 +104,7 @@ function reconcileRows(current: HTMLOListElement, next: HTMLOListElement): void 
     fragment.append(clone);
     existing.delete(key);
   }
-  current.replaceChildren(fragment);
+  patchChildren(current, fragment);
   if (focusKey !== null) {
     current
       .querySelector<HTMLElement>(`li[data-room="${CSS.escape(focusKey)}"], li[data-space="${CSS.escape(focusKey)}"]`)
