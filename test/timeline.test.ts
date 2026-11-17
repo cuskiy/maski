@@ -74,11 +74,10 @@ void test("a failed window reveals a retryable failure instead of an empty room"
 });
 
 void test("a shared location links to its map", () => {
-  const state = { ...mockChatState(), roomId: "roadmap" };
-  const locationMarkup = timeline(state, en, "en").value;
+  const locationMarkup = timeline(mockChatState(), en, "en").value;
   assert.match(
-    markup,
+    locationMarkup,
     /class="message-location"[\s\S]{0,40}href="https:\/\/www\.openstreetmap\.org\/\?mlat=35\.0116&amp;mlon=135\.7681"/u,
   );
-  assert.match(markup, /Meet at the venue\./u);
+  assert.match(locationMarkup, /Meet at the venue\./u);
 });
