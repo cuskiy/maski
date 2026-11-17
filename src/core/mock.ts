@@ -5,6 +5,7 @@ import type {
   Media,
   Member,
   MessageEncryption,
+  MessageLocation,
   MessageKind,
   MessageRow,
   MessageStatus,
@@ -201,6 +202,7 @@ interface RowInput {
   readonly mentions?: readonly string[];
   readonly edited?: boolean;
   readonly redacted?: boolean;
+  readonly location?: MessageLocation | null;
   readonly status?: MessageStatus;
   readonly error?: string;
   readonly system?: boolean;
@@ -224,7 +226,7 @@ function row(input: RowInput): MessageRow {
     kind: input.kind,
     effect: null,
     poll: null,
-    location: null,
+    location: input.location ?? null,
     body: input.body,
     html: input.html ?? null,
     media: input.media ?? null,
@@ -473,6 +475,17 @@ const roadmapMessages: readonly MessageRow[] = [
     own: true,
     kind: "text",
     body: "The UI pass comes first.",
+  }),
+  row({
+    id: "r3",
+    roomId: "roadmap",
+    sender: "@alice:matrix.org",
+    senderName: "Alice",
+    ts: at(13, 9, 51),
+    own: false,
+    kind: "text",
+    body: "Meet at the venue.",
+    location: { geoUri: "geo:35.0116,135.7681;u=35", description: "Meet at the venue." },
   }),
 ];
 
