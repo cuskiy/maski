@@ -195,6 +195,7 @@ function harness(): Harness {
       ),
     media: () => Promise.resolve({ url: "blob:https://example.org/1", mime: "image/webp", width: 1, height: 1 }),
     setAvatar: () => Promise.resolve(null),
+    pat: () => Promise.resolve(null),
     onEvent: () => () => {},
   };
   return { api: createWorkerApi(port), outbox, backend, emitted, requests, deferred };
@@ -358,6 +359,7 @@ void test("a queued row interrupted by a restart uses a typed failure", async ()
     retryable: true,
     media: null,
     uploaded: null,
+    headpat: false,
   });
   await outbox.resume();
   assert.equal(backend.queued()[0]?.row.status, "failed");

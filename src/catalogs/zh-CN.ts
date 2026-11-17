@@ -274,6 +274,7 @@ export const zhCN = {
   "surface.search.scope": "在 {room} 中搜索",
   "settings.lowPriority": "低优先级",
   "settings.lowPriorityEmpty": "没有低优先级房间。",
+  "messageMenu.pat": "摸摸头",
   "messageMenu.reply": "回复",
   "messageMenu.react": "回应",
   "messageMenu.edit": "编辑",

@@ -27,6 +27,7 @@ const METHOD_CAPABILITIES = [
   "answerInvite",
   "saveNotifications",
   "setAvatar",
+  "pat",
   "backupSetup",
 ] as const satisfies readonly SourceCapability[];
 

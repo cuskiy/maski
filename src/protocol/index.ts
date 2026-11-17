@@ -70,6 +70,7 @@ export type CommandName =
   | "sendSticker"
   | "media"
   | "setAvatar"
+  | "pat"
   | "sasStart"
   | "sasAccept"
   | "sasConfirm"
@@ -194,6 +195,11 @@ export interface CommandMap {
     readonly packId: string;
     readonly shortcode: string;
   };
+  /** A pat is an emote the room renders as a headpat, with the target named in `m.mentions`. */
+  readonly pat: {
+    readonly roomId: string;
+    readonly userId: string;
+  };
   /** The avatar bytes stay a Blob; the worker strips, resizes and uploads them. */
   readonly setAvatar: {
     readonly file: Blob;
@@ -253,6 +259,7 @@ export interface ReplyData {
   readonly sendSticker: MessageRow;
   readonly media: MediaReply;
   readonly setAvatar: null;
+  readonly pat: null;
   readonly sasStart: SasState;
   readonly sasAccept: null;
   readonly sasConfirm: null;
@@ -357,6 +364,7 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "sendSticker",
   "media",
   "setAvatar",
+  "pat",
   "sasStart",
   "sasAccept",
   "sasConfirm",
@@ -999,6 +1007,7 @@ export const REPLY_DATA_GUARDS: {
   sendSticker: isMessageRow,
   media: isMediaReply,
   setAvatar: isNull,
+  pat: isNull,
   sasStart: isSasState,
   sasAccept: isNull,
   sasConfirm: isNull,
@@ -1265,6 +1274,10 @@ function validSendMedia(fields: Record<string, unknown>): fields is CommandMap["
   );
 }
 
+function validPat(fields: Record<string, unknown>): fields is CommandMap["pat"] {
+  return isRoomId(fields["roomId"]) && isUserId(fields["userId"]);
+}
+
 function validSetAvatar(fields: Record<string, unknown>): fields is CommandMap["setAvatar"] {
   const file = fields["file"];
   return file instanceof Blob && file.size > 0;
@@ -1493,6 +1506,9 @@ export function parseCommand(value: unknown): Command | null {
           shortcode: fields.shortcode,
         },
       };
+    case "pat":
+      if (!validPat(fields)) return null;
+      return { id, type, payload: { roomId: fields.roomId, userId: fields.userId } };
     case "setAvatar":
       if (!validSetAvatar(fields)) return null;
       return { id, type, payload: { file: fields.file } };

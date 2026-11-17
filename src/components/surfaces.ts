@@ -45,6 +45,7 @@ const MENU_ICONS = {
   "spaceMenu.settings": icons.settings,
   "spaceMenu.leave": icons.exit,
   "messageMenu.reply": icons.reply,
+  "messageMenu.pat": icons.heart,
   "messageMenu.react": icons.emoji,
   "messageMenu.edit": icons.compose,
   "messageMenu.delete": icons.trash,
@@ -478,6 +479,7 @@ export function surfaceBodyFor(
     }
     case SURFACE.messageMenu: {
       const keys: MenuKey[] = ["messageMenu.reply"];
+      if (capabilities.pat) keys.push("messageMenu.pat");
       if (capabilities.react) keys.push("messageMenu.react");
       if (capabilities.edit) keys.push("messageMenu.edit");
       if (capabilities.redact) keys.push("messageMenu.delete");

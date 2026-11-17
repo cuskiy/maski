@@ -633,6 +633,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       if (target !== null) {
         const permissions = messagePermissions(target, room(target.roomId), state().session?.userId ?? null);
         if (permissions.reply) allowed.add("messageMenu.reply");
+        if (capabilities.pat && target.sender !== (state().session?.userId ?? "")) allowed.add("messageMenu.pat");
         if (permissions.react) allowed.add("messageMenu.react");
         if (permissions.edit) allowed.add("messageMenu.edit");
         if (permissions.redact) allowed.add("messageMenu.delete");
@@ -953,7 +954,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = message(activeMessageId);
     if (target === null) return;
     if (action === "messageMenu.reply") composer.showReply(target);
-    else if (action === "messageMenu.react") {
+    else if (action === "messageMenu.pat") {
+      void actions.pat(target.roomId, target.sender).catch(() => undefined);
+    } else if (action === "messageMenu.react") {
       if (!capabilities.react) return;
       const source = lastMenuSource;
       const point = lastMenuPoint;
@@ -978,8 +981,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     hide(SURFACE.messageMenu);
   }
 
+  let searchSequence = 0;
   async function search(form: HTMLFormElement): Promise<void> {
     if (!capabilities.search) return;
+    // Each keystroke starts a search; only the newest answer may paint, so a slow one cannot
+    // overwrite the results of a query the reader already changed.
+    searchSequence += 1;
+    const sequence = searchSequence;
     const input = form.querySelector<HTMLInputElement>("#search-field");
     const results = document.querySelector<HTMLElement>("[data-search-results]");
     if (input === null || results === null) return;
@@ -1002,6 +1010,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     } catch {
       failed = true;
     }
+    if (sequence !== searchSequence) return;
     replaceHtml(
       results,
       failed
@@ -1037,6 +1046,12 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
+
+    // The backdrop fallback: an engine without `closedby` still closes a modal on a click outside it.
+    if (target instanceof HTMLDialogElement && target.matches(":modal")) {
+      target.close();
+      return;
+    }
 
     if (suppressClick) {
       suppressClick = false;

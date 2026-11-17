@@ -194,6 +194,10 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("sendSticker");
       return sentRow;
     },
+    async pat() {
+      calls.push("pat");
+      return null;
+    },
     async setAvatar() {
       calls.push("setAvatar");
       return null;

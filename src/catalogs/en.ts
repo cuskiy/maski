@@ -277,6 +277,7 @@ export const en = {
   "surface.search.scope": "Search in {room}",
   "settings.lowPriority": "Low priority",
   "settings.lowPriorityEmpty": "No low priority rooms.",
+  "messageMenu.pat": "Pat",
   "messageMenu.reply": "Reply",
   "messageMenu.react": "React",
   "messageMenu.edit": "Edit",

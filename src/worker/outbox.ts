@@ -50,6 +50,8 @@ export interface OutboxRecord {
   readonly uploaded: UploadedMedia | null;
   /** A pack sticker sends an existing mxc URI and never uploads bytes. */
   readonly pack?: OutboxPack | null;
+  /** True when the emote is a headpat, which the room renders as one. */
+  readonly headpat: boolean;
 }
 
 export interface OutboxBackend {
@@ -79,6 +81,7 @@ export interface OutboxInput {
   readonly media: OutboxMedia | null;
   readonly replyTo: string | null;
   readonly pack?: OutboxPack | null;
+  readonly headpat?: boolean;
 }
 
 export interface OutboxIdentity {
@@ -274,6 +277,7 @@ export function createOutbox(options: OutboxOptions): Outbox {
         media: input.media,
         uploaded: null,
         pack,
+        headpat: input.headpat === true,
       };
       await backend.put(record);
       emit({ roomId: input.roomId, messageId: input.messageId, row, retryable: allowed });

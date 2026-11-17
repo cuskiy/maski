@@ -33,6 +33,7 @@ export interface SessionPort {
   sendSticker(input: CommandMap["sendSticker"]): Promise<MessageRow>;
   media(input: CommandMap["media"]): Promise<MediaReply>;
   setAvatar(input: CommandMap["setAvatar"]): Promise<null>;
+  pat(input: CommandMap["pat"]): Promise<null>;
   markRead(roomId: string, eventId: string): Promise<null>;
   members(roomId: string): Promise<null>;
   devices(): Promise<readonly DeviceSession[]>;

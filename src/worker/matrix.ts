@@ -251,6 +251,7 @@ function mentionIds(value: unknown): readonly string[] {
 }
 
 type MessageContent = TimelineEvents[typeof EventType.RoomMessage];
+
 type StickerContent = TimelineEvents[typeof EventType.Sticker];
 
 interface SdkEncryptedFile {
@@ -963,6 +964,28 @@ export class MatrixSession implements SessionPort {
    * Validates, strips and caches the bytes, then queues one outbox row. The upload itself happens
    * in `deliver`, so a send retry never repeats it.
    */
+  async pat(input: CommandMap["pat"]): Promise<null> {
+    this.requireClient();
+    const room = this.requireRoom(input.roomId);
+    if (room.getMyMembership() !== "join") throw new WorkerFailure("unavailable");
+    const outbox = this.requireOutbox();
+    const messageId = `local-${crypto.randomUUID()}`;
+    await outbox.queue({
+      roomId: input.roomId,
+      messageId,
+      transactionId: `pat-${crypto.randomUUID()}`,
+      body: `pats ${input.userId}`,
+      html: null,
+      kind: "emote",
+      media: null,
+      replyTo: null,
+      headpat: true,
+    });
+    void outbox.deliver(messageId).catch(() => undefined);
+    this.scheduleRooms();
+    return null;
+  }
+
   async setAvatar(input: CommandMap["setAvatar"]): Promise<null> {
     const client = this.requireClient();
     const prepared = await prepareUpload(input.file, "avatar", "image", await this.uploadLimitFor(client));
@@ -1976,6 +1999,7 @@ export class MatrixSession implements SessionPort {
               ...(row.html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: row.html }),
               ...(record.replyTo === null ? {} : { "m.relates_to": { "m.in_reply_to": { event_id: record.replyTo } } }),
               ...(mentions.length === 0 ? {} : { "m.mentions": { user_ids: mentions } }),
+              ...(record.headpat ? { "fyi.cisnt.headpat": true } : {}),
             },
             row.transactionId ?? undefined,
           );
@@ -2919,19 +2943,31 @@ export class MatrixSession implements SessionPort {
       setTimeout(() => {
         this.syncRestartTimer = null;
         if (this.client !== client) return;
-        try {
-          client.stopClient();
-        } catch {
-          // The sync loop may already be stopped.
-        }
-        void client
-          .startClient({
-            initialSyncLimit: 20,
-            lazyLoadMembers: true,
-            pendingEventOrdering: PendingEventOrdering.Detached,
-            threadSupport: false,
-          })
-          .catch(() => this.restartSync(client));
+        void (async () => {
+          const stored = this.stored;
+          if (stored !== null) {
+            const renewed = await this.refreshSession(stored);
+            // A refresh token that no longer works means the session is over; say so.
+            if (renewed === null && stored.refreshToken !== null) {
+              await this.softLogout();
+              return;
+            }
+          }
+          if (this.client !== client) return;
+          try {
+            client.stopClient();
+          } catch {
+            // The sync loop may already be stopped.
+          }
+          await client
+            .startClient({
+              initialSyncLimit: 20,
+              lazyLoadMembers: true,
+              pendingEventOrdering: PendingEventOrdering.Detached,
+              threadSupport: false,
+            })
+            .catch(() => this.restartSync(client));
+        })();
       }, delay),
     );
   }

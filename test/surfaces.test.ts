@@ -180,6 +180,7 @@ void test("the message menu offers source and forwarding offers rooms", () => {
   const actions = [...menu.matchAll(/data-action="(messageMenu\.[^"]+)"/gu)].map((match) => match[1]);
   assert.deepEqual(actions, [
     "messageMenu.reply",
+    "messageMenu.pat",
     "messageMenu.react",
     "messageMenu.edit",
     "messageMenu.delete",
