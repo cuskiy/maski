@@ -23,6 +23,11 @@
     font-size: var(--text-base);
   }
 
+  .message-location .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+  }
+
   .load-older {
     display: flex;
     align-items: center;
@@ -969,10 +974,5 @@
     color: var(--bubble-ink);
     font-size: var(--text-sm);
     text-decoration: none;
-  }
-
-  .message-location .icon {
-    inline-size: 1rem;
-    block-size: 1rem;
   }
 }
