@@ -213,6 +213,7 @@ export class MockSource implements ChatSource {
       own: true,
       kind,
       effect: null,
+      poll: null,
       body: caption,
       html: null,
       media: {
@@ -264,6 +265,7 @@ export class MockSource implements ChatSource {
       own: true,
       kind: "sticker",
       effect: null,
+      poll: null,
       body: image.body,
       html: null,
       media: {

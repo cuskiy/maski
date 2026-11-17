@@ -1,5 +1,7 @@
 import type {
   BackupState,
+  Poll,
+  PollAnswer,
   ChatEffect,
   Connection,
   DeviceSession,
@@ -730,6 +732,19 @@ export function isRoomSummary(value: unknown): value is RoomSummary {
   );
 }
 
+function isPollAnswer(value: unknown): value is PollAnswer {
+  return isRecord(value) && isString(value["id"]) && isText(value["text"]);
+}
+
+function isPoll(value: unknown): value is Poll {
+  return (
+    isRecord(value) &&
+    isText(value["question"]) &&
+    isArrayOf(value["answers"], isPollAnswer) &&
+    isBoolean(value["disclosed"])
+  );
+}
+
 function isMedia(value: unknown): value is Media {
   if (!isRecord(value)) return false;
   const kind = value["kind"];
@@ -771,6 +786,7 @@ export function isMessageRow(value: unknown): value is MessageRow {
     isBoolean(value["own"]) &&
     isMessageKind(value["kind"]) &&
     (value["effect"] === null || isChatEffect(value["effect"])) &&
+    (value["poll"] === null || isPoll(value["poll"])) &&
     isText(value["body"]) &&
     isStringOrNull(value["html"]) &&
     (value["media"] === null || isMedia(value["media"])) &&

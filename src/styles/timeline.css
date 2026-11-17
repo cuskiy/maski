@@ -932,4 +932,29 @@
     background: var(--card-hover-bg);
     color: var(--card-ink);
   }
+
+  .poll {
+    display: grid;
+    gap: var(--space-2);
+    margin-block-start: var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--bubble-bg);
+  }
+
+  .poll-answers {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .poll-answer {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--menu);
+    color: var(--bubble-ink);
+    font-size: var(--text-sm);
+  }
 }

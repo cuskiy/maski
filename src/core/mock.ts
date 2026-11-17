@@ -223,6 +223,7 @@ function row(input: RowInput): MessageRow {
     own: input.own,
     kind: input.kind,
     effect: null,
+    poll: null,
     body: input.body,
     html: input.html ?? null,
     media: input.media ?? null,

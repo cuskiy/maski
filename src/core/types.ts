@@ -109,6 +109,18 @@ export interface ReplyRef {
 /** The chat effects a message may ask the room to play, as Element names them. */
 export type ChatEffect = "confetti" | "fireworks" | "rainfall" | "snowfall" | "space-invaders" | "hearts";
 
+export interface PollAnswer {
+  readonly id: string;
+  readonly text: string;
+}
+
+/** A poll as the room stores it: one question, its answers, and whether votes are visible. */
+export interface Poll {
+  readonly question: string;
+  readonly answers: readonly PollAnswer[];
+  readonly disclosed: boolean;
+}
+
 export interface MessageRow {
   readonly id: string;
   readonly eventId: string | null;
@@ -122,6 +134,8 @@ export interface MessageRow {
   readonly kind: MessageKind;
   /** Null unless the message asks the room to play one of the chat effects. */
   readonly effect: ChatEffect | null;
+  /** Null unless the message is a poll. */
+  readonly poll: Poll | null;
   readonly body: string;
   readonly html: string | null;
   readonly media: Media | null;

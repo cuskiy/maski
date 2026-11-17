@@ -31,6 +31,7 @@ export function queuedRow(input: QueuedMessage): MessageRow {
     own: true,
     kind: input.kind,
     effect: null,
+    poll: null,
     body: input.body,
     html: input.html,
     media: input.media,

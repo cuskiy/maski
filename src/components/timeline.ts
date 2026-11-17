@@ -251,6 +251,17 @@ function messageRow(
         <div class="message-body">
           ${reply}
           <div class="message-line">${content}</div>
+      ${
+        message.poll === null
+          ? html``
+          : html`<div class="poll" data-poll="${message.poll.question}">
+              <ol class="poll-answers" role="list">
+                ${message.poll.answers.map(
+                  (answer) => html`<li class="poll-answer" data-poll-answer="${answer.id}">${answer.text}</li>`,
+                )}
+              </ol>
+            </div>`
+      }
         </div>
         ${capabilities.react ? reactionsView(message, c) : html``}
         <button

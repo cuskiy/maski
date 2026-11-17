@@ -8,6 +8,8 @@ import {
 } from "matrix-js-sdk";
 import type {
   ChatEffect,
+  Poll,
+  PollAnswer,
   Invite,
   Member,
   MessageEncryption,
@@ -50,6 +52,28 @@ function chatEffect(event: MatrixEvent): ChatEffect | null {
     default:
       return null;
   }
+}
+
+function chatPoll(event: MatrixEvent): Poll | null {
+  const start = content(event)["org.matrix.msc3381.poll.start"];
+  if (!isRecord(start)) return null;
+  const question = start["question"];
+  const questionText = isRecord(question) ? question["org.matrix.msc1767.text"] : undefined;
+  const answers = start["answers"];
+  if (!Array.isArray(answers)) return null;
+  const parsed: PollAnswer[] = [];
+  for (const answer of answers) {
+    if (!isRecord(answer) || typeof answer["id"] !== "string") continue;
+    const text = answer["org.matrix.msc1767.text"];
+    if (typeof text !== "string") continue;
+    parsed.push({ id: answer["id"], text });
+  }
+  if (parsed.length === 0) return null;
+  return {
+    question: typeof questionText === "string" ? questionText : "",
+    answers: parsed,
+    disclosed: start["kind"] === "org.matrix.msc3381.poll.disclosed",
+  };
 }
 
 function messageKind(event: MatrixEvent): MessageKind {
@@ -266,6 +290,7 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
     own: sender === ownUserId,
     kind,
     effect: redacted ? null : chatEffect(event),
+    poll: redacted ? null : chatPoll(event),
     body: details === null ? (typeof body === "string" ? body : "") : details.caption,
     html: !redacted && encryption.state === "ok" && typeof formatted === "string" ? formatted : null,
     media: details === null ? null : messageMedia(details),
