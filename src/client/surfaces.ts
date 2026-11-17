@@ -885,6 +885,12 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       hide(SURFACE.roomMenu);
       askConfirm(t(c, "roomMenu.leaveConfirm"), () => actions.leaveRoom(id));
       return;
+    } else if (action === "roomMenu.addToSpace") {
+      if (!capabilities.addRoom) return;
+      hide(SURFACE.roomMenu);
+      const dialog = document.getElementById(SURFACE.spacePicker);
+      if (dialog instanceof HTMLDialogElement) dialog.showModal();
+      return;
     } else if (action === "roomMenu.mediaFiles") {
       if (!capabilities.search) return;
       hide(SURFACE.roomMenu);
@@ -1624,14 +1630,6 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = event.target;
     if (!(target instanceof Element)) return;
     const keyboardPoint = lastInput === "keyboard";
-    const addToSpace = target.closest<HTMLElement>('[data-menu-key="roomMenu.addToSpace"]');
-    if (addToSpace !== null) {
-      event.preventDefault();
-      const dialog = document.getElementById(SURFACE.spacePicker);
-      if (dialog instanceof HTMLDialogElement) dialog.showModal();
-      return;
-    }
-
     const roomControl = target.closest<HTMLElement>("button[data-room], [data-space-toggle]");
     if (roomControl !== null) {
       event.preventDefault();
