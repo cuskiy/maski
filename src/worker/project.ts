@@ -165,7 +165,13 @@ function messageMedia(details: MediaDetails): MessageRow["media"] {
 /** The worker-only record that can answer a `media` command for this event. */
 export function projectMediaSource(room: Room, event: MatrixEvent): MediaSource | null {
   const type = event.getType();
-  if (type !== EventType.RoomMessage && type !== EventType.RoomMessageEncrypted && type !== EventType.Sticker) {
+  // A poll is its own event type, and the room renders it with the message it names.
+  if (
+    type !== EventType.RoomMessage &&
+    type !== EventType.RoomMessageEncrypted &&
+    type !== EventType.Sticker &&
+    type !== "m.poll.start"
+  ) {
     return null;
   }
   if (event.isRedacted() || event.isDecryptionFailure()) return null;
