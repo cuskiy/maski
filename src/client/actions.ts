@@ -102,6 +102,7 @@ export interface Actions {
   resetRecoveryKey(): void;
   clearRecoveryKey(): void;
   resetIdentity(password: string): void;
+  setAvatar(file: Blob): Promise<void>;
   startSas(deviceId: string | null): Promise<void>;
   acceptSas(id: string): Promise<void>;
   confirmSas(id: string): Promise<void>;
@@ -721,6 +722,10 @@ export function createActions({ store, source, c, account }: Context): Actions {
     },
     clearRecoveryKey() {
       store.write("recoveryKey", null);
+    },
+    setAvatar(file) {
+      if (!caps.setAvatar) return Promise.reject(new Error("unsupported"));
+      return source.setAvatar?.(file) ?? Promise.reject(new Error("unsupported"));
     },
     resetIdentity(password) {
       if (!caps.resetIdentity) return;

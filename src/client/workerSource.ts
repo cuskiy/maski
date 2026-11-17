@@ -141,6 +141,10 @@ export class WorkerSource implements ChatSource {
     return this.transport.sendSticker(roomId, messageId, transactionId, packId, shortcode);
   }
 
+  setAvatar(file: Blob): Promise<void> {
+    return this.transport.setAvatar(file).then(() => undefined);
+  }
+
   media(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply> {
     return this.transport.media(roomId, messageId, variant);
   }

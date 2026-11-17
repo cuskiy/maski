@@ -605,6 +605,7 @@ function settingsTabs(
 function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabilities): Html {
   const session = state.session;
   const sessionCapabilities = session?.capabilities ?? null;
+  const accountAvatar = session === null ? null : safeAvatarUrl(session.avatar);
   const hasSecurity =
     capabilities.resetRecoveryKey ||
     capabilities.resetIdentity ||
@@ -629,12 +630,30 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
         session === null
           ? html`<p class="note">${t(c, "settings.signedOut")}</p>`
           : html`<div class="profile-line">
-                <span class="profile-avatar" aria-hidden="true">${session.displayName.slice(0, 1)}</span>
+                <span class="profile-avatar" aria-hidden="true">
+                  ${
+                    accountAvatar === null
+                      ? session.displayName.slice(0, 1)
+                      : html`<img src="${accountAvatar}" alt="" width="40" height="40" decoding="async" />`
+                  }
+                </span>
                 <div class="profile-text">
                   <strong dir="auto">${session.displayName}</strong>
                   <p class="note" dir="ltr">${session.userId}</p>
                 </div>
               </div>
+              <button class="button-quiet" type="button" data-settings-action="avatar">
+                ${t(c, "settings.changeAvatar")}
+              </button>
+              <input
+                class="visually-hidden"
+                type="file"
+                accept="image/*"
+                id="settings-avatar"
+                data-settings-avatar
+                tabindex="-1"
+                aria-hidden="true"
+              />
               <button class="button-quiet" type="button" data-settings-action="logout">
                 ${t(c, "settings.logout")}
               </button>

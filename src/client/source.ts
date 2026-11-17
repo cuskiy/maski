@@ -127,6 +127,7 @@ export interface ChatSource {
   ): Promise<MessageRow>;
   /** Resolves a worker-only source to a `blob:` URL; absent means the surface is hidden. */
   media?(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply>;
+  setAvatar?(file: Blob): Promise<void>;
   retrySend(roomId: string, messageId: string): Promise<MessageRow>;
   discardSend(roomId: string, messageId: string): void;
   markRead(roomId: string, eventId: string): Promise<void> | void;

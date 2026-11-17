@@ -161,6 +161,10 @@ export class MatrixTransport {
     return this.request("sendSticker", { roomId, messageId, transactionId, packId, shortcode });
   }
 
+  setAvatar(file: Blob): Promise<null> {
+    return this.request("setAvatar", { file });
+  }
+
   media(roomId: string, messageId: string, variant: MediaVariant): Promise<MediaReply> {
     return this.request("media", { roomId, messageId, variant });
   }

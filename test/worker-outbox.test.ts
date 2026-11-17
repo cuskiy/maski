@@ -194,6 +194,7 @@ function harness(): Harness {
         }),
       ),
     media: () => Promise.resolve({ url: "blob:https://example.org/1", mime: "image/webp", width: 1, height: 1 }),
+    setAvatar: () => Promise.resolve(null),
     onEvent: () => () => {},
   };
   return { api: createWorkerApi(port), outbox, backend, emitted, requests, deferred };

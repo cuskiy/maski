@@ -148,6 +148,8 @@ export const zhCN = {
   "settings.notificationLevel": "通知级别",
   "settings.logout": "退出登录",
   "settings.logoutConfirm": "退出这个账户？",
+  "settings.changeAvatar": "更换头像",
+  "settings.avatarFailed": "这张图片不能用。请换一张。",
   "settings.logoutFailed": "无法退出登录。请检查网络后重试。",
   "settings.signOutDeviceConfirm": "退出这个会话？",
   "settings.signOutOthersConfirm": "退出其他所有会话？",

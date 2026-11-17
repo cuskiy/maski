@@ -53,7 +53,7 @@ export class MockSource implements ChatSource {
   private readonly olderLoaded = new Set<string>();
   private readonly messageLog = new Map<string, MessageRow[]>();
   private readonly memberLog = new Map<string, Member[]>();
-  private readonly state = mockChatState();
+  private state = mockChatState();
   private rooms: RoomSummary[] = [];
   private devices: readonly DeviceSession[] = [...mockDevices];
   private invites: readonly Invite[] = [];
@@ -318,6 +318,16 @@ export class MockSource implements ChatSource {
   }
 
   markRead(_roomId: string, _eventId: string): void {}
+
+  /** The review fixture shows the chosen image as this session's avatar. */
+  setAvatar(file: Blob): Promise<void> {
+    const session = this.state.session;
+    if (session === null) return Promise.reject(new Error("not-signed-in"));
+    const url = URL.createObjectURL(file);
+    this.state = { ...this.state, session: { ...session, avatar: url } };
+    this.emit("session", this.state.session);
+    return Promise.resolve();
+  }
 
   private emitPatch(roomId: string, row: MessageRow): void {
     this.emit("window", {

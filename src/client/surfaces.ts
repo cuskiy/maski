@@ -799,6 +799,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         void actions.logout().catch(() => showSettingsError(t(c, "settings.logoutFailed")));
       });
       return;
+    } else if (action === "avatar") {
+      const file = document.querySelector<HTMLInputElement>("[data-settings-avatar]");
+      if (file !== null) file.click();
+      return;
     } else if (action === "reset-key") {
       if (!capabilities.resetRecoveryKey) return;
       askConfirm(t(c, "settings.resetKeyConfirm"), () => {
@@ -1525,6 +1529,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = event.target;
     if (target instanceof HTMLInputElement && target.id === "surface-attach-input") {
       composer.handleFileInput(target);
+      return;
+    }
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-settings-avatar")) {
+      const file = target.files?.[0];
+      target.value = "";
+      if (file === undefined) return;
+      void actions.setAvatar(file).catch(() => showSettingsError(t(c, "settings.avatarFailed")));
       return;
     }
     if (target instanceof HTMLInputElement && target.dataset["setting"] !== undefined) {

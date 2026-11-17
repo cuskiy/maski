@@ -69,6 +69,7 @@ export type CommandName =
   | "sendMedia"
   | "sendSticker"
   | "media"
+  | "setAvatar"
   | "sasStart"
   | "sasAccept"
   | "sasConfirm"
@@ -193,6 +194,10 @@ export interface CommandMap {
     readonly packId: string;
     readonly shortcode: string;
   };
+  /** The avatar bytes stay a Blob; the worker strips, resizes and uploads them. */
+  readonly setAvatar: {
+    readonly file: Blob;
+  };
   readonly media: {
     readonly roomId: string;
     readonly messageId: string;
@@ -247,6 +252,7 @@ export interface ReplyData {
   readonly sendMedia: MessageRow;
   readonly sendSticker: MessageRow;
   readonly media: MediaReply;
+  readonly setAvatar: null;
   readonly sasStart: SasState;
   readonly sasAccept: null;
   readonly sasConfirm: null;
@@ -350,6 +356,7 @@ const COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "sendMedia",
   "sendSticker",
   "media",
+  "setAvatar",
   "sasStart",
   "sasAccept",
   "sasConfirm",
@@ -991,6 +998,7 @@ export const REPLY_DATA_GUARDS: {
   sendMedia: isMessageRow,
   sendSticker: isMessageRow,
   media: isMediaReply,
+  setAvatar: isNull,
   sasStart: isSasState,
   sasAccept: isNull,
   sasConfirm: isNull,
@@ -1257,6 +1265,11 @@ function validSendMedia(fields: Record<string, unknown>): fields is CommandMap["
   );
 }
 
+function validSetAvatar(fields: Record<string, unknown>): fields is CommandMap["setAvatar"] {
+  const file = fields["file"];
+  return file instanceof Blob && file.size > 0;
+}
+
 function validMediaCommand(fields: Record<string, unknown>): fields is CommandMap["media"] {
   return (
     isRoomId(fields["roomId"]) &&
@@ -1480,6 +1493,9 @@ export function parseCommand(value: unknown): Command | null {
           shortcode: fields.shortcode,
         },
       };
+    case "setAvatar":
+      if (!validSetAvatar(fields)) return null;
+      return { id, type, payload: { file: fields.file } };
     case "media":
       if (!validMediaCommand(fields)) return null;
       return {

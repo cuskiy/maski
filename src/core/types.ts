@@ -184,6 +184,7 @@ export type SourceCapability =
   | "setRoomTag"
   | "setNotification"
   | "resetRecoveryKey"
+  | "setAvatar"
   | "resetIdentity"
   | "signOutDevice"
   | "signOutOthers"
@@ -196,6 +197,7 @@ export type SourceCapabilities = Readonly<Record<SourceCapability, boolean>>;
 /** The review surface: every command the mock fixture implements. */
 export const REVIEW_CAPABILITIES: SourceCapabilities = {
   media: true,
+  setAvatar: true,
   stickers: true,
   search: true,
   react: true,
@@ -222,6 +224,7 @@ export const REVIEW_CAPABILITIES: SourceCapabilities = {
 /** The worker conversation: only the commands the worker protocol implements. */
 export const PRODUCTION_CAPABILITIES: SourceCapabilities = {
   media: true,
+  setAvatar: true,
   stickers: true,
   search: true,
   react: true,

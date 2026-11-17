@@ -150,6 +150,8 @@ export const en = {
   "settings.notificationLevel": "Notification level",
   "settings.logout": "Sign out",
   "settings.logoutConfirm": "Sign out of this account?",
+  "settings.changeAvatar": "Change avatar",
+  "settings.avatarFailed": "That image could not be used. Try another one.",
   "settings.logoutFailed": "Could not sign out. Check the connection and try again.",
   "settings.signOutDeviceConfirm": "Sign out this session?",
   "settings.signOutOthersConfirm": "Sign out all other sessions?",

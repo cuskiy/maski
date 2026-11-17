@@ -960,6 +960,15 @@ export class MatrixSession implements SessionPort {
    * Validates, strips and caches the bytes, then queues one outbox row. The upload itself happens
    * in `deliver`, so a send retry never repeats it.
    */
+  async setAvatar(input: CommandMap["setAvatar"]): Promise<null> {
+    const client = this.requireClient();
+    const prepared = await prepareUpload(input.file, "avatar", "image", await this.uploadLimitFor(client));
+    const uploaded = await client.uploadContent(new File([prepared.blob], prepared.name, { type: prepared.mime }));
+    await client.setAvatarUrl(uploaded.content_uri);
+    await this.refreshAccountAvatar();
+    return null;
+  }
+
   async sendMedia(input: CommandMap["sendMedia"]): Promise<MessageRow> {
     const client = this.requireClient();
     const account = this.requireAccount();

@@ -194,6 +194,10 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("sendSticker");
       return sentRow;
     },
+    async setAvatar() {
+      calls.push("setAvatar");
+      return null;
+    },
     async media() {
       calls.push("media");
       return { url: "blob:https://example.org/1", mime: "image/webp", width: 1, height: 1 };
