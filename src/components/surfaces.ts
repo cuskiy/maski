@@ -426,6 +426,7 @@ export function bootSurfaceBody(c: Catalog, id: string, capabilities: SourceCapa
     case SURFACE.sendMenu:
     case SURFACE.confirm:
     case SURFACE.licenses:
+    case SURFACE.spacePicker:
       return surfaceBodyFor(c, id, emptyChatState(), capabilities);
     default:
       return html`<p class="note">${t(c, "noscript.surface")}</p>`;
