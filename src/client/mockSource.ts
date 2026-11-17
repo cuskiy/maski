@@ -414,7 +414,7 @@ export class MockSource implements ChatSource {
     this.emit("members", { roomId, members: this.withData ? this.membersFor(roomId) : [] });
   }
 
-  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void {
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<void> {
     const members = this.membersFor(roomId).map((member) => {
       if (member.userId !== userId) return member;
       return Object.assign({}, member, {
@@ -423,6 +423,7 @@ export class MockSource implements ChatSource {
     });
     this.memberLog.set(roomId, members);
     this.emit("members", { roomId, members });
+    return Promise.resolve();
   }
 
   inviteUser(roomId: string, userId: string): void {

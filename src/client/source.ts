@@ -140,7 +140,7 @@ export interface ChatSource {
   forward?(targetRoomId: string, sources: readonly ForwardSource[]): void;
   typing?(roomId: string, typing: boolean): void;
   members(roomId: string): void;
-  memberAction?(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
+  memberAction?(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<void>;
   inviteUser?(roomId: string, userId: string): void;
   /** The review fixture inserts a local room; production creates through `createRoom`. */
   addRoom?(room: RoomSummary): void;

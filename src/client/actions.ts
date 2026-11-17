@@ -60,7 +60,7 @@ export interface Actions {
   ): Promise<void>;
   addRoomAddress(roomId: string, address: string): void;
   removeRoomAddress(roomId: string, address: string): void;
-  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<void>;
   inviteUser(roomId: string, userId: string): "ok" | "invalid" | "exists";
   loadMembers(roomId: string): void;
   typing(roomId: string, typing: boolean): void;
@@ -506,9 +506,9 @@ export function createActions({ store, source, c, account }: Context): Actions {
     memberAction(roomId, userIdToChange, action) {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);
       const member = store.read("members").find((entry) => entry.userId === userIdToChange);
-      if (room === undefined || member === undefined || !caps.memberAction) return;
-      if (!memberPermissions(room, member, userId())[action]) return;
-      source.memberAction?.(roomId, userIdToChange, action);
+      if (room === undefined || member === undefined || !caps.memberAction) return Promise.resolve();
+      if (!memberPermissions(room, member, userId())[action]) return Promise.resolve();
+      return source.memberAction?.(roomId, userIdToChange, action) ?? Promise.resolve();
     },
     inviteUser(roomId, invitee) {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);

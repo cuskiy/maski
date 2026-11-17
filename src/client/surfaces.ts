@@ -1302,7 +1302,8 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
             { name },
           ),
           () => {
-            actions.memberAction(roomId, memberId, action);
+            clearRoomSettingsError();
+            void actions.memberAction(roomId, memberId, action).catch(failRoomSettings);
             refreshBody(SURFACE.roomSettings, activeRoomId ?? state().roomId);
           },
         );

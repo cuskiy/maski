@@ -227,8 +227,8 @@ export class WorkerSource implements ChatSource {
     void this.transport.forward(targetRoomId, sources).catch(() => undefined);
   }
 
-  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void {
-    void this.transport.memberAction(roomId, userId, action).catch(() => undefined);
+  memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): Promise<void> {
+    return this.transport.memberAction(roomId, userId, action).then(() => undefined);
   }
 
   startSas(deviceId: string | null): Promise<void> {
