@@ -198,7 +198,14 @@ function messageRow(
   const failure = t(c, "message.failed");
   const status = pending
     ? message.status === "failed"
-      ? html`<span class="message-failed" role="img" aria-label="${failure}" title="${failure}">!</span>`
+      ? html`<span
+          class="message-failed"
+          role="img"
+          data-error="${message.error ?? "unavailable"}"
+          aria-label="${failure}"
+          title="${failure}"
+          >!</span
+        >`
       : html`<span
           class="message-spinner"
           role="status"

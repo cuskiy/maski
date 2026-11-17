@@ -398,6 +398,7 @@ export class MatrixSession implements SessionPort {
   private startTask: Promise<SessionSummary> | null = null;
   private startFailure: FailureCode | null = null;
   private renewTimer: number | null = null;
+  private renewInFlight: Promise<StoredSession | null> | null = null;
   private syncReady = false;
   private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
@@ -1925,57 +1926,69 @@ export class MatrixSession implements SessionPort {
         this.scheduleRooms();
       },
       deliver: async (record) => {
-        const client = this.requireClient();
-        const row = record.row;
-        const packSticker = record.pack ?? null;
-        if (packSticker !== null) {
-          const response = await client.sendEvent(
+        const send = async (): Promise<string> => {
+          const client = this.requireClient();
+          const row = record.row;
+          const packSticker = record.pack ?? null;
+          if (packSticker !== null) {
+            const response = await client.sendEvent(
+              row.roomId,
+              EventType.Sticker,
+              { body: packSticker.body, info: packSticker.info, url: packSticker.source.url },
+              row.transactionId ?? undefined,
+            );
+            return response.event_id;
+          }
+          const media = record.media ?? null;
+          if (media !== null) {
+            const uploaded = record.uploaded;
+            if (uploaded === null) throw new WorkerFailure("unavailable");
+            const fields = buildMediaContent({
+              kind: media.kind,
+              name: media.name,
+              caption: row.body,
+              html: row.html,
+              mime: media.mime,
+              size: media.size,
+              width: media.width,
+              height: media.height,
+              duration: media.duration,
+              reference: uploaded.source,
+            });
+            const transactionId = row.transactionId ?? undefined;
+            const response =
+              fields.event === "sticker"
+                ? await client.sendEvent(row.roomId, EventType.Sticker, stickerContent(fields), transactionId)
+                : await client.sendMessage(row.roomId, messageContent(fields), transactionId);
+            return response.event_id;
+          }
+          const msgtype = row.kind === "notice" ? MsgType.Notice : row.kind === "emote" ? MsgType.Emote : MsgType.Text;
+          const room = client.getRoom(row.roomId);
+          const ownUserId = client.getUserId();
+          const mentions = room === null || ownUserId === null ? [] : mentionedUserIds(room, ownUserId, row.body);
+          const response = await client.sendMessage(
             row.roomId,
-            EventType.Sticker,
-            { body: packSticker.body, info: packSticker.info, url: packSticker.source.url },
+            {
+              msgtype,
+              body: row.body,
+              ...(row.html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: row.html }),
+              ...(record.replyTo === null ? {} : { "m.relates_to": { "m.in_reply_to": { event_id: record.replyTo } } }),
+              ...(mentions.length === 0 ? {} : { "m.mentions": { user_ids: mentions } }),
+            },
             row.transactionId ?? undefined,
           );
           return response.event_id;
+        };
+        try {
+          return await send();
+        } catch (error) {
+          // A five-minute token can expire between a renewal and the request itself.
+          const stored = this.stored;
+          if (stored === null) throw error;
+          const next = await this.refreshSession(stored);
+          if (next === null) throw error;
+          return await send();
         }
-        const media = record.media ?? null;
-        if (media !== null) {
-          const uploaded = record.uploaded;
-          if (uploaded === null) throw new WorkerFailure("unavailable");
-          const fields = buildMediaContent({
-            kind: media.kind,
-            name: media.name,
-            caption: row.body,
-            html: row.html,
-            mime: media.mime,
-            size: media.size,
-            width: media.width,
-            height: media.height,
-            duration: media.duration,
-            reference: uploaded.source,
-          });
-          const transactionId = row.transactionId ?? undefined;
-          const response =
-            fields.event === "sticker"
-              ? await client.sendEvent(row.roomId, EventType.Sticker, stickerContent(fields), transactionId)
-              : await client.sendMessage(row.roomId, messageContent(fields), transactionId);
-          return response.event_id;
-        }
-        const msgtype = row.kind === "notice" ? MsgType.Notice : row.kind === "emote" ? MsgType.Emote : MsgType.Text;
-        const room = client.getRoom(row.roomId);
-        const ownUserId = client.getUserId();
-        const mentions = room === null || ownUserId === null ? [] : mentionedUserIds(room, ownUserId, row.body);
-        const response = await client.sendMessage(
-          row.roomId,
-          {
-            msgtype,
-            body: row.body,
-            ...(row.html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: row.html }),
-            ...(record.replyTo === null ? {} : { "m.relates_to": { "m.in_reply_to": { event_id: record.replyTo } } }),
-            ...(mentions.length === 0 ? {} : { "m.mentions": { user_ids: mentions } }),
-          },
-          row.transactionId ?? undefined,
-        );
-        return response.event_id;
       },
       upload: (record) => this.uploadMedia(record),
       now: () => Date.now(),
@@ -2701,6 +2714,20 @@ export class MatrixSession implements SessionPort {
    * endpoints the specification names: a five-minute token would otherwise be dead before the first sync.
    */
   private async refreshSession(stored: StoredSession): Promise<StoredSession | null> {
+    const running = this.renewInFlight;
+    if (running !== null) return running;
+    const task = this.performRefresh(stored);
+    this.renewInFlight = task;
+    try {
+      const next = await task;
+      if (next !== null) this.client?.setAccessToken(next.accessToken);
+      return next;
+    } finally {
+      if (this.renewInFlight === task) this.renewInFlight = null;
+    }
+  }
+
+  private async performRefresh(stored: StoredSession): Promise<StoredSession | null> {
     const refreshToken = stored.refreshToken;
     if (refreshToken === null) return null;
     const base = stored.baseUrl.replace(/\/+$/u, "");
@@ -2746,19 +2773,20 @@ export class MatrixSession implements SessionPort {
 
   /** Renews the token before its lifetime ends, and keeps the running client on the new one. */
   private scheduleRenewal(client: MatrixClient, stored: StoredSession): void {
-    if (this.renewTimer !== null) window.clearTimeout(this.renewTimer);
+    if (this.renewTimer !== null) clearTimeout(this.renewTimer);
     this.renewTimer = null;
     const expiresAt = stored.expiresAt;
     if (expiresAt === null) return;
     const wait = Math.max(MIN_RENEW_DELAY_MS, expiresAt - Date.now() - RENEW_BEFORE_MS);
-    this.renewTimer = window.setTimeout(() => {
-      this.renewTimer = null;
-      void this.refreshSession(stored).then((next) => {
-        if (next === null || this.client !== client) return;
-        client.setAccessToken(next.accessToken);
-        this.scheduleRenewal(client, next);
-      });
-    }, wait);
+    this.renewTimer = Number(
+      setTimeout(() => {
+        this.renewTimer = null;
+        void this.refreshSession(stored).then((next) => {
+          if (next === null || this.client !== client) return;
+          this.scheduleRenewal(client, next);
+        });
+      }, wait),
+    );
   }
 
   private async startClient(original: StoredSession, generation: number): Promise<SessionSummary> {
@@ -2876,7 +2904,7 @@ export class MatrixSession implements SessionPort {
   }
 
   private async softLogout(): Promise<void> {
-    if (this.renewTimer !== null) window.clearTimeout(this.renewTimer);
+    if (this.renewTimer !== null) clearTimeout(this.renewTimer);
     this.renewTimer = null;
     this.generation += 1;
     this.startTask = null;
@@ -2918,7 +2946,7 @@ export class MatrixSession implements SessionPort {
   }
 
   private async teardown(client: MatrixClient | null): Promise<void> {
-    if (this.renewTimer !== null) window.clearTimeout(this.renewTimer);
+    if (this.renewTimer !== null) clearTimeout(this.renewTimer);
     this.renewTimer = null;
     this.generation += 1;
     this.startTask = null;
