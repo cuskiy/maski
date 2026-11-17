@@ -42,7 +42,7 @@ export interface SessionPort {
   sasConfirm(id: string): Promise<null>;
   sasMismatch(id: string): Promise<null>;
   sasCancel(id: string): Promise<null>;
-  resetIdentity(): Promise<string | null>;
+  resetIdentity(password: string): Promise<string | null>;
   react(roomId: string, eventId: string, key: string): Promise<null>;
   edit(roomId: string, eventId: string, body: string, html: string | null): Promise<null>;
   redact(roomId: string, eventId: string): Promise<null>;

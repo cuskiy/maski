@@ -268,7 +268,7 @@ void test("the worker dispatcher covers every command and preserves order", asyn
     ok: true,
     data: [],
   });
-  assert.deepEqual(await api.handle({ id: 11, type: "resetIdentity", payload: {} }), {
+  assert.deepEqual(await api.handle({ id: 11, type: "resetIdentity", payload: { password: "secret" } }), {
     id: 11,
     ok: true,
     data: null,

@@ -22,6 +22,7 @@ export function keyView({ locale }: PageContext): PageView {
           </form>
           <form class="form" method="post" data-flow="reset">
             <p class="field-hint">${t(c, "settings.resetIdentityConfirm")}</p>
+            ${field({ id: "reset-password", label: t(c, "auth.password"), type: "password", autocomplete: "current-password", required: true })}
             <button class="button-quiet is-danger" type="submit">${t(c, "settings.resetIdentity")}</button>
           </form>
         </div>

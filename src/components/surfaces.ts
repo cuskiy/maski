@@ -495,6 +495,10 @@ export function surfaceBodyFor(
       return html`<p class="note">${t(c, "surface.profile.empty")}</p>`;
     case SURFACE.confirm:
       return html`<p class="note" data-confirm-message></p>
+        <div class="field" data-confirm-password hidden>
+          <label class="field-label" for="confirm-password">${t(c, "auth.password")}</label>
+          <input class="input" id="confirm-password" type="password" autocomplete="current-password" />
+        </div>
         <div class="confirm-actions">
           <button class="button-quiet" type="button" data-confirm="cancel">${t(c, "confirm.cancel")}</button>
           <button class="button-primary" type="button" data-confirm="ok">${t(c, "confirm.ok")}</button>

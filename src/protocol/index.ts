@@ -128,7 +128,8 @@ export interface CommandMap {
   readonly devices: Record<string, never>;
   readonly backupStatus: Record<string, never>;
   readonly backupSetup: Record<string, never>;
-  readonly resetIdentity: Record<string, never>;
+  /** Signing new cross-signing keys is a user-interactive operation: the server asks for the password. */
+  readonly resetIdentity: { readonly password: string };
   readonly react: { readonly roomId: string; readonly eventId: string; readonly key: string };
   readonly edit: {
     readonly roomId: string;
@@ -492,6 +493,10 @@ function isMediaVariant(value: unknown): value is MediaVariant {
 function validSasStart(fields: Record<string, unknown>): fields is CommandMap["sasStart"] {
   const deviceId = fields["deviceId"];
   return "deviceId" in fields && (deviceId === null || (isString(deviceId) && deviceId.length <= 255));
+}
+
+function validResetIdentity(fields: Record<string, unknown>): fields is CommandMap["resetIdentity"] {
+  return isText(fields["password"]) && fields["password"].length <= 4096;
 }
 
 function validSasId(fields: Record<string, unknown>): fields is CommandMap["sasAccept"] {
@@ -1363,8 +1368,8 @@ export function parseCommand(value: unknown): Command | null {
       if (!validMarkRead(fields)) return null;
       return { id, type, payload: { roomId: fields.roomId, eventId: fields.eventId } };
     case "resetIdentity":
-      if (!empty(fields)) return null;
-      return { id, type, payload: {} };
+      if (!validResetIdentity(fields)) return null;
+      return { id, type, payload: { password: fields.password } };
     case "react":
       if (!validReact(fields)) return null;
       return {

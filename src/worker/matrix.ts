@@ -722,59 +722,95 @@ export class MatrixSession implements SessionPort {
     return sas.cancel(id);
   }
 
-  async resetIdentity(): Promise<string | null> {
+  /**
+   * Replaces the account's encryption with a consistent set: the old backup, secret storage and
+   * cross-signing identity are deleted, then a new identity, a new secret storage key and a new backup
+   * are created together. The returned key is the only copy of the new secret storage key.
+   */
+  async resetIdentity(password: string): Promise<string | null> {
     const task = this.startTask;
     if (task !== null) await task;
     const client = this.requireClient();
     const crypto = client.getCrypto();
     if (crypto === undefined) throw new WorkerFailure("unavailable");
 
-    try {
-      this.secretStorageKeys.clear();
-      const key = await crypto.createRecoveryKeyFromPassphrase();
-      this.pendingSecret = { key: key.privateKey, passphrase: "" };
+    const userId = client.getUserId() ?? "";
+    const auth = {
+      type: "m.login.password" as const,
+      identifier: { type: "m.id.user" as const, user: userId },
+      password,
+    };
+    const uia = async <T>(makeRequest: (authData: typeof auth | null) => Promise<T>): Promise<T> => {
       try {
-        await crypto.bootstrapSecretStorage({
-          setupNewSecretStorage: true,
-          createSecretStorageKey: () => Promise.resolve(key),
-        });
+        return await makeRequest(null);
       } catch {
-        throw new WorkerFailure("network");
-      } finally {
-        this.pendingSecret = null;
+        return await makeRequest(auth);
       }
-      const defaultKey = await client.secretStorage.getKey();
-      if (defaultKey === null || !(await client.secretStorage.checkKey(key.privateKey, defaultKey[1]))) {
-        throw new WorkerFailure("auth");
-      }
-      const defaultKeyId = defaultKey[0];
-      this.secretStorageKeys.set(defaultKeyId, key.privateKey);
-      if (this.stored !== null) {
-        const updated: StoredSession = {
-          ...this.stored,
-          secretStorageKeyId: defaultKeyId,
-          secretStorageKey: toBase64(key.privateKey),
-        };
-        this.stored = updated;
-        await writeSession(updated).catch(() => undefined);
-      }
-      try {
-        await this.activateBackup(client);
-      } catch {
-        // The one-time key is already valid even when backup setup fails.
-      }
-      this.keyReady = await this.refreshGate().catch(() => "needs-recovery" as const);
-      this.emit({ type: "keys", payload: this.keyReady });
-      const encoded = key.encodedPrivateKey ?? null;
-      // A library error string must never be shown as the one-time key.
-      if (encoded === null) return null;
-      decodeRecoveryKey(encoded);
-      return encoded;
-    } catch {
-      throw new WorkerFailure("auth");
-    }
-  }
+    };
 
+    // The old backup, the old secrets and the old key description are deleted first, so the new
+    // identity is the only one left. Each piece uses the public storage API, and a missing backup or
+    // an unreadable secret is not an error here: this step exists to remove it.
+    const backup = await crypto.getKeyBackupInfo().catch(() => null);
+    if (backup?.version !== undefined) await crypto.deleteKeyBackupVersion(backup.version).catch(() => undefined);
+    for (const secret of [
+      "m.cross_signing.master",
+      "m.cross_signing.self_signing",
+      "m.cross_signing.user_signing",
+      "m.megolm_backup.v1",
+    ] as const) {
+      await client.secretStorage.store(secret, null).catch(() => undefined);
+    }
+    const previousKeyId = await client.secretStorage.getDefaultKeyId().catch(() => null);
+    if (previousKeyId !== null) {
+      await client.secretStorage.setDefaultKeyId(null).catch(() => undefined);
+    }
+    this.secretStorageKeys.clear();
+    try {
+      await crypto.bootstrapCrossSigning({ setupNewCrossSigning: true, authUploadDeviceSigningKeys: uia });
+    } catch (cause) {
+      // The server rejected the password: that is the reader's to fix, not a network failure.
+      const known = cause instanceof Error && /M_FORBIDDEN|M_UNAUTHORIZED|unauthor/iu.test(cause.message);
+      throw new WorkerFailure(known ? "auth" : "network");
+    }
+    const key = await crypto.createRecoveryKeyFromPassphrase();
+    this.pendingSecret = { key: key.privateKey, passphrase: "" };
+    try {
+      await crypto.bootstrapSecretStorage({
+        setupNewSecretStorage: true,
+        createSecretStorageKey: () => Promise.resolve(key),
+        setupNewKeyBackup: true,
+      });
+    } catch {
+      throw new WorkerFailure("network");
+    } finally {
+      this.pendingSecret = null;
+    }
+    const defaultKey = await client.secretStorage.getKey();
+    if (defaultKey === null || !(await client.secretStorage.checkKey(key.privateKey, defaultKey[1]))) {
+      throw new WorkerFailure("corrupt");
+    }
+    const defaultKeyId = defaultKey[0];
+    this.secretStorageKeys.clear();
+    this.secretStorageKeys.set(defaultKeyId, key.privateKey);
+    if (this.stored !== null) {
+      const updated: StoredSession = {
+        ...this.stored,
+        secretStorageKeyId: defaultKeyId,
+        secretStorageKey: toBase64(key.privateKey),
+      };
+      this.stored = updated;
+      await writeSession(updated).catch(() => undefined);
+    }
+    await crypto.checkKeyBackupAndEnable().catch(() => undefined);
+    this.keyReady = await this.refreshGate().catch(() => "needs-recovery" as const);
+    this.emit({ type: "keys", payload: this.keyReady });
+    const encoded = key.encodedPrivateKey ?? null;
+    // A library error string must never be shown as the one-time key.
+    if (encoded === null) return null;
+    decodeRecoveryKey(encoded);
+    return encoded;
+  }
   async open(roomId: string): Promise<null> {
     const account = this.requireAccount();
     if (!this.directoryPublished.has(roomId)) {

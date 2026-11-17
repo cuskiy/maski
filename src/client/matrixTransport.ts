@@ -209,8 +209,8 @@ export class MatrixTransport {
     return this.request("sasCancel", { id });
   }
 
-  resetIdentity(): Promise<string | null> {
-    return this.request("resetIdentity", {});
+  resetIdentity(password: string): Promise<string | null> {
+    return this.request("resetIdentity", { password });
   }
 
   react(roomId: string, eventId: string, key: string): Promise<null> {

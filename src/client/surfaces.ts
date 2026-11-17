@@ -462,7 +462,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   let pressLong = false;
   let suppressClick = false;
   let suppressNextContext = false;
-  let pendingConfirm: (() => void) | null = null;
+  let pendingConfirm: ((password: string) => void) | null = null;
   let confirmFocus: HTMLElement | null = null;
   let desktopRequest = 0;
   let pendingResetKey = false;
@@ -720,14 +720,21 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
-  function askConfirm(text: string, action: () => void): void {
+  function askConfirm(text: string, action: (password: string) => void, needsPassword = false): void {
     const dialog = document.getElementById(SURFACE.confirm);
     if (!(dialog instanceof HTMLDialogElement)) {
-      action();
+      action("");
       return;
     }
     const target = dialog.querySelector<HTMLElement>("[data-confirm-message]");
     if (target !== null) target.textContent = text;
+    const passwordField = dialog.querySelector<HTMLElement>("[data-confirm-password]");
+    const passwordInput = dialog.querySelector<HTMLInputElement>("#confirm-password");
+    if (passwordField !== null) passwordField.hidden = !needsPassword;
+    if (passwordInput !== null) {
+      passwordInput.value = "";
+      passwordInput.required = needsPassword;
+    }
     pendingConfirm = action;
     confirmFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.showModal();
@@ -1135,8 +1142,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       event.preventDefault();
       const action = pendingConfirm;
       pendingConfirm = null;
+      const password = document.querySelector<HTMLInputElement>("#confirm-password");
       hide(SURFACE.confirm);
-      if (confirm.dataset["confirm"] === "ok") action?.();
+      if (confirm.dataset["confirm"] === "ok") action?.(password?.value ?? "");
       return;
     }
 
@@ -1398,10 +1406,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       });
     } else if (id === "reset-identity") {
       if (!capabilities.resetIdentity) return;
-      askConfirm(t(c, "settings.resetIdentityConfirm"), () => {
-        pendingResetKey = true;
-        actions.resetIdentity();
-      });
+      askConfirm(
+        t(c, "settings.resetIdentityConfirm"),
+        (password) => {
+          pendingResetKey = true;
+          actions.resetIdentity(password);
+        },
+        true,
+      );
     } else if (id === "join") {
       const input = form.querySelector<HTMLInputElement>("#join-field");
       const value = input?.value.trim() ?? "";

@@ -259,9 +259,9 @@ export class WorkerSource implements ChatSource {
     void this.transport.backupSetup().catch(() => undefined);
   }
 
-  resetIdentity(): void {
+  resetIdentity(password: string): void {
     void this.transport
-      .resetIdentity()
+      .resetIdentity(password)
       .then((value) => {
         if (value !== null) this.emit("recoveryKey", { value, copy: true, download: true });
       })

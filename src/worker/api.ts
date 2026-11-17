@@ -102,7 +102,7 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
       case "sasCancel":
         return { id, ok: true, data: await session.sasCancel(command.payload.id) };
       case "resetIdentity":
-        return { id, ok: true, data: await session.resetIdentity() };
+        return { id, ok: true, data: await session.resetIdentity(command.payload.password) };
       case "react":
         return {
           id,

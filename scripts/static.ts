@@ -95,7 +95,7 @@ export function serve(options: ServeOptions = {}): Served {
     }
   });
 
-  const port = options.port ?? Number(process.env["PORT"] ?? "5172");
+  const port = options.port ?? Number(process.env["PORT"] ?? "5072");
   const host = options.host ?? process.env["HOST"] ?? "127.0.0.1";
   server.listen(port, host, () => {
     const address = server.address();

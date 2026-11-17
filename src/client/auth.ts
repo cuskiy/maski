@@ -318,6 +318,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
   });
 
   const reset = form("reset");
+  const resetPassword = input("reset-password");
   const keyDialog = document.querySelector<HTMLDialogElement>("#key-reset-dialog");
   const keyValue = document.querySelector<HTMLElement>("[data-key-reset-value]");
   let currentKey: string | null = null;
@@ -373,7 +374,7 @@ function initKey(c: Catalog, locale: LocaleId): void {
     if (submit !== null) submit.disabled = true;
     resetPending = true;
     void transport
-      .resetIdentity()
+      .resetIdentity(resetPassword?.value ?? "")
       .then((key) => {
         if (key === null || keyDialog === null || keyValue === null) {
           resetPending = false;
@@ -384,9 +385,22 @@ function initKey(c: Catalog, locale: LocaleId): void {
         keyValue.textContent = key;
         keyDialog.showModal();
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         resetPending = false;
-        showStatus(t(c, "auth.key.resetFailed"));
+        const code = error instanceof Error ? error.message : "";
+        if (code === "auth") {
+          showStatus(t(c, "auth.key.resetFailed"));
+          return;
+        }
+        if (code === "unavailable" || code === "not-signed-in") {
+          showStatus(t(c, "auth.key.unavailable"));
+          return;
+        }
+        if (code === "corrupt") {
+          showStatus(t(c, "auth.key.resetBroken"));
+          return;
+        }
+        showStatus(t(c, "auth.key.resetOffline"));
       })
       .finally(() => {
         if (submit !== null) submit.disabled = false;
