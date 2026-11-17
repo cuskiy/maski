@@ -8,6 +8,18 @@ function sectionId(value: string): SectionId | null {
   return null;
 }
 
+/** Signing out drops every preference that belonged to the account. */
+export function clearAccount(account: string): void {
+  storage.write(storage.STORAGE.sections(account), null);
+  storage.write(storage.STORAGE.spaces(account), null);
+  storage.write(storage.STORAGE.notifications(account), null);
+  storage.write(storage.STORAGE.backup(account), null);
+  storage.write(storage.STORAGE.recentEmoji(account), null);
+  storage.write(storage.STORAGE.recentReactions(account), null);
+  storage.write(storage.STORAGE.recentStickers(account), null);
+  storage.write(storage.STORAGE.stickers(account), null);
+}
+
 export function readSections(account: string): Partial<Record<SectionId, boolean>> | null {
   const key = storage.STORAGE.sections(account);
   const scoped = storage.readJson(key);

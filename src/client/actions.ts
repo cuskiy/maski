@@ -766,6 +766,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
       } catch {
         // The account is already signed out; a local draft store failure cannot keep it alive.
       }
+      prefs.clearAccount(account);
       clearSession();
     },
   };
