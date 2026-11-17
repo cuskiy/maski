@@ -1,5 +1,5 @@
 import { t } from "../lib/catalog.ts";
-import type { Catalog } from "../lib/catalog.ts";
+import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, raw, type Html } from "../lib/html.ts";
 import { formatBytes } from "../lib/bytes.ts";
 import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
@@ -25,6 +25,21 @@ const MEDIA_ICONS: Readonly<Record<Media["kind"], Html>> = {
   file: icons.file,
   audio: icons.audio,
   sticker: icons.sticker,
+};
+
+/** Every failure code a sent message can carry, and the sentence the row shows for it. */
+const FAILURE_KEYS: Readonly<Record<string, CatalogKey>> = {
+  network: "message.failed.network",
+  "too-large": "message.failed.too-large",
+  unsupported: "message.failed.unsupported",
+  auth: "message.failed.auth",
+  unavailable: "message.failed.unavailable",
+  invalid: "message.failed",
+  "unknown-command": "message.failed",
+  locked: "message.failed",
+  "not-signed-in": "message.failed.auth",
+  corrupt: "message.failed",
+  restart: "message.failed",
 };
 
 const STATUS_LABELS = {
@@ -195,7 +210,8 @@ function messageRow(
           <strong>${message.reply.senderName}</strong><span>${message.reply.body}</span>
         </a>`;
   const pending = message.status !== "sent";
-  const failure = t(c, "message.failed");
+  const failure =
+    message.error === null ? t(c, "message.failed") : t(c, FAILURE_KEYS[message.error] ?? "message.failed");
   const status = pending
     ? message.status === "failed"
       ? html`<span
