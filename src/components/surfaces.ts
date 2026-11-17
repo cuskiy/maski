@@ -898,6 +898,7 @@ function roomSettingsBody(c: Catalog, state: ChatState): Html {
         : "roomSettings.encryptionUnknown";
   const roomAvatar = safeAvatarUrl(room.avatar);
   return html`<div class="settings-layout">
+    <p class="form-error" data-room-settings-error role="alert" hidden></p>
     ${settingsTabs(c, "surface.roomSettings", [
       { href: "#room-settings-overview", key: "roomSettings.overview" },
       { href: "#room-settings-members", key: "roomSettings.members" },

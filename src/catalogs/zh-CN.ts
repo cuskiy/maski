@@ -146,6 +146,7 @@ export const zhCN = {
   "settings.desktopDenied": "浏览器已阻止通知。",
   "settings.desktopUnavailable": "这个浏览器无法显示通知。",
   "settings.notificationLevel": "通知级别",
+  "settings.roomChangeFailed": "这个改动没有送到服务器。请重试。",
   "settings.logout": "退出登录",
   "settings.logoutConfirm": "退出这个账户？",
   "settings.changeAvatar": "更换头像",

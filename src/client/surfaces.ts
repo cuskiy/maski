@@ -437,6 +437,13 @@ function clearSettingsHash(): void {
   history.replaceState(null, "", `${location.pathname}${location.search}`);
 }
 
+function clearRoomSettingsError(): void {
+  const target = document.querySelector<HTMLElement>("[data-room-settings-error]");
+  if (target === null) return;
+  target.hidden = true;
+  target.textContent = "";
+}
+
 function showSettingsError(message: string): void {
   const error = document.querySelector<HTMLElement>("[data-settings-error]");
   if (error === null) return;
@@ -708,6 +715,13 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     dialog.showModal();
   }
 
+  function failRoomSettings(): void {
+    const error = document.querySelector<HTMLElement>("[data-room-settings-error]");
+    if (error === null) return;
+    error.textContent = t(c, "settings.roomChangeFailed");
+    error.hidden = false;
+  }
+
   function applySelectValue(name: string, value: string): void {
     const roomId = activeRoomId ?? state().roomId;
     if (name === "notification-level") {
@@ -715,13 +729,20 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     } else if (name === "room-notifications" && roomId !== null) {
       if (isRoomNotification(value)) actions.setNotification(roomId, value);
     } else if (name === "room-join" && roomId !== null) {
-      if (isRoomJoinRule(value)) actions.updateRoomAccess(roomId, { joinRule: value });
+      clearRoomSettingsError();
+      if (isRoomJoinRule(value)) {
+        void actions.updateRoomAccess(roomId, { joinRule: value }).catch(failRoomSettings);
+      }
     } else if (name === "room-guest" && roomId !== null) {
-      actions.updateRoomAccess(roomId, { guestAccess: value === "can_join" ? "can_join" : "forbidden" });
+      void actions
+        .updateRoomAccess(roomId, { guestAccess: value === "can_join" ? "can_join" : "forbidden" })
+        .catch(failRoomSettings);
     } else if (name === "room-history" && roomId !== null) {
-      if (isHistoryVisibility(value)) actions.updateRoomAccess(roomId, { historyVisibility: value });
+      if (isHistoryVisibility(value)) {
+        void actions.updateRoomAccess(roomId, { historyVisibility: value }).catch(failRoomSettings);
+      }
     } else if (name === "room-directory" && roomId !== null) {
-      actions.updateRoomAccess(roomId, { directoryPublished: value === "true" });
+      void actions.updateRoomAccess(roomId, { directoryPublished: value === "true" }).catch(failRoomSettings);
     }
   }
 

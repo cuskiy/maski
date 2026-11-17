@@ -57,7 +57,7 @@ export interface Actions {
       readonly historyVisibility?: RoomHistoryVisibility;
       readonly directoryPublished?: boolean;
     },
-  ): void;
+  ): Promise<void>;
   addRoomAddress(roomId: string, address: string): void;
   removeRoomAddress(roomId: string, address: string): void;
   memberAction(roomId: string, userId: string, action: "kick" | "ban" | "unban"): void;
@@ -473,7 +473,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
     },
     updateRoomAccess(roomId, patch) {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);
-      if (room === undefined || !caps.setRoomState) return;
+      if (room === undefined || !caps.setRoomState) return Promise.resolve();
       const permissions = permissionsFor(room);
       const next: {
         joinRule?: RoomJoinRule;
@@ -489,7 +489,8 @@ export function createActions({ store, source, c, account }: Context): Actions {
       if (permissions.directory && patch.directoryPublished !== undefined) {
         next.directoryPublished = patch.directoryPublished;
       }
-      if (Object.keys(next).length > 0) source.setRoomState?.(roomId, next);
+      if (Object.keys(next).length === 0) return Promise.resolve();
+      return source.setRoomState?.(roomId, next) ?? Promise.resolve();
     },
     addRoomAddress(roomId, address) {
       const room = store.read("rooms").find((entry) => entry.roomId === roomId);

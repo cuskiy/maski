@@ -148,6 +148,7 @@ export const en = {
   "settings.desktopDenied": "Notifications are blocked in this browser.",
   "settings.desktopUnavailable": "This browser cannot show notifications.",
   "settings.notificationLevel": "Notification level",
+  "settings.roomChangeFailed": "That change did not reach the server. Try again.",
   "settings.logout": "Sign out",
   "settings.logoutConfirm": "Sign out of this account?",
   "settings.changeAvatar": "Change avatar",
