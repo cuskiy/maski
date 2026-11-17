@@ -34,6 +34,19 @@ export function field(input: FieldInput): Html {
   </div>`;
 }
 
+export interface NextStepInput {
+  readonly id: string;
+  readonly text: string;
+  readonly href: string;
+  readonly link: string;
+}
+
+/** A page never moves the reader; it says where to go and lets the link do the moving. */
+export function nextStep(input: NextStepInput): Html {
+  return html`<p class="note next-step" data-next-step="${input.id}" hidden>${input.text}
+    <a class="link" href="${input.href}">${input.link}</a></p>`;
+}
+
 export function submit(label: string): Html {
   return html`<button class="button-primary" type="submit">${label}</button>`;
 }

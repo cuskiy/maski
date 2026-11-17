@@ -369,6 +369,11 @@ Two classes, not one.
   close it. Open with `commandfor`; dismiss with `closedby` where the target engine supports it. If an
   engine in the floor lacks it, one explicit fallback is allowed only after a platform decision; there
   is never a second dialog implementation.
+- **Only the root page moves the reader.** `/` resolves the stored language and replaces the
+  address once; every other page stays where it is, says what it needs in the place the reader is
+  looking, and links to the next step. A page without its context (no server, no account, no key)
+  keeps its controls absent or inert rather than navigating, so a refresh never bounces the reader
+  between `/key/` and `/`.
 - **Popover**: room menu, language menu, emoji/sticker picker, attachment picker, search scope, send menu,
   profile, context menus. Use `popover` with `popovertarget`, no backdrop, no focus trap, outside click
   closes. Use anchor positioning and implicit anchor. Menus and pickers use `auto`; room and message
@@ -1260,7 +1265,18 @@ Measured on 2026-11-16 on the working tree with user image packs, mentions and t
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **205 tests**, 11 generated pages, 354 catalog keys, 2 languages.
+- `npm run check` is green: **200 tests**, 9 generated pages, 352 catalog keys, 2 languages.
+- A password session renews its token itself: `src/worker/matrix.ts` calls
+  `/_matrix/client/v3/refresh` before a start whose stored token is near expiry and repeats it on a
+  timer, because the SDK only refreshes an OAuth2 client and `matrix.unredacted.org` issues
+  five-minute tokens. The stored key is loaded on every start and verified by the gate, so a reload
+  does not ask for the recovery key again.
+- `start` answers with the stored room list before reading the last window or any read marker, and
+  one room whose stored rows cannot be read keeps its SDK projection instead of hiding the list.
+  Typing at 8× CPU throttling costs 143 ms for 16 keys (was 641 ms) after the timeline stopped
+  rebuilding on a wrap resize and the composer stopped rewriting `data-empty` on every key.
+- A message that arrives into a room already on screen animates in over 160 ms; the first paint and
+  a room switch appear at their final position, and reduced motion turns it off.
 - Build sizes: stylesheet 84.7 KiB, client 322.3 KiB, matrix worker 1.27 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass; the client
   ceiling is 336 KiB by the user's 2026-11-16 decision.

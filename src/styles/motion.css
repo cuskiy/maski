@@ -9,8 +9,23 @@
     animation: router-turn var(--spin-duration) linear infinite;
   }
 
+  @keyframes message-arrive {
+    from {
+      opacity: 0%;
+      transform: translateY(0.35rem);
+    }
+  }
+
+  .timeline .message.is-arriving {
+    animation: message-arrive var(--arrive-duration) var(--ease) both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .router-spinner {
+      animation: none;
+    }
+
+    .timeline .message.is-arriving {
       animation: none;
     }
   }

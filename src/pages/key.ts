@@ -1,11 +1,11 @@
 import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
 import { authLayout } from "../layouts/auth.ts";
-import { field, submit } from "../components/form.ts";
+import { field, nextStep, submit } from "../components/form.ts";
 import { surfaceHead } from "../components/surface.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
-export function keyView({ locale }: PageContext): PageView {
+export function keyView({ locale, localePath }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.key.title")} · ${t(c, "app.name")}`,
@@ -14,6 +14,18 @@ export function keyView({ locale }: PageContext): PageView {
       title: t(c, "auth.key.title"),
       hint: t(c, "auth.key.hint"),
       body: html`<p class="field-hint" data-key-status hidden></p>
+        ${nextStep({
+          id: "login",
+          text: t(c, "auth.next.login"),
+          href: `${localePath}login/`,
+          link: t(c, "auth.login.submit"),
+        })}
+        ${nextStep({
+          id: "chat",
+          text: t(c, "auth.next.chat"),
+          href: localePath,
+          link: t(c, "chat.title"),
+        })}
         <div class="key-paths" data-key-paths>
           <form class="form" method="post" data-flow="unlock">
             ${field({ id: "recovery", label: t(c, "auth.key.recovery"), type: "text", autocomplete: "off" })}

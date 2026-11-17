@@ -40,7 +40,9 @@ function composerText(field: HTMLElement): string {
 }
 
 function updateEmptyState(field: HTMLElement): void {
-  field.dataset["empty"] = String(composerText(field).trim() === "");
+  // Writing the attribute on every keystroke would restyle the document selectors that read it.
+  const empty = String(composerText(field).trim() === "");
+  if (field.dataset["empty"] !== empty) field.dataset["empty"] = empty;
 }
 
 function setComposerText(field: HTMLElement, value: string): void {

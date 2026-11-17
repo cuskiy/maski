@@ -206,6 +206,7 @@
     --context-blur: 10px;
     --scrim-blur: 6px;
     --spin-duration: 800ms;
+    --arrive-duration: 160ms;
 
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
     --duration: 120ms;

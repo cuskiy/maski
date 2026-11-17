@@ -2,10 +2,10 @@ import { config } from "../config.ts";
 import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
 import { authLayout } from "../layouts/auth.ts";
-import { field, submit } from "../components/form.ts";
+import { field, nextStep, submit } from "../components/form.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
-export function serverView({ locale }: PageContext): PageView {
+export function serverView({ locale, localePath }: PageContext): PageView {
   const c = locale.catalog;
   return {
     title: `${t(c, "auth.server.title")} · ${t(c, "app.name")}`,
@@ -26,7 +26,13 @@ export function serverView({ locale }: PageContext): PageView {
           value: config.homeserver.default,
         })}
         ${submit(t(c, "auth.server.submit"))}
-      </form>`,
+      </form>
+      ${nextStep({
+        id: "login",
+        text: t(c, "auth.next.login"),
+        href: `${localePath}login/`,
+        link: t(c, "auth.login.submit"),
+      })}`,
       note: t(c, "noscript.auth"),
     }),
   };

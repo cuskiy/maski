@@ -5,14 +5,8 @@ import { PRODUCTION_CAPABILITIES } from "../core/types.ts";
 import type { ChatSource, ForwardSource, SourceEvent, SourceEvents } from "./source.ts";
 import { clearSourceListeners, createSourceListeners } from "./source.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
-import { localeForPath, localeRoot } from "../core/locales.ts";
-import { clearAccount, mockSession, setGate, takeUnlocked } from "./session.ts";
+import { clearAccount, mockSession, setGate } from "./session.ts";
 import { keepStorage } from "./persist.ts";
-
-function loginPath(): string {
-  const locale = localeForPath(location.pathname) ?? "en";
-  return `${localeRoot(locale)}login/`;
-}
 
 export function phaseFor(gate: KeyGate): Phase {
   if (gate === "missing") return "signedOut";
@@ -67,15 +61,13 @@ export class WorkerSource implements ChatSource {
   }
 
   start(): void {
-    const unlocked = takeUnlocked();
-    void this.transport.start(unlocked).then(
+    void this.transport.start().then(
       (data) => {
         if (data.session === null) {
           clearAccount();
           this.emit("phase", "signedOut");
           this.emit("connection", "offline");
           this.emit("rooms", { rooms: [], loading: false });
-          if (new URL(location.href).pathname !== loginPath()) location.assign(loginPath());
           return;
         }
         this.emit("session", data.session);
@@ -292,7 +284,6 @@ export class WorkerSource implements ChatSource {
           clearAccount();
           this.emit("session", null);
           this.emit("phase", "signedOut");
-          location.assign(loginPath());
           break;
         }
         this.emit("session", event.payload);

@@ -1,7 +1,7 @@
 import { t } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
 import { authLayout } from "../layouts/auth.ts";
-import { field, submit } from "../components/form.ts";
+import { field, nextStep, submit } from "../components/form.ts";
 import { config } from "../config.ts";
 import type { PageContext, PageView } from "./kit.ts";
 
@@ -16,6 +16,18 @@ export function loginView({ locale, localePath }: PageContext): PageView {
           <span>${t(c, "auth.login.server")}: <span data-auth-server dir="ltr">${config.homeserver.default}</span></span>
           <a class="link" href="${localePath}server/">${t(c, "auth.login.changeServer")}</a>
         </div>
+        ${nextStep({
+          id: "server",
+          text: t(c, "auth.next.server"),
+          href: `${localePath}server/`,
+          link: t(c, "auth.login.changeServer"),
+        })}
+        ${nextStep({
+          id: "key",
+          text: t(c, "auth.next.key"),
+          href: `${localePath}key/`,
+          link: t(c, "auth.key.title"),
+        })}
         <form class="form" method="post" data-flow="login">
         ${field({ id: "username", label: t(c, "auth.username"), type: "text", autocomplete: "username", required: true })}
         ${field({ id: "password", label: t(c, "auth.password"), type: "password", autocomplete: "current-password", required: true })}

@@ -11,6 +11,6 @@ export function start(): void {
 
   if (page === "chat") initChat(c, locale);
   else if (page === "server" || page === "login" || page === "key") {
-    initAuth(page, c, locale);
+    initAuth(page, c);
   }
 }

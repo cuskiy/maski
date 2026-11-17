@@ -7,6 +7,8 @@ import type { ChatState, Media, MessageRow, SourceCapabilities } from "../core/t
 import { REVIEW_CAPABILITIES } from "../core/types.ts";
 import { messagePositions, type MessagePosition } from "../core/messageGroups.ts";
 import { REGION, SURFACE } from "../core/regions.ts";
+import { localeRoot } from "../core/locales.ts";
+import type { LocaleId } from "../core/locales.ts";
 import { icons } from "./icons.ts";
 
 const MEDIA_LABELS = {
@@ -39,7 +41,7 @@ const UNREADABLE_KEYS = {
 export function timeline(
   state: ChatState,
   c: Catalog,
-  locale: string,
+  locale: LocaleId,
   capabilities: SourceCapabilities = REVIEW_CAPABILITIES,
 ): Html {
   const time = new Intl.DateTimeFormat(locale, { timeStyle: "short" });
@@ -78,7 +80,7 @@ export function timeline(
     </div>
     <div class="timeline-wrap">
       <div class="timeline-state" data-region="${REGION.timelineState}" data-field="state" ${state.windowLoading ? html` aria-busy="true"` : html``}>
-        ${stateNote(state, c)}${
+        ${stateNote(state, c, locale)}${
           state.failure !== null
             ? html`<p class="note form-error" role="alert">${t(c, "chat.loadFailed")}</p>`
             : ready && state.windowLoading && state.messages.length === 0
@@ -129,9 +131,16 @@ export function timeline(
   </section>`;
 }
 
-function stateNote(state: ChatState, c: Catalog): Html {
-  if (state.phase === "signedOut") return html`<p class="note">${t(c, "chat.signedOut")}</p>`;
-  if (state.phase === "locked") return html`<p class="note">${t(c, "chat.locked")}</p>`;
+function stateNote(state: ChatState, c: Catalog, locale: LocaleId): Html {
+  const root = localeRoot(locale);
+  if (state.phase === "signedOut") {
+    return html`<p class="note">${t(c, "chat.signedOut")}
+      <a class="link" href="${root}login/">${t(c, "auth.login.submit")}</a></p>`;
+  }
+  if (state.phase === "locked") {
+    return html`<p class="note">${t(c, "chat.locked")}
+      <a class="link" href="${root}key/">${t(c, "auth.key.unlock")}</a></p>`;
+  }
   if (state.phase === "verifying") return html`<p class="note" role="status">${t(c, "chat.verifying")}</p>`;
   return html``;
 }

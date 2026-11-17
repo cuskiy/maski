@@ -1,4 +1,5 @@
 import { t } from "../lib/catalog.ts";
+import type { LocaleId } from "../core/locales.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
 import { emptyChatState } from "../core/state.ts";
@@ -13,7 +14,7 @@ import { bootSurfaceBody } from "../components/surfaces.ts";
 import { timeline } from "../components/timeline.ts";
 import { topbar } from "../components/topbar.ts";
 
-export function appShell(c: Catalog, locale: string, capabilities: SourceCapabilities = REVIEW_CAPABILITIES): Html {
+export function appShell(c: Catalog, locale: LocaleId, capabilities: SourceCapabilities = REVIEW_CAPABILITIES): Html {
   const state: ChatState = emptyChatState();
   return html`<div class="app" data-region="${REGION.shell}" data-view="list">
       ${nav(state, c, capabilities)}

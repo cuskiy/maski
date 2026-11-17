@@ -58,27 +58,6 @@ export function setGate(gate: KeyGate): void {
   storage.write(storage.STORAGE.gate, gate);
 }
 
-const UNLOCK_KEY = "maski.unlocked";
-
-/** The key itself stays in the worker; this is only the one-navigation handoff. */
-export function markUnlocked(): void {
-  try {
-    sessionStorage.setItem(UNLOCK_KEY, "1");
-  } catch {
-    // Storage can be unavailable; the chat page will ask for the key again.
-  }
-}
-
-export function takeUnlocked(): boolean {
-  try {
-    const unlocked = sessionStorage.getItem(UNLOCK_KEY) === "1";
-    sessionStorage.removeItem(UNLOCK_KEY);
-    return unlocked;
-  } catch {
-    return false;
-  }
-}
-
 /** Clears the account identity but keeps the selected homeserver for the next login. */
 export function clearAccount(): void {
   storage.write(storage.STORAGE.account, null);

@@ -1,3 +1,4 @@
+import { t } from "../lib/catalog.ts";
 import type { Catalog } from "../lib/catalog.ts";
 import type { ChatState } from "../core/types.ts";
 import { emptyChatState, isSectionId } from "../core/state.ts";
@@ -13,6 +14,9 @@ import { wireSurfaces } from "./surfaces.ts";
 import type { LocaleId } from "../core/locales.ts";
 import { localeRoot } from "../core/locales.ts";
 import { mockSession } from "./session.ts";
+import { replaceHtml } from "./dom.ts";
+import { html } from "../lib/html.ts";
+import { REGION } from "../core/regions.ts";
 import { watchMediaLoads } from "./mediaLoads.ts";
 import { wireComposerInteractions } from "./interactions.ts";
 import { hydrateDrafts } from "./uiDb.ts";
@@ -24,7 +28,20 @@ function pageUrl(): string {
 }
 
 export function initChat(c: Catalog, locale: LocaleId): void {
-  mountChat(c, locale, new WorkerSource(), emptyChatState(), mockSession().account ?? "local");
+  const account = mockSession().account;
+  if (account === null) {
+    const state = document.querySelector<HTMLElement>(`[data-region="${REGION.timelineState}"]`);
+    if (state !== null) {
+      state.hidden = false;
+      replaceHtml(
+        state,
+        html`<p class="note">${t(c, "chat.signedOut")}
+          <a class="link" href="${localeRoot(locale)}login/">${t(c, "auth.login.submit")}</a></p>`,
+      );
+    }
+    return;
+  }
+  mountChat(c, locale, new WorkerSource(), emptyChatState(), account);
 }
 
 export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base: ChatState, account: string): void {
@@ -51,9 +68,6 @@ export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base
   const actions = createActions({ store, source, c, account });
   const unwire = wireSources(store, source);
   const unwatchMedia = watchMediaLoads();
-  const unwatchGate = store.watch(["phase"], () => {
-    if (store.read("phase") === "locked") location.assign(`${localeRoot(locale)}key/`);
-  });
 
   const routing = document.documentElement.dataset["page"] === "chat";
   let roomsSeen = false;
@@ -137,7 +151,6 @@ export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base
       unwire();
       unwatchTitle();
       unwatchMedia();
-      unwatchGate();
       unwatchRoomsHash();
       unwatchRoomUrl();
       window.removeEventListener("hashchange", onHashChange);

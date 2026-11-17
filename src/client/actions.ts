@@ -759,7 +759,6 @@ export function createActions({ store, source, c, account }: Context): Actions {
         // The account is already signed out; a local draft store failure cannot keep it alive.
       }
       clearSession();
-      location.assign("/");
     },
   };
 }

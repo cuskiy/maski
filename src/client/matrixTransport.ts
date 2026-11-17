@@ -73,8 +73,8 @@ export class MatrixTransport {
     };
   }
 
-  async start(unlocked = false): Promise<StartData> {
-    return this.request("start", { wasmUrl: this.wasmUrl, ...(unlocked ? { unlocked: true } : {}) });
+  async start(): Promise<StartData> {
+    return this.request("start", { wasmUrl: this.wasmUrl });
   }
 
   async login(input: CommandMap["login"]): Promise<SessionSummary> {

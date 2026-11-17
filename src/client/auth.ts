@@ -1,17 +1,26 @@
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
-import type { LocaleId } from "../core/locales.ts";
-import { localeRoot } from "../core/locales.ts";
 import type { SasState } from "../core/types.ts";
 import { isActiveSas, sasBody } from "../components/sas.ts";
 import { config } from "../config.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
 import { replaceHtml } from "./dom.ts";
-import { markUnlocked, mockSession, setAccount, setGate, setServer } from "./session.ts";
+import { mockSession, setAccount, setGate, setServer } from "./session.ts";
 import { keepStorage } from "./persist.ts";
 
-function navigate(path: string): void {
-  location.assign(path);
+function revealNextStep(id: string): void {
+  const note = document.querySelector<HTMLElement>(`[data-next-step="${id}"]`);
+  if (note !== null) note.hidden = false;
+}
+
+function hideNextStep(id: string): void {
+  const note = document.querySelector<HTMLElement>(`[data-next-step="${id}"]`);
+  if (note !== null) note.hidden = true;
+}
+
+function hideFlow(flow: string): void {
+  const target = document.querySelector<HTMLElement>(`form[data-flow="${flow}"]`);
+  if (target !== null) target.hidden = true;
 }
 
 function form(flow: string): HTMLFormElement | null {
@@ -33,7 +42,7 @@ function normaliseHomeserver(value: string): string | null {
   }
 }
 
-function initServer(c: Catalog, locale: LocaleId): void {
+function initServer(c: Catalog): void {
   const serverForm = form("server");
   if (serverForm === null) return;
   const serverField = input("homeserver");
@@ -51,16 +60,17 @@ function initServer(c: Catalog, locale: LocaleId): void {
     }
     field.setCustomValidity("");
     setServer(server);
-    navigate(`${localeRoot(locale)}login/`);
+    revealNextStep("login");
   });
 }
 
-function finishLogin(transport: MatrixTransport, session: { readonly userId: string }, locale: LocaleId): void {
+function finishLogin(transport: MatrixTransport, session: { readonly userId: string }): void {
   setAccount(session.userId);
   void keepStorage();
   transport.dispose();
   // The worker just started, so it does not hold a secret-storage key yet.
-  navigate(`${localeRoot(locale)}key/`);
+  hideFlow("login");
+  revealNextStep("key");
 }
 
 function loginError(c: Catalog, error: unknown): string {
@@ -70,9 +80,15 @@ function loginError(c: Catalog, error: unknown): string {
   return t(c, "auth.login.failed");
 }
 
-function initLogin(c: Catalog, locale: LocaleId): void {
+function initLogin(c: Catalog): void {
   const passwordField = input("password");
   const loginForm = form("login");
+  if (loginForm !== null && mockSession().server === null) {
+    loginForm.hidden = true;
+    hideNextStep("key");
+    revealNextStep("server");
+    return;
+  }
   if (loginForm !== null) {
     const username = input("username");
     username?.addEventListener("input", () => username.setCustomValidity(""));
@@ -99,7 +115,7 @@ function initLogin(c: Catalog, locale: LocaleId): void {
             password: passwordField.value,
           }),
         )
-        .then((session) => finishLogin(transport, session, locale))
+        .then((session) => finishLogin(transport, session))
         .catch((error: unknown) => {
           transport.dispose();
           passwordField.setCustomValidity(loginError(c, error));
@@ -124,7 +140,7 @@ function keyStatusText(c: Catalog, gate: string): string | null {
   return null;
 }
 
-function initKey(c: Catalog, locale: LocaleId): void {
+function initKey(c: Catalog): void {
   const transport = keyTransport();
   const status = document.querySelector<HTMLElement>("[data-key-status]");
   const showStatus = (message: string | null): void => {
@@ -136,6 +152,13 @@ function initKey(c: Catalog, locale: LocaleId): void {
     showStatus(t(c, "auth.key.unavailable"));
     return;
   }
+  if (mockSession().account === null) {
+    hideFlow("unlock");
+    hideFlow("reset");
+    revealNextStep("login");
+    return;
+  }
+  hideNextStep("login");
 
   let resetPending = false;
   const verifyButton = document.querySelector<HTMLButtonElement>("[data-key-verify]");
@@ -184,9 +207,11 @@ function initKey(c: Catalog, locale: LocaleId): void {
     if (completed) return;
     completed = true;
     setGate("ready");
-    markUnlocked();
     transport.dispose();
-    navigate(localeRoot(locale));
+    showStatus(null);
+    hideFlow("unlock");
+    hideFlow("reset");
+    revealNextStep("chat");
   };
 
   transport.onEvent((event) => {
@@ -257,7 +282,9 @@ function initKey(c: Catalog, locale: LocaleId): void {
       async (data) => {
         if (data.session === null) {
           transport.dispose();
-          navigate(`${localeRoot(locale)}login/`);
+          hideFlow("unlock");
+          hideFlow("reset");
+          revealNextStep("login");
           return;
         }
         const gate = await transport.keyStatus();
@@ -273,6 +300,10 @@ function initKey(c: Catalog, locale: LocaleId): void {
         if (error instanceof Error && error.message === "locked") {
           document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
           showStatus(t(c, "auth.key.locked"));
+          return;
+        }
+        if (error instanceof Error && error.message === "corrupt") {
+          showStatus(t(c, "auth.key.broken"));
           return;
         }
         showStatus(t(c, "auth.key.unavailable"));
@@ -392,7 +423,23 @@ function initKey(c: Catalog, locale: LocaleId): void {
           showStatus(t(c, "auth.key.resetFailed"));
           return;
         }
-        if (code === "unavailable" || code === "not-signed-in") {
+        if (code === "unsupported") {
+          showStatus(t(c, "auth.key.resetFailed"));
+          return;
+        }
+        if (code === "too-large") {
+          showStatus(t(c, "auth.key.resetOffline"));
+          return;
+        }
+        if (code === "locked") {
+          showStatus(t(c, "auth.key.locked"));
+          return;
+        }
+        if (code === "not-signed-in") {
+          showStatus(t(c, "auth.key.resetSignedOut"));
+          return;
+        }
+        if (code === "unavailable") {
           showStatus(t(c, "auth.key.unavailable"));
           return;
         }
@@ -408,12 +455,12 @@ function initKey(c: Catalog, locale: LocaleId): void {
   });
 }
 
-export function initAuth(page: string, c: Catalog, locale: LocaleId): void {
+export function initAuth(page: string, c: Catalog): void {
   if (page === "login") {
     const target = document.querySelector<HTMLElement>("[data-auth-server]");
     if (target !== null) target.textContent = mockSession().server ?? config.homeserver.default;
   }
-  if (page === "server") initServer(c, locale);
-  else if (page === "login") initLogin(c, locale);
-  else if (page === "key") initKey(c, locale);
+  if (page === "server") initServer(c);
+  else if (page === "login") initLogin(c);
+  else if (page === "key") initKey(c);
 }

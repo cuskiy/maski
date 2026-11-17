@@ -57,6 +57,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let activeRoomId = store.read("roomId");
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
+  let painted = false;
 
   let readRequest: string | null = null;
 
@@ -211,6 +212,9 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   };
 
   const reconcile = (next: HTMLElement): void => {
+    // Only a message that arrives into a room already on screen animates in; the first paint and a
+    // room switch appear at their final position.
+    const arriving = painted && list.children.length > 0;
     const nextList = next.querySelector<HTMLOListElement>(".timeline");
     if (nextList !== null) {
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -247,11 +251,21 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         if (message !== undefined) nextRendered.set(id, message);
         const old = currentMessages.get(id);
         const same = old !== undefined && message !== undefined && rendered.get(id) === message;
-        fragment.append(old !== undefined && same ? old : desired.cloneNode(true));
+        if (old !== undefined && same) {
+          fragment.append(old);
+          continue;
+        }
+        const copy = desired.cloneNode(true);
+        if (arriving && old === undefined && copy instanceof HTMLElement) {
+          copy.classList.add("is-arriving");
+          copy.addEventListener("animationend", () => copy.classList.remove("is-arriving"), { once: true });
+        }
+        fragment.append(copy);
       }
       list.replaceChildren(fragment);
       paintSelection();
       rendered = nextRendered;
+      painted = true;
       if (focusState !== null) {
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(focusState.id)}"]`);
         const target =
@@ -289,8 +303,9 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       return line?.getBoundingClientRect().width ?? 0;
     });
     for (const [index, element] of reactions.entries()) {
-      element.style.maxInlineSize =
-        widths[index] === undefined || widths[index] <= 0 ? "" : `${String(widths[index])}px`;
+      const width = widths[index];
+      const next = width === undefined || width <= 0 ? "" : `${String(width)}px`;
+      if (element.style.maxInlineSize !== next) element.style.maxInlineSize = next;
     }
   };
 
@@ -455,7 +470,14 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       }
     },
   });
-  const resizeObserver = new ResizeObserver(scheduleLayout);
+  // A resize of the wrap changes the layout only when its inline size changed: a taller composer
+  // shrinks the wrap without rewrapping a single bubble.
+  let lastInlineSize = wrap.clientWidth;
+  const resizeObserver = new ResizeObserver(() => {
+    if (wrap.clientWidth === lastInlineSize) return;
+    lastInlineSize = wrap.clientWidth;
+    scheduleLayout();
+  });
   resizeObserver.observe(wrap);
   const unsubscribe = store.watch(["phase", "roomId", "messages", "hasOlder", "olderLoading"], render);
   render();

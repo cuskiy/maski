@@ -100,7 +100,7 @@ export interface MediaReply {
 }
 
 export interface CommandMap {
-  readonly start: { readonly wasmUrl: string; readonly unlocked?: boolean };
+  readonly start: { readonly wasmUrl: string };
   readonly login: {
     readonly homeserver: string;
     readonly username: string;
@@ -1055,7 +1055,7 @@ function isRoomId(value: unknown): value is string {
 }
 
 function validStart(fields: Record<string, unknown>): fields is CommandMap["start"] {
-  return isString(fields["wasmUrl"]) && (fields["unlocked"] === undefined || isBoolean(fields["unlocked"]));
+  return isString(fields["wasmUrl"]);
 }
 
 function validLogin(fields: Record<string, unknown>): fields is CommandMap["login"] {
@@ -1308,7 +1308,7 @@ export function parseCommand(value: unknown): Command | null {
       return {
         id,
         type,
-        payload: { wasmUrl: fields.wasmUrl, ...(fields.unlocked === true ? { unlocked: true } : {}) },
+        payload: { wasmUrl: fields.wasmUrl },
       };
     case "login":
       if (!validLogin(fields)) return null;

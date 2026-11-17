@@ -39,7 +39,7 @@ import type {
   SessionSummary,
   StickerPack,
 } from "../core/types.ts";
-import type { CommandMap, Event, KeyStatus, MediaReply, StartData } from "../protocol/index.ts";
+import type { CommandMap, Event, FailureCode, KeyStatus, MediaReply, StartData } from "../protocol/index.ts";
 import { WorkerFailure } from "./failure.ts";
 import {
   parseGlobalPackReferences,
@@ -90,6 +90,10 @@ import { SasSessions, type SasEvents } from "./sas.ts";
 import { clearSession, readSession, writeSession, type StoredSession } from "./sessionDb.ts";
 
 const MAX_RESOLVED_PACK_IMAGES = 200;
+/** Renew a stored token this long before it expires, because a short-lived server may already be past it. */
+const RENEW_BEFORE_MS = 60_000;
+const MIN_RENEW_DELAY_MS = 15_000;
+const RENEW_TIMEOUT_MS = 20_000;
 type SecretKeyTuple = Awaited<ReturnType<MatrixClient["secretStorage"]["getKey"]>>;
 type SecretKeyInfo = NonNullable<SecretKeyTuple>[1];
 
@@ -392,6 +396,8 @@ export class MatrixSession implements SessionPort {
   private stickerPacks: readonly StickerPack[] = [];
   private readonly packSources = new Map<string, OutboxPack>();
   private startTask: Promise<SessionSummary> | null = null;
+  private startFailure: FailureCode | null = null;
+  private renewTimer: number | null = null;
   private syncReady = false;
   private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
@@ -427,7 +433,9 @@ export class MatrixSession implements SessionPort {
       return { session: null, connection: "offline", key: "missing" };
     }
     this.secretStorageKeys.clear();
-    if (input.unlocked === true && stored.secretStorageKeyId && stored.secretStorageKey) {
+    // The key belongs to this session record and the gate checks it against the account's key
+    // description, so a reload uses it without asking the reader for it again.
+    if (stored.secretStorageKeyId && stored.secretStorageKey) {
       const key = fromBase64(stored.secretStorageKey);
       if (key !== null && key.length === 32) this.secretStorageKeys.set(stored.secretStorageKeyId, key);
     }
@@ -444,14 +452,18 @@ export class MatrixSession implements SessionPort {
     );
     this.emitCachedRooms(cached, cached.length === 0);
     const recent = [...cached].toSorted((left, right) => right.lastOpened - left.lastOpened)[0];
-    if (recent !== undefined) await this.emitStoredWindow(recent.room.roomId);
+    // The start reply carries the room list; the last window arrives as its own event so the rows
+    // are not delayed by reading one room's history.
+    if (recent !== undefined) void this.emitStoredWindow(recent.room.roomId).catch(() => undefined);
     void this.outbox.resume().catch(() => undefined);
     const generation = this.generation;
     const task = this.startClient(stored, generation);
     this.startTask = task;
     void task
-      .catch(() => {
+      .catch((error: unknown) => {
         if (generation !== this.generation) return;
+        // A swallowed start failure would show up later as "the worker is not available".
+        this.startFailure = error instanceof WorkerFailure ? error.code : "unavailable";
         this.emit({ type: "connection", payload: "offline" });
         this.emit({ type: "session", payload: summary(null, stored, [], this.accountAvatar) });
       })
@@ -729,10 +741,15 @@ export class MatrixSession implements SessionPort {
    */
   async resetIdentity(password: string): Promise<string | null> {
     const task = this.startTask;
-    if (task !== null) await task;
+    if (task !== null) {
+      // A start that failed is why the reset cannot run; its own code says which step.
+      await task.catch((cause: unknown) => {
+        throw cause instanceof WorkerFailure ? cause : new WorkerFailure("corrupt");
+      });
+    }
     const client = this.requireClient();
     const crypto = client.getCrypto();
-    if (crypto === undefined) throw new WorkerFailure("unavailable");
+    if (crypto === undefined) throw new WorkerFailure(this.startFailure ?? "unavailable");
 
     const userId = client.getUserId() ?? "";
     const auth = {
@@ -766,28 +783,36 @@ export class MatrixSession implements SessionPort {
       await client.secretStorage.setDefaultKeyId(null).catch(() => undefined);
     }
     this.secretStorageKeys.clear();
+    // The new secret storage key has to exist before the new cross-signing keys, because the SDK
+    // stores their private halves in it as part of the bootstrap.
+    const key = await crypto.createRecoveryKeyFromPassphrase().catch(() => {
+      throw new WorkerFailure("unsupported");
+    });
+    const added = await client.secretStorage
+      .addKey("m.secret_storage.v1.aes-hmac-sha2", { key: key.privateKey })
+      .catch(() => {
+        throw new WorkerFailure("too-large");
+      });
+    const keyId = added.keyId;
+    await client.secretStorage.setDefaultKeyId(keyId).catch(() => {
+      throw new WorkerFailure("locked");
+    });
+    this.pendingSecret = { key: key.privateKey, passphrase: "" };
     try {
       await crypto.bootstrapCrossSigning({ setupNewCrossSigning: true, authUploadDeviceSigningKeys: uia });
+      await crypto.resetKeyBackup().catch(() => undefined);
     } catch (cause) {
       // The server rejected the password: that is the reader's to fix, not a network failure.
       const known = cause instanceof Error && /M_FORBIDDEN|M_UNAUTHORIZED|unauthor/iu.test(cause.message);
       throw new WorkerFailure(known ? "auth" : "network");
-    }
-    const key = await crypto.createRecoveryKeyFromPassphrase();
-    this.pendingSecret = { key: key.privateKey, passphrase: "" };
-    try {
-      await crypto.bootstrapSecretStorage({
-        setupNewSecretStorage: true,
-        createSecretStorageKey: () => Promise.resolve(key),
-        setupNewKeyBackup: true,
-      });
-    } catch {
-      throw new WorkerFailure("network");
     } finally {
       this.pendingSecret = null;
     }
-    const defaultKey = await client.secretStorage.getKey();
-    if (defaultKey === null || !(await client.secretStorage.checkKey(key.privateKey, defaultKey[1]))) {
+    const defaultKey = await client.secretStorage.getKey().catch(() => null);
+    if (
+      defaultKey === null ||
+      !(await client.secretStorage.checkKey(key.privateKey, defaultKey[1]).catch(() => false))
+    ) {
       throw new WorkerFailure("corrupt");
     }
     const defaultKeyId = defaultKey[0];
@@ -2251,7 +2276,15 @@ export class MatrixSession implements SessionPort {
         await this.emitRooms();
       } while (this.roomsAgain);
     } catch {
-      // A projection read failure keeps the previous room snapshot.
+      // The list stays usable: the stored rows are shown without a preview rather than the skeleton.
+      const account = this.account;
+      if (account !== null) {
+        const records = await account.readRooms().catch(() => []);
+        const visible = sortRooms(
+          records.filter((record) => record.room.membership === "join" || record.room.membership === "invite"),
+        );
+        this.emitCachedRooms(visible, false);
+      }
     } finally {
       this.roomsRunning = false;
       if (this.roomsAgain) {
@@ -2294,22 +2327,26 @@ export class MatrixSession implements SessionPort {
       const base = avatar === undefined ? projectedBase : { ...projectedBase, avatar };
       const mxcAvatar = room.getMxcAvatarUrl();
       if (mxcAvatar !== null) this.queueAvatar(room.roomId, mxcAvatar);
-      const [marker, latest, queued] = await Promise.all([
-        account.readMarker(room.roomId),
-        account.readLatest(room.roomId, Math.max(WINDOW_LIMIT, 100)),
-        this.outbox === null ? Promise.resolve([]) : this.outbox.rows(room.roomId),
-      ]);
-      const projected = projectRoomState(base, latest, queued, marker, own);
-      const summaryRoom = {
-        ...projected,
-        spaceId: spaces.get(room.roomId) ?? projected.spaceId,
-      };
-      const record = {
-        room: { ...summaryRoom, avatar: null },
-        lastOpened: lastOpened.get(room.roomId) ?? 0,
-      };
-      await account.writeRoom(record);
-      rooms.push({ room: summaryRoom, lastOpened: record.lastOpened });
+      const summaryRoom = { ...base, spaceId: spaces.get(room.roomId) ?? base.spaceId };
+      const lastOpenedAt = lastOpened.get(room.roomId) ?? 0;
+      // One room whose stored rows cannot be read keeps its SDK projection in the list: a single
+      // unreadable preview must not leave the reader without the other rooms.
+      try {
+        const [marker, latest, queued] = await Promise.all([
+          account.readMarker(room.roomId),
+          account.readLatest(room.roomId, Math.max(WINDOW_LIMIT, 100)),
+          this.outbox === null ? Promise.resolve([]) : this.outbox.rows(room.roomId),
+        ]);
+        const projected = projectRoomState(base, latest, queued, marker, own);
+        const projectedRoom = {
+          ...projected,
+          spaceId: spaces.get(room.roomId) ?? projected.spaceId,
+        };
+        await account.writeRoom({ room: { ...projectedRoom, avatar: null }, lastOpened: lastOpenedAt });
+        rooms.push({ room: projectedRoom, lastOpened: lastOpenedAt });
+      } catch {
+        rooms.push({ room: summaryRoom, lastOpened: lastOpenedAt });
+      }
     }
     // Safe only here: this path runs after SyncState.Prepared, so absence is an explicit leave.
     for (const record of records) {
@@ -2611,19 +2648,22 @@ export class MatrixSession implements SessionPort {
       readonly device_id?: string;
       readonly access_token?: string;
       readonly refresh_token?: string;
+      readonly expires_in_ms?: number;
     },
     startClient = true,
   ): Promise<SessionSummary> {
     if (response.device_id === undefined || response.access_token === undefined) {
       throw new WorkerFailure("auth");
     }
-    if (this.client !== null) throw new WorkerFailure("unavailable");
+    const previous = this.client;
+    if (previous !== null) await this.teardown(previous);
     const stored: StoredSession = {
       baseUrl,
       userId: response.user_id,
       deviceId: response.device_id,
       accessToken: response.access_token,
       refreshToken: response.refresh_token ?? null,
+      expiresAt: response.expires_in_ms === undefined ? null : Date.now() + response.expires_in_ms,
     };
     await this.acquireLock(stored.userId);
     try {
@@ -2647,9 +2687,75 @@ export class MatrixSession implements SessionPort {
     if (generation !== this.generation) throw new WorkerFailure("unavailable");
   }
 
-  private async startClient(stored: StoredSession, generation: number): Promise<SessionSummary> {
+  /**
+   * The SDK only refreshes tokens for an OAuth2 client, so a password session renews here through the
+   * endpoints the specification names: a five-minute token would otherwise be dead before the first sync.
+   */
+  private async refreshSession(stored: StoredSession): Promise<StoredSession | null> {
+    const refreshToken = stored.refreshToken;
+    if (refreshToken === null) return null;
+    const base = stored.baseUrl.replace(/\/+$/u, "");
+    let response: Response;
+    try {
+      response = await fetch(`${base}/_matrix/client/v3/refresh`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        signal: AbortSignal.timeout(RENEW_TIMEOUT_MS),
+      });
+    } catch {
+      return null;
+    }
+    if (!response.ok) return null;
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch {
+      return null;
+    }
+    if (!isRecord(value)) return null;
+    const accessToken = value["access_token"];
+    const rotated = value["refresh_token"];
+    const expiresIn = value["expires_in_ms"];
+    if (typeof accessToken !== "string" || accessToken === "") return null;
+    const next: StoredSession = {
+      ...stored,
+      accessToken,
+      refreshToken: typeof rotated === "string" ? rotated : refreshToken,
+      expiresAt: typeof expiresIn === "number" ? Date.now() + expiresIn : null,
+    };
+    await writeSession(next).catch(() => undefined);
+    if (this.stored !== null) this.stored = next;
+    return next;
+  }
+
+  private async renewSession(stored: StoredSession): Promise<StoredSession> {
+    const known = stored.expiresAt;
+    if (known !== null && known - Date.now() > RENEW_BEFORE_MS) return stored;
+    return (await this.refreshSession(stored)) ?? stored;
+  }
+
+  /** Renews the token before its lifetime ends, and keeps the running client on the new one. */
+  private scheduleRenewal(client: MatrixClient, stored: StoredSession): void {
+    if (this.renewTimer !== null) window.clearTimeout(this.renewTimer);
+    this.renewTimer = null;
+    const expiresAt = stored.expiresAt;
+    if (expiresAt === null) return;
+    const wait = Math.max(MIN_RENEW_DELAY_MS, expiresAt - Date.now() - RENEW_BEFORE_MS);
+    this.renewTimer = window.setTimeout(() => {
+      this.renewTimer = null;
+      void this.refreshSession(stored).then((next) => {
+        if (next === null || this.client !== client) return;
+        client.setAccessToken(next.accessToken);
+        this.scheduleRenewal(client, next);
+      });
+    }, wait);
+  }
+
+  private async startClient(original: StoredSession, generation: number): Promise<SessionSummary> {
     const wasmUrl = this.wasmUrl;
     if (wasmUrl === null) throw new WorkerFailure("unavailable");
+    const stored = await this.renewSession(original);
     const key = accountKey(stored.userId);
     const store = new IndexedDBStore({
       indexedDB: self.indexedDB,
@@ -2680,6 +2786,7 @@ export class MatrixSession implements SessionPort {
                 ...current,
                 accessToken: tokens.accessToken,
                 refreshToken: tokens.refreshToken ?? current.refreshToken,
+                expiresAt: null,
               };
               this.stored = next;
               void writeSession(next).catch(() => undefined);
@@ -2690,11 +2797,23 @@ export class MatrixSession implements SessionPort {
     this.stored = stored;
     this.cryptoPrefix = `maski:crypto:${key}:${stored.deviceId}`;
     this.wire(client);
-    await client.store.startup();
+    try {
+      await client.store.startup();
+    } catch {
+      throw new WorkerFailure("corrupt");
+    }
     this.ensureGeneration(generation);
-    await initAsync(wasmUrl);
+    try {
+      await initAsync(wasmUrl);
+    } catch {
+      throw new WorkerFailure("unsupported");
+    }
     this.ensureGeneration(generation);
-    await client.initRustCrypto({ cryptoDatabasePrefix: this.cryptoPrefix });
+    try {
+      await client.initRustCrypto({ cryptoDatabasePrefix: this.cryptoPrefix });
+    } catch {
+      throw new WorkerFailure("corrupt");
+    }
     this.ensureGeneration(generation);
     this.sas?.dispose();
     this.sas = new SasSessions({
@@ -2710,13 +2829,18 @@ export class MatrixSession implements SessionPort {
     this.sas.adoptInProgress();
     this.keyReady = await this.refreshGate();
     this.ensureGeneration(generation);
-    await client.startClient({
-      initialSyncLimit: 20,
-      lazyLoadMembers: true,
-      pendingEventOrdering: PendingEventOrdering.Detached,
-      threadSupport: false,
-    });
+    try {
+      await client.startClient({
+        initialSyncLimit: 20,
+        lazyLoadMembers: true,
+        pendingEventOrdering: PendingEventOrdering.Detached,
+        threadSupport: false,
+      });
+    } catch {
+      throw new WorkerFailure("network");
+    }
     this.ensureGeneration(generation);
+    this.scheduleRenewal(client, stored);
     const session = summary(client, stored, this.stickerPacks, this.accountAvatar);
     this.emit({ type: "session", payload: session });
     this.emit({ type: "keys", payload: this.keyReady });
@@ -2724,11 +2848,16 @@ export class MatrixSession implements SessionPort {
     void this.devices().catch(() => undefined);
     this.refreshBackup();
     this.emitInvites();
+    // The list does not wait for the other rooms' read markers: it paints from the stored rooms
+    // first and updates the markers in the background.
+    this.scheduleRooms();
     const account = this.account;
     if (account !== null) {
-      for (const room of client.getRooms()) await this.syncMarker(room);
+      void (async () => {
+        for (const room of client.getRooms()) await this.syncMarker(room);
+        this.scheduleRooms();
+      })().catch(() => undefined);
     }
-    this.scheduleRooms();
     if (this.activeRoomId !== null) {
       await this.ingestRoom(this.activeRoomId);
       await this.persistBackfill(this.activeRoomId);
@@ -2738,6 +2867,8 @@ export class MatrixSession implements SessionPort {
   }
 
   private async softLogout(): Promise<void> {
+    if (this.renewTimer !== null) window.clearTimeout(this.renewTimer);
+    this.renewTimer = null;
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
@@ -2778,6 +2909,8 @@ export class MatrixSession implements SessionPort {
   }
 
   private async teardown(client: MatrixClient | null): Promise<void> {
+    if (this.renewTimer !== null) window.clearTimeout(this.renewTimer);
+    this.renewTimer = null;
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;

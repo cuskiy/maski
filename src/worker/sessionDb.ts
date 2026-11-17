@@ -6,6 +6,8 @@ export interface StoredSession {
   readonly deviceId: string;
   readonly accessToken: string;
   readonly refreshToken: string | null;
+  /** Epoch milliseconds from the login reply; null when the server named no lifetime. */
+  readonly expiresAt: number | null;
   /** Worker-only key material; loaded only for a one-tab post-unlock handoff. */
   readonly secretStorageKeyId?: string | null;
   readonly secretStorageKey?: string | null;
@@ -62,6 +64,7 @@ export async function readSession(): Promise<StoredSession | null> {
       deviceId: value["deviceId"],
       accessToken: value["accessToken"],
       refreshToken: typeof value["refreshToken"] === "string" ? value["refreshToken"] : null,
+      expiresAt: typeof value["expiresAt"] === "number" ? value["expiresAt"] : null,
       secretStorageKeyId: typeof value["secretStorageKeyId"] === "string" ? value["secretStorageKeyId"] : null,
       secretStorageKey: typeof value["secretStorageKey"] === "string" ? value["secretStorageKey"] : null,
     };
