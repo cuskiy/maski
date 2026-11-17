@@ -399,6 +399,8 @@ export class MatrixSession implements SessionPort {
   private startFailure: FailureCode | null = null;
   private renewTimer: number | null = null;
   private renewInFlight: Promise<StoredSession | null> | null = null;
+  private syncRestartTimer: number | null = null;
+  private syncAttempts = 0;
   private syncReady = false;
   private sas: SasSessions | null = null;
   private pendingSecret: { readonly key: Uint8Array<ArrayBuffer> | null; readonly passphrase: string } | null = null;
@@ -2570,9 +2572,11 @@ export class MatrixSession implements SessionPort {
     client.on(ClientEvent.Sync, (state: SyncState) => {
       if (state === SyncState.Error) {
         this.emit({ type: "connection", payload: "offline" });
+        this.restartSync(client);
         return;
       }
       if (state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup) {
+        this.syncAttempts = 0;
         if (state === SyncState.Prepared) this.syncReady = true;
         this.emit({ type: "connection", payload: "online" });
         this.scheduleRooms();
@@ -2903,9 +2907,40 @@ export class MatrixSession implements SessionPort {
     return session;
   }
 
+  /**
+   * A sync that stopped leaves the reader with a room list that never changes, so it is started again
+   * with a bounded backoff; the attempt count resets as soon as a sync succeeds.
+   */
+  private restartSync(client: MatrixClient): void {
+    if (this.client !== client || this.syncRestartTimer !== null) return;
+    const delay = Math.min(30_000, 1_000 * 2 ** this.syncAttempts);
+    this.syncAttempts += 1;
+    this.syncRestartTimer = Number(
+      setTimeout(() => {
+        this.syncRestartTimer = null;
+        if (this.client !== client) return;
+        try {
+          client.stopClient();
+        } catch {
+          // The sync loop may already be stopped.
+        }
+        void client
+          .startClient({
+            initialSyncLimit: 20,
+            lazyLoadMembers: true,
+            pendingEventOrdering: PendingEventOrdering.Detached,
+            threadSupport: false,
+          })
+          .catch(() => this.restartSync(client));
+      }, delay),
+    );
+  }
+
   private async softLogout(): Promise<void> {
     if (this.renewTimer !== null) clearTimeout(this.renewTimer);
     this.renewTimer = null;
+    if (this.syncRestartTimer !== null) clearTimeout(this.syncRestartTimer);
+    this.syncRestartTimer = null;
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
@@ -2948,6 +2983,8 @@ export class MatrixSession implements SessionPort {
   private async teardown(client: MatrixClient | null): Promise<void> {
     if (this.renewTimer !== null) clearTimeout(this.renewTimer);
     this.renewTimer = null;
+    if (this.syncRestartTimer !== null) clearTimeout(this.syncRestartTimer);
+    this.syncRestartTimer = null;
     this.generation += 1;
     this.startTask = null;
     this.syncReady = false;
