@@ -1454,16 +1454,18 @@ a reader-visible symptom, known facts, ruled-out paths and the next concrete ste
      enable sticker sending only with an image-backed picker, and exercise encrypted/unencrypted upload,
      download, cancel and real-server thumbnails in Chromium.
 
-5. **Spaces and global notifications remain partial.**
-   - Symptom: a space cannot be created or have children; the global notification level is local only.
-   - Known: membership invites are projected into `invites`; room settings, member moderation,
-     send-invite, join/leave, DM creation (`m.direct`), tags, mute push rules and local search are worker
-     commands; `saveNotifications` is false.
-   - Ruled out: enabling a no-op control, a fake notification mapping for `all`/`mentions`, or keeping a
-     mock response in the production source.
-   - Next: add space creation and `SpaceChild`/`SpaceParent`, then implement the notification preferences
-     the product actually stores; each needs a record, command, projection and test before its control
-     returns.
+5. **Global notifications remain partial.**
+   - Symptom: the global notification level is local only; `saveNotifications` is false and no control
+     offers it.
+   - Known: a space is created with a private room whose creation content names `m.space`, and the room
+     menu adds or removes a room from a space by writing `m.space.child` and `m.space.parent`; both were
+     driven against a real account. Membership invites are projected into `invites`; room settings, member
+     moderation, send-invite, join/leave, DM creation (`m.direct`), tags, mute push rules and local search
+     are worker commands.
+   - Ruled out: a no-op control, a fake notification mapping for `all`/`mentions`, or keeping a mock
+     response in the production source.
+   - Next: implement the notification preferences the product actually stores; each needs a record, command,
+     projection and test before its control returns.
 
 6. **CSP is broad.**
    - Symptom: `connect-src https: wss:` permits every origin.
