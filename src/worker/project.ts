@@ -8,6 +8,7 @@ import {
 } from "matrix-js-sdk";
 import type {
   ChatEffect,
+  MessageLocation,
   Poll,
   PollAnswer,
   Invite,
@@ -52,6 +53,15 @@ function chatEffect(event: MatrixEvent): ChatEffect | null {
     default:
       return null;
   }
+}
+
+function chatLocation(event: MatrixEvent): MessageLocation | null {
+  const value = content(event);
+  if (value["msgtype"] !== "m.location") return null;
+  const geoUri = value["geo_uri"];
+  if (typeof geoUri !== "string" || !geoUri.startsWith("geo:")) return null;
+  const description = value["body"];
+  return { geoUri, description: typeof description === "string" ? description : "" };
 }
 
 function chatPoll(event: MatrixEvent): Poll | null {
@@ -303,6 +313,7 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
     kind,
     effect: redacted ? null : chatEffect(event),
     poll: redacted ? null : chatPoll(event),
+    location: redacted ? null : chatLocation(event),
     body: details === null ? (typeof body === "string" ? body : "") : details.caption,
     html: !redacted && encryption.state === "ok" && typeof formatted === "string" ? formatted : null,
     media: details === null ? null : messageMedia(details),

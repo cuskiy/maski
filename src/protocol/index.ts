@@ -1,5 +1,6 @@
 import type {
   BackupState,
+  MessageLocation,
   Poll,
   PollAnswer,
   ChatEffect,
@@ -736,6 +737,12 @@ function isPollAnswer(value: unknown): value is PollAnswer {
   return isRecord(value) && isString(value["id"]) && isText(value["text"]);
 }
 
+function isMessageLocation(value: unknown): value is MessageLocation {
+  return (
+    isRecord(value) && isText(value["geoUri"]) && value["geoUri"].startsWith("geo:") && isText(value["description"])
+  );
+}
+
 function isPoll(value: unknown): value is Poll {
   return (
     isRecord(value) &&
@@ -787,6 +794,7 @@ export function isMessageRow(value: unknown): value is MessageRow {
     isMessageKind(value["kind"]) &&
     (value["effect"] === null || isChatEffect(value["effect"])) &&
     (value["poll"] === null || isPoll(value["poll"])) &&
+    (value["location"] === null || isMessageLocation(value["location"])) &&
     isText(value["body"]) &&
     isStringOrNull(value["html"]) &&
     (value["media"] === null || isMedia(value["media"])) &&

@@ -252,6 +252,20 @@ function messageRow(
           ${reply}
           <div class="message-line">${content}</div>
       ${
+        message.location === null
+          ? html``
+          : html`<a
+              class="message-location"
+              href="${mapUrl(message.location.geoUri)}"
+              target="_blank"
+              rel="noreferrer"
+              dir="auto"
+            >
+              ${icons.globe}<span>${message.location.description}</span>
+            </a>
+            <span class="visually-hidden">${t(c, "message.location")}</span>`
+      }
+      ${
         message.poll === null
           ? html``
           : html`<div class="poll" data-poll="${message.poll.question}">
@@ -291,6 +305,14 @@ function messageMeta(message: MessageRow, c: Catalog, time: Intl.DateTimeFormat,
     ${edited}
   </span>`;
   return html`<span class="bubble-meta">${stamp}${status}</span>`;
+}
+
+/** A geo URI becomes the openstreetmap view of that point, which needs no request until it is opened. */
+function mapUrl(geoUri: string): string {
+  const coordinates = geoUri.slice(4).split(";")[0] ?? "";
+  const [latitude, longitude] = coordinates.split(",");
+  if (latitude === undefined || longitude === undefined) return "https://www.openstreetmap.org/";
+  return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude.trim())}&mlon=${encodeURIComponent(longitude.trim())}`;
 }
 
 function mediaDimensions(media: Media): Html {

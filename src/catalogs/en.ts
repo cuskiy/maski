@@ -356,6 +356,7 @@ export const en = {
   "message.failed.unsupported": "This server does not accept that kind of message.",
   "message.failed.auth": "The session expired. Sign in again, then retry.",
   "message.failed.unavailable": "The server is not available. Retry in a moment.",
+  "message.location": "Location",
   "message.failed": "Not sent",
   "composer.tray": "Attachments",
   "composer.remove": "Remove",

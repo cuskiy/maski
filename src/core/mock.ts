@@ -224,6 +224,7 @@ function row(input: RowInput): MessageRow {
     kind: input.kind,
     effect: null,
     poll: null,
+    location: null,
     body: input.body,
     html: input.html ?? null,
     media: input.media ?? null,

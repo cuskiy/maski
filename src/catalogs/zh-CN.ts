@@ -353,6 +353,7 @@ export const zhCN = {
   "message.failed.unsupported": "这个服务器不接受这类消息。",
   "message.failed.auth": "会话已过期。请重新登录后再试。",
   "message.failed.unavailable": "服务器暂时不可用。稍后重试。",
+  "message.location": "位置",
   "message.failed": "未发送",
   "composer.tray": "附件",
   "composer.remove": "移除",

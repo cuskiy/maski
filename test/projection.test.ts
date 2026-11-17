@@ -34,6 +34,7 @@ function event(index: number): MessageRow {
     kind: "text",
     effect: null,
     poll: null,
+    location: null,
     body: mention ? `${OWN} hello ${String(index)}` : `hello ${String(index)}`,
     html: null,
     media: null,

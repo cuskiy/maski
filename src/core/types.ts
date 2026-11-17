@@ -121,6 +121,12 @@ export interface Poll {
   readonly disclosed: boolean;
 }
 
+/** A location as the room stores it: the geo URI, and the sentence the sender wrote for it. */
+export interface MessageLocation {
+  readonly geoUri: string;
+  readonly description: string;
+}
+
 export interface MessageRow {
   readonly id: string;
   readonly eventId: string | null;
@@ -136,6 +142,8 @@ export interface MessageRow {
   readonly effect: ChatEffect | null;
   /** Null unless the message is a poll. */
   readonly poll: Poll | null;
+  /** Null unless the message shares a location. */
+  readonly location: MessageLocation | null;
   readonly body: string;
   readonly html: string | null;
   readonly media: Media | null;

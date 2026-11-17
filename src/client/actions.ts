@@ -317,6 +317,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
         kind: options.kind ?? "text",
         effect: null,
         poll: null,
+        location: null,
         body,
         html: options.html === undefined || options.html === null ? null : sanitizeMessageHtml(options.html),
         media: options.media ?? null,
