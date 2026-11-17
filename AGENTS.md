@@ -1277,6 +1277,11 @@ old commits are evidence, not status.
   one room whose stored rows cannot be read keeps its SDK projection instead of hiding the list.
   Typing at 8× CPU throttling costs 143 ms for 16 keys (was 641 ms) after the timeline stopped
   rebuilding on a wrap resize and the composer stopped rewriting `data-empty` on every key.
+- Chat effects are read from the `msgtype` Element names (`nic.custom.confetti`, `nic.custom.fireworks`,
+  `io.element.effect.rainfall`, `io.element.effect.snowfall`, `io.element.effects.space_invaders`,
+  `io.element.effect.hearts`) and played once as a particle burst when the message arrives into a room
+  that is already on screen. The message menu offers a pat (`fyi.cisnt.headpat`) and a boop
+  (`fyi.cisnt.boop`), both queued through the outbox; a real account sent both and the room showed them.
 - A message that arrives into a room already on screen animates in over 160 ms; the first paint and
   a room switch appear at their final position, and reduced motion turns it off.
 - Navigation and timeline layout share one paint scheduler: the next frame, or a 120 ms timeout when
