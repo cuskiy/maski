@@ -1893,13 +1893,23 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   };
   sasElement?.addEventListener("close", onSasClose);
 
+  // A refresh replaces the body, which moves the reader's focus and caret, so it happens only when the
+  // rows the body shows actually changed.
+  let lastMembers: ChatState["members"] | null = null;
   const unwatchMembers = store.watch(["members", "membersLoading"], () => {
+    const members = state().members;
+    if (members === lastMembers) return;
+    lastMembers = members;
     const dialog = document.getElementById(SURFACE.roomSettings);
     if (dialog instanceof HTMLDialogElement && dialog.open) {
       refreshBody(SURFACE.roomSettings, activeRoomId ?? state().roomId);
     }
   });
+  let lastBackup: readonly [boolean, string | null] | null = null;
   const unwatchBackup = store.watch(["backupReady", "backupError"], () => {
+    const current: readonly [boolean, string | null] = [state().backupReady, state().backupError];
+    if (lastBackup !== null && lastBackup[0] === current[0] && lastBackup[1] === current[1]) return;
+    lastBackup = current;
     const dialog = document.getElementById(SURFACE.settings);
     if (dialog instanceof HTMLDialogElement && dialog.open) refreshBody(SURFACE.settings);
   });
