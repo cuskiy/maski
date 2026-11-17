@@ -17,6 +17,7 @@ import type {
   SourceCapabilities,
 } from "../core/types.ts";
 import type { CommandMap, MediaVariant } from "../protocol/index.ts";
+import { isFailureCode } from "../protocol/index.ts";
 import { createRoom, hasTag, roomFromInvite } from "../core/rooms.ts";
 import { memberPermissions, messagePermissions, roomPermissions } from "../core/permissions.ts";
 import type { Store } from "./store.ts";
@@ -286,12 +287,14 @@ export function createActions({ store, source, c, account }: Context): Actions {
       for (const raw of rawRows) {
         const row = cleanRow({ ...raw, status: "sending" });
         appendVisibleRow(store, row);
-        void source.send(roomId, row).catch(() => {
+        void source.send(roomId, row).catch((error: unknown) => {
+          // The worker's code says what happened; a failed send is not always a network failure.
+          const code = error instanceof Error && isFailureCode(error.message) ? error.message : "unavailable";
           patchVisibleRow(store, roomId, {
             ...row,
             status: "failed",
-            error: "network",
-            retryable: true,
+            error: code,
+            retryable: code === "network" || code === "unavailable",
           });
         });
       }
