@@ -15,7 +15,7 @@ import {
 } from "../core/rooms.ts";
 import { messagePermissions, roomPermissions } from "../core/permissions.ts";
 import { surfaceBodyFor, mediaFilesBody } from "../components/surfaces.ts";
-import { isActiveSas, sasBody } from "../components/sas.ts";
+import { SasUi } from "./sasUi.ts";
 import { replaceHtml } from "./dom.ts";
 import { emojiPickerBody } from "../components/emoji.ts";
 import { stickerSections } from "../components/stickers.ts";
@@ -467,11 +467,6 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   let desktopRequest = 0;
   let pendingResetKey = false;
   let pendingSearch: { readonly roomId: string; readonly messageId: string } | null = null;
-  let sasError: CatalogKey | null = null;
-  let sasConfirmedId: string | null = null;
-  let sasDismissedId: string | null = null;
-  let sasSentCancelId: string | null = null;
-  let sasShownId: string | null = null;
 
   const state = (): ChatState => store.snapshot();
   const capabilities = actions.capabilities;
@@ -480,56 +475,18 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   const message = (id: string | null): MessageRow | null => state().messages.find((entry) => entry.id === id) ?? null;
   let viewerMessageId: string | null = null;
 
-  function renderSas(): void {
-    const body = sasDialogElement()?.querySelector<HTMLElement>(`[data-region="${SURFACE.sas}-body"]`);
-    if (body === null || body === undefined) return;
-    const sas = state().sas;
-    replaceHtml(
-      body,
-      sasBody(c, sas, {
-        dialogId: SURFACE.sas,
-        error: sasError,
-        confirmed: sasConfirmedId !== null && sasConfirmedId === sas?.id,
-      }),
-    );
-  }
-
-  function openSas(): void {
-    const dialog = sasDialogElement();
-    if (dialog === null) return;
-    renderSas();
-    if (!dialog.open) dialog.showModal();
-  }
-
-  function failSas(): void {
-    sasError = "auth.key.sasFailed";
-    openSas();
-  }
-
-  function cancelSas(id: string): void {
-    if (sasSentCancelId === id) return;
-    sasSentCancelId = id;
-    void actions.cancelSas(id).catch(() => undefined);
-  }
-
-  function handleSasAction(action: string): void {
-    const sas = state().sas;
-    if (sas === null) return;
-    sasError = null;
-    if (action === "accept") {
-      void actions.acceptSas(sas.id).catch(failSas);
-    } else if (action === "confirm") {
-      sasConfirmedId = sas.id;
-      renderSas();
-      void actions.confirmSas(sas.id).catch(failSas);
-    } else if (action === "mismatch") {
-      void actions.mismatchSas(sas.id).catch(failSas);
-    } else if (action === "cancel") {
-      sasDismissedId = sas.id;
-      cancelSas(sas.id);
-      sasDialogElement()?.close();
-    }
-  }
+  const chatSas = new SasUi({
+    c,
+    dialogId: SURFACE.sas,
+    dialog: sasDialogElement,
+    state: () => state().sas,
+    actions: {
+      acceptSas: (id: string) => actions.acceptSas(id),
+      confirmSas: (id: string) => actions.confirmSas(id),
+      mismatchSas: (id: string) => actions.mismatchSas(id),
+      cancelSas: (id: string) => actions.cancelSas(id),
+    },
+  });
 
   function downloadMedia(roomId: string, messageId: string, name: string): void {
     void actions.resolveMedia(roomId, messageId, "full").then((url) => {
@@ -822,8 +779,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       const deviceId = element.dataset["deviceId"] ?? "";
       const device = state().devices.find((entry) => entry.id === deviceId);
       if (device === undefined || !device.capabilities.verify || device.verified || device.current) return;
-      sasError = null;
-      void actions.startSas(device.id).catch(failSas);
+      void actions.startSas(device.id).catch(() => chatSas.fail());
       return;
     } else if (action === "sign-out-device") {
       if (!capabilities.signOutDevice) return;
@@ -1062,7 +1018,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const sasAction = target.closest<HTMLElement>("[data-sas-action]");
     if (sasAction !== null) {
       event.preventDefault();
-      handleSasAction(sasAction.dataset["sasAction"] ?? "");
+      chatSas.handleAction(sasAction.dataset["sasAction"] ?? "");
       return;
     }
 
@@ -1864,30 +1820,15 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
   });
 
   const applySasState = (): void => {
-    const sas = state().sas;
-    if (sas === null) return;
-    if (sas.id !== sasShownId) {
-      sasShownId = sas.id;
-      sasConfirmedId = null;
-      sasDismissedId = null;
-      sasSentCancelId = null;
-    }
-    sasError = null;
-    if (sasDismissedId === sas.id) {
-      renderSas();
-      return;
-    }
-    openSas();
+    if (state().sas === null) return;
+    chatSas.update();
   };
   const unwatchSas = store.watch(["sas"], applySasState);
   applySasState();
 
   const sasElement = sasDialogElement();
   const onSasClose = (): void => {
-    const sas = state().sas;
-    if (sas === null) return;
-    sasDismissedId = sas.id;
-    if (isActiveSas(sas.phase)) cancelSas(sas.id);
+    chatSas.handleClose();
     const settings = document.getElementById(SURFACE.settings);
     if (settings instanceof HTMLDialogElement && settings.open) refreshBody(SURFACE.settings);
   };

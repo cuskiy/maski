@@ -1,10 +1,10 @@
-import type { Catalog, CatalogKey } from "../lib/catalog.ts";
+import type { Catalog } from "../lib/catalog.ts";
 import { t } from "../lib/catalog.ts";
 import type { SasState } from "../core/types.ts";
-import { isActiveSas, sasBody } from "../components/sas.ts";
+import { isActiveSas } from "../components/sas.ts";
+import { SasUi } from "./sasUi.ts";
 import { config } from "../config.ts";
 import { MatrixTransport } from "./matrixTransport.ts";
-import { replaceHtml } from "./dom.ts";
 import { mockSession, setAccount, setGate, setServer } from "./session.ts";
 import { keepStorage } from "./persist.ts";
 
@@ -161,41 +161,23 @@ function initKey(c: Catalog): void {
   hideNextStep("login");
 
   let resetPending = false;
+  let keySasState: SasState | null = null;
   const verifyButton = document.querySelector<HTMLButtonElement>("[data-key-verify]");
-  const sasDialog = document.querySelector<HTMLDialogElement>("#key-sas-dialog");
-  const sasRegion = document.querySelector<HTMLElement>('[data-region="key-sas-dialog-body"]');
-  let sas: SasState | null = null;
-  let sasError: CatalogKey | null = null;
-  let sasConfirmedId: string | null = null;
-  let sasSentCancelId: string | null = null;
-
-  const renderSas = (): void => {
-    if (sasRegion === null) return;
-    replaceHtml(
-      sasRegion,
-      sasBody(c, sas, {
-        dialogId: "key-sas-dialog",
-        error: sasError,
-        confirmed: sasConfirmedId !== null && sasConfirmedId === sas?.id,
-      }),
-    );
-  };
-
-  const showSas = (): void => {
-    renderSas();
-    if (sasDialog !== null && !sasDialog.open) sasDialog.showModal();
-  };
-
-  const failSas = (): void => {
-    sasError = "auth.key.sasFailed";
-    showSas();
-  };
-
-  const cancelSas = (): void => {
-    if (sas === null || sasSentCancelId === sas.id) return;
-    sasSentCancelId = sas.id;
-    void transport.sasCancel(sas.id).catch(() => undefined);
-  };
+  const keySas = new SasUi({
+    c,
+    dialogId: "key-sas-dialog",
+    dialog: () => document.querySelector<HTMLDialogElement>("#key-sas-dialog"),
+    state: () => keySasState,
+    actions: {
+      acceptSas: (id) => transport.sasAccept(id).then(() => undefined),
+      confirmSas: (id) => transport.sasConfirm(id).then(() => undefined),
+      mismatchSas: (id) => transport.sasMismatch(id).then(() => undefined),
+      cancelSas: (id) => transport.sasCancel(id).then(() => undefined),
+    },
+    rendered: () => {
+      if (verifyButton !== null) verifyButton.disabled = keySasState !== null && isActiveSas(keySasState.phase);
+    },
+  });
 
   const revealVerify = (gate: string): void => {
     if (verifyButton === null) return;
@@ -216,14 +198,8 @@ function initKey(c: Catalog): void {
 
   transport.onEvent((event) => {
     if (event.type === "sas") {
-      if (sas?.id !== event.payload.id) {
-        sasConfirmedId = null;
-        sasSentCancelId = null;
-      }
-      sas = event.payload;
-      sasError = null;
-      if (verifyButton !== null) verifyButton.disabled = isActiveSas(sas.phase);
-      showSas();
+      keySasState = event.payload;
+      keySas.update();
       return;
     }
     if (event.type !== "keys") return;
@@ -241,37 +217,24 @@ function initKey(c: Catalog): void {
   verifyButton?.addEventListener("click", () => {
     if (verifyButton.disabled) return;
     verifyButton.disabled = true;
-    sasError = null;
     void transport.sasStart(null).catch(() => {
       verifyButton.disabled = false;
-      failSas();
+      keySas.fail();
     });
   });
 
-  sasDialog?.addEventListener("click", (event) => {
+  const keySasDialog = document.querySelector<HTMLDialogElement>("#key-sas-dialog");
+  keySasDialog?.addEventListener("click", (event) => {
     const target = event.target;
-    if (!(target instanceof Element) || sas === null) return;
+    if (!(target instanceof Element)) return;
     const button = target.closest<HTMLElement>("[data-sas-action]");
     if (button === null) return;
     event.preventDefault();
-    sasError = null;
-    const action = button.dataset["sasAction"] ?? "";
-    if (action === "accept") {
-      void transport.sasAccept(sas.id).catch(failSas);
-    } else if (action === "confirm") {
-      sasConfirmedId = sas.id;
-      renderSas();
-      void transport.sasConfirm(sas.id).catch(failSas);
-    } else if (action === "mismatch") {
-      void transport.sasMismatch(sas.id).catch(failSas);
-    } else if (action === "cancel") {
-      cancelSas();
-      sasDialog.close();
-    }
+    keySas.handleAction(button.dataset["sasAction"] ?? "");
   });
 
-  sasDialog?.addEventListener("close", () => {
-    if (sas !== null && isActiveSas(sas.phase)) cancelSas();
+  keySasDialog?.addEventListener("close", () => {
+    keySas.handleClose();
     if (verifyButton !== null) verifyButton.disabled = false;
   });
 
