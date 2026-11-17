@@ -1109,7 +1109,16 @@ export class MatrixSession implements SessionPort {
   async members(roomId: string): Promise<null> {
     const client = this.requireClient();
     const room = client.getRoom(roomId);
-    if (room !== null) this.emit({ type: "members", payload: { roomId, members: projectMembers(room) } });
+    if (room === null) return null;
+    // A lazy-loaded room only knows the members it has seen; the settings list has to be all of them.
+    if (!room.membersLoaded()) {
+      try {
+        await room.loadMembersIfNeeded();
+      } catch {
+        // A server that refuses the member request keeps the partial list rather than none.
+      }
+    }
+    this.emit({ type: "members", payload: { roomId, members: projectMembers(room) } });
     return null;
   }
 
