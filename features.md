@@ -12,7 +12,7 @@ anchor positioning and `anchor-size()` are recorded from MDN.
 | `<dialog>` | 2022-03 | 37 / 98 / 15.4 | modal surfaces |
 | invoker commands (`commandfor`) | 2025-12 | 135 / 144 / 26.2 | declarative dialog open |
 | `popover` | 2025-01 | 116 / 125 / 17 | floating menus, pickers, profile |
-| `closedby` | — | 134 / 141 / 27.3 | backdrop/Escape close; Safari 27.0 lacks it, no JS fallback |
+| `closedby` | — | 134 / 141 / 27.3 | backdrop/Escape close; Safari 27.0 lacks it, one JS fallback closes the dialog on an outside click |
 | anchor positioning (`anchor-name`, `position-anchor`, `position-area`, `position-try`, `anchor-size`) | — | 125 / 147 / 26 | popover placement and width from the invoker; no JS |
 | popover implicit anchor reference | — | 133 / 147 / 26 | `popovertarget` supplies the anchor |
 | `backdrop-filter` | 2024-09 | 76 / 103 / 18 | modal backdrop blur |

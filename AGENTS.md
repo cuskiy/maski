@@ -489,8 +489,10 @@ preload them.
 
 ## 2.6 Login, key gate, settings
 
-- Server address, `.well-known`, `/versions`, `/login` flows; password login, SSO, registration including
-  interactive auth. Password reset appears only when the reset flow exists.
+- Server address, `.well-known`, `/versions`, `/login` flows; password login. The first release signs in
+  with a password only: SSO, registration and password reset are cut from scope at the user's decision on
+  2026-11-17, so the login page carries no control for them. A homeserver that offers only SSO or OAuth is
+  outside this release, and the login page says so rather than pretending.
 - The key gate is enforced. Three paths: recovery key/passphrase, SAS from another device, and restart.
   After registration only restart. A new recovery key is shown once, monospaced, copyable, downloadable,
   never logged. Until the gate is complete the chat is not interactive and room data is not rendered.
@@ -1277,6 +1279,14 @@ old commits are evidence, not status.
   rebuilding on a wrap resize and the composer stopped rewriting `data-empty` on every key.
 - A message that arrives into a room already on screen animates in over 160 ms; the first paint and
   a room switch appear at their final position, and reduced motion turns it off.
+- Navigation and timeline layout share one paint scheduler: the next frame, or a 120 ms timeout when
+  frames are throttled. A stored account paints its cached room list at **252 ms**, and the newest
+  server event reaches the timeline within a second.
+- One message projects only the room it belongs to: a marker read, a bounded row read, the outbox rows
+  and a write for that room instead of for every room.
+- A room that a reader joins, a message they send and a headpat they give share the worker-owned outbox.
+  A headpat is an `m.emote` whose body names the target and whose `fyi.cisnt.headpat` flag is true; the
+  message menu sends it, and the same content is read from the room.
 - Build sizes: stylesheet 84.7 KiB, client 322.3 KiB, matrix worker 1.27 MiB, crypto wasm 7.43 MiB,
   watermark 68.2 KiB (was 257 KiB), generated service worker 2.7 KiB. All budgets pass; the client
   ceiling is 336 KiB by the user's 2026-11-16 decision.
