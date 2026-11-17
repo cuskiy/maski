@@ -1,5 +1,6 @@
 import type {
   BackupState,
+  ChatEffect,
   Connection,
   DeviceSession,
   GuestAccess,
@@ -403,6 +404,19 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<keyof EventMap>([
   "sas",
 ]);
 
+const CHAT_EFFECTS: ReadonlySet<string> = new Set<ChatEffect>([
+  "confetti",
+  "fireworks",
+  "rainfall",
+  "snowfall",
+  "space-invaders",
+  "hearts",
+]);
+
+function isChatEffect(value: unknown): value is ChatEffect {
+  return isInSet<ChatEffect>(value, CHAT_EFFECTS);
+}
+
 const SAS_PHASES: ReadonlySet<string> = new Set<SasPhase>([
   "needs-accept",
   "requested",
@@ -756,6 +770,7 @@ export function isMessageRow(value: unknown): value is MessageRow {
     isNumber(value["ts"]) &&
     isBoolean(value["own"]) &&
     isMessageKind(value["kind"]) &&
+    (value["effect"] === null || isChatEffect(value["effect"])) &&
     isText(value["body"]) &&
     isStringOrNull(value["html"]) &&
     (value["media"] === null || isMedia(value["media"])) &&

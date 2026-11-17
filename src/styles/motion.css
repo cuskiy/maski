@@ -29,4 +29,81 @@
       animation: none;
     }
   }
+
+  @keyframes effect-fall {
+    0% {
+      opacity: 0%;
+      transform: translate3d(0, -10%, 0) rotate(0deg);
+    }
+
+    10% {
+      opacity: 100%;
+    }
+
+    100% {
+      opacity: 0%;
+      transform: translate3d(var(--drift), 105%, 0) rotate(var(--spin));
+    }
+  }
+
+  @keyframes effect-rise {
+    0% {
+      opacity: 0%;
+      transform: translate3d(0, 10%, 0) scale(0.6);
+    }
+
+    15% {
+      opacity: 100%;
+    }
+
+    100% {
+      opacity: 0%;
+      transform: translate3d(var(--drift), -110%, 0) scale(1.1);
+    }
+  }
+
+  .effect-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .effect-particle {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: var(--x);
+    inline-size: var(--size);
+    block-size: var(--size);
+    border-radius: var(--radius-sm);
+    background: var(--effect-accent);
+    animation: effect-fall 2.6s var(--ease) var(--delay) forwards;
+  }
+
+  .effect-layer.is-rainfall .effect-particle,
+  .effect-layer.is-snowfall .effect-particle {
+    border-radius: var(--radius-pill);
+    background: var(--effect-soft);
+    animation-duration: 3.2s;
+  }
+
+  .effect-layer.is-hearts .effect-particle,
+  .effect-layer.is-fireworks .effect-particle {
+    inset-block: auto 0;
+    border-radius: var(--radius-pill);
+    background: var(--effect-warm);
+    animation-name: effect-rise;
+    animation-duration: 2.2s;
+  }
+
+  .effect-layer.is-space-invaders .effect-particle {
+    border-radius: 0;
+    background: var(--effect-cool);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .effect-layer {
+      display: none;
+    }
+  }
 }

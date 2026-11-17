@@ -24,6 +24,10 @@
     --verified: light-dark(rgb(57 122 82), rgb(137 201 158));
     --verified-soft: light-dark(rgb(57 122 82 / 12%), rgb(137 201 158 / 16%));
     --mark: light-dark(rgb(232 232 232), rgb(64 62 59));
+    --effect-accent: light-dark(rgb(190 168 214), rgb(198 178 224));
+    --effect-soft: light-dark(rgb(168 186 206), rgb(178 196 216));
+    --effect-warm: light-dark(rgb(224 158 168), rgb(236 176 186));
+    --effect-cool: light-dark(rgb(140 168 150), rgb(158 188 168));
     --selection: light-dark(rgb(99 113 133 / 16%), rgb(167 181 200 / 18%));
     --selection-control-bg: light-dark(
       color-mix(in srgb, var(--surface) 65%, transparent),

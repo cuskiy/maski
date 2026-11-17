@@ -32,6 +32,7 @@ function event(index: number): MessageRow {
     ts: 1_000 + index,
     own,
     kind: "text",
+    effect: null,
     body: mention ? `${OWN} hello ${String(index)}` : `hello ${String(index)}`,
     html: null,
     media: null,

@@ -9,6 +9,7 @@ import type { Actions } from "../actions.ts";
 import type { LocaleId } from "../../core/locales.ts";
 import type { Store } from "../store.ts";
 import { markMultilineBubbles } from "../bubbleLayout.ts";
+import { playEffect } from "../effects.ts";
 import { schedulePaint } from "../paint.ts";
 import { bindSwipe } from "../swipe.ts";
 import { messagePermissions } from "../../core/permissions.ts";
@@ -288,6 +289,14 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       }
       patchChildren(list, ordered);
       paintSelection();
+      if (arriving) {
+        for (const row of ordered) {
+          const id = row.dataset["id"];
+          if (id === undefined || currentMessages.has(id)) continue;
+          const effect = byId.get(id)?.effect ?? null;
+          if (effect !== null) playEffect(effect, region);
+        }
+      }
       rendered = nextRendered;
       painted = true;
       if (focusState !== null) {

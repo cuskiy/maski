@@ -315,6 +315,7 @@ export function createActions({ store, source, c, account }: Context): Actions {
         ts: options.ts ?? Date.now(),
         own: true,
         kind: options.kind ?? "text",
+        effect: null,
         body,
         html: options.html === undefined || options.html === null ? null : sanitizeMessageHtml(options.html),
         media: options.media ?? null,

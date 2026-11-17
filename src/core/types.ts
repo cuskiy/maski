@@ -106,6 +106,9 @@ export interface ReplyRef {
   readonly body: string;
 }
 
+/** The chat effects a message may ask the room to play, as Element names them. */
+export type ChatEffect = "confetti" | "fireworks" | "rainfall" | "snowfall" | "space-invaders" | "hearts";
+
 export interface MessageRow {
   readonly id: string;
   readonly eventId: string | null;
@@ -117,6 +120,8 @@ export interface MessageRow {
   readonly ts: number;
   readonly own: boolean;
   readonly kind: MessageKind;
+  /** Null unless the message asks the room to play one of the chat effects. */
+  readonly effect: ChatEffect | null;
   readonly body: string;
   readonly html: string | null;
   readonly media: Media | null;

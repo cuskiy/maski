@@ -7,6 +7,7 @@ import {
   type TimelineEvents,
 } from "matrix-js-sdk";
 import type {
+  ChatEffect,
   Invite,
   Member,
   MessageEncryption,
@@ -30,6 +31,25 @@ const MEMBERSHIPS: ReadonlySet<string> = new Set<Membership>(["join", "invite", 
 
 function isMembership(value: unknown): value is Membership {
   return typeof value === "string" && MEMBERSHIPS.has(value);
+}
+
+function chatEffect(event: MatrixEvent): ChatEffect | null {
+  switch (content(event)["msgtype"]) {
+    case "nic.custom.confetti":
+      return "confetti";
+    case "nic.custom.fireworks":
+      return "fireworks";
+    case "io.element.effect.rainfall":
+      return "rainfall";
+    case "io.element.effect.snowfall":
+      return "snowfall";
+    case "io.element.effects.space_invaders":
+      return "space-invaders";
+    case "io.element.effect.hearts":
+      return "hearts";
+    default:
+      return null;
+  }
 }
 
 function messageKind(event: MatrixEvent): MessageKind {
@@ -245,6 +265,7 @@ export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string
     ts: event.getTs(),
     own: sender === ownUserId,
     kind,
+    effect: redacted ? null : chatEffect(event),
     body: details === null ? (typeof body === "string" ? body : "") : details.caption,
     html: !redacted && encryption.state === "ok" && typeof formatted === "string" ? formatted : null,
     media: details === null ? null : messageMedia(details),

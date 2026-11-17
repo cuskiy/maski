@@ -212,6 +212,7 @@ export class MockSource implements ChatSource {
       ts: Date.now(),
       own: true,
       kind,
+      effect: null,
       body: caption,
       html: null,
       media: {
@@ -262,6 +263,7 @@ export class MockSource implements ChatSource {
       ts: Date.now(),
       own: true,
       kind: "sticker",
+      effect: null,
       body: image.body,
       html: null,
       media: {
