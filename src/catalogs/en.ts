@@ -130,7 +130,7 @@ export const en = {
   "surface.invite.from": "From {name}",
   "surface.join.label": "Room address or alias",
   "surface.join.submit": "Join",
-  "surface.join.notFound": "That room is not available in this preview.",
+  "surface.join.notFound": "That room cannot be joined from here. Check the address with the room admin.",
   "surface.create.name": "Room name",
   "surface.create.topic": "Topic",
   "surface.create.submit": "Create",

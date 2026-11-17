@@ -128,7 +128,7 @@ export const zhCN = {
   "surface.invite.from": "来自 {name}",
   "surface.join.label": "房间地址或别名",
   "surface.join.submit": "加入",
-  "surface.join.notFound": "这个预览里没有这个房间。",
+  "surface.join.notFound": "从这里加不进这个房间。请向房间管理员确认地址。",
   "surface.create.name": "房间名称",
   "surface.create.topic": "描述",
   "surface.create.submit": "创建",

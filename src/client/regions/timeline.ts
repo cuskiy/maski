@@ -46,6 +46,28 @@ function stateRoom(state: ChatState): RoomSummary | null {
   return state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
 }
 
+function cloneElement(element: HTMLElement): HTMLElement {
+  const copy = element.cloneNode(true);
+  if (copy instanceof HTMLElement) return copy;
+  throw new Error("a cloned row is not an element");
+}
+
+/** Moves list children into order without detaching a node that already sits in its place. */
+function patchChildren(list: HTMLOListElement, target: readonly HTMLElement[]): void {
+  const current = Array.from(list.children);
+  let index = 0;
+  for (const node of target) {
+    const existing = current[index];
+    if (existing === node) {
+      index += 1;
+      continue;
+    }
+    list.insertBefore(node, existing ?? null);
+    index += 1;
+  }
+  while (list.children.length > target.length) list.lastElementChild?.remove();
+}
+
 export function mountTimeline({ store, actions, c, locale }: TimelineInput): () => void {
   const region = document.querySelector<HTMLElement>(`[data-region="${REGION.timeline}"]`);
   const wrap = region?.querySelector<HTMLElement>(".timeline-wrap") ?? null;
@@ -236,12 +258,13 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
       }
       const nextRendered = new Map<string, MessageRow>();
       const byId = new Map(store.read("messages").map((message) => [message.id, message]));
-      const fragment = document.createDocumentFragment();
+      const ordered: HTMLElement[] = [];
       for (const desired of nextList.children) {
         if (!(desired instanceof HTMLElement)) continue;
         if (desired.matches("li.row-day")) {
           const key = desired.textContent ?? "";
-          fragment.append(currentDays.get(key) ?? desired.cloneNode(true));
+          const day = currentDays.get(key);
+          ordered.push(day ?? cloneElement(desired));
           continue;
         }
         if (!desired.matches("li.message")) continue;
@@ -252,26 +275,26 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
         const old = currentMessages.get(id);
         const same = old !== undefined && message !== undefined && rendered.get(id) === message;
         if (old !== undefined && same) {
-          fragment.append(old);
+          ordered.push(old);
           continue;
         }
-        const copy = desired.cloneNode(true);
-        if (arriving && old === undefined && copy instanceof HTMLElement) {
+        const copy = cloneElement(desired);
+        if (arriving && old === undefined) {
           copy.classList.add("is-arriving");
           copy.addEventListener("animationend", () => copy.classList.remove("is-arriving"), { once: true });
         }
-        fragment.append(copy);
+        ordered.push(copy);
       }
-      list.replaceChildren(fragment);
+      patchChildren(list, ordered);
       paintSelection();
       rendered = nextRendered;
       painted = true;
       if (focusState !== null) {
         const row = list.querySelector<HTMLElement>(`li.message[data-id="${CSS.escape(focusState.id)}"]`);
-        const target =
+        const focusTarget =
           (focusState.selector === null ? null : row?.querySelector<HTMLElement>(focusState.selector)) ??
           row?.querySelector<HTMLElement>(".message-inner");
-        target?.focus({ preventScroll: true });
+        focusTarget?.focus({ preventScroll: true });
       }
     }
 
