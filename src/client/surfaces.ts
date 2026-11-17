@@ -937,7 +937,19 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     hide(SURFACE.messageMenu);
   }
 
+  const SEARCH_DELAY_MS = 140;
   let searchSequence = 0;
+  let searchTimer = 0;
+
+  /** Typing waits a moment; the search itself runs once the reader pauses. */
+  function scheduleSearch(form: HTMLFormElement): void {
+    if (searchTimer !== 0) window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => {
+      searchTimer = 0;
+      void search(form);
+    }, SEARCH_DELAY_MS);
+  }
+
   async function search(form: HTMLFormElement): Promise<void> {
     if (!capabilities.search) return;
     // Each keystroke starts a search; only the newest answer may paint, so a slow one cannot
@@ -995,7 +1007,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     }
     if (!(target instanceof HTMLInputElement) || target.id !== "search-field") return;
     const form = target.closest<HTMLFormElement>(".search-form");
-    if (form !== null) void search(form);
+    if (form !== null) scheduleSearch(form);
   }
 
   function onClick(event: MouseEvent): void {
