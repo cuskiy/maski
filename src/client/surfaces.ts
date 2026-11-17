@@ -1787,6 +1787,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
         loadRoomMembers();
         return;
       }
+      if (target.id === SURFACE.spacePicker) {
+        refreshBody(SURFACE.spacePicker);
+        return;
+      }
       if (target.id === "search-scope") {
         document.querySelector<HTMLElement>("[data-search-scope-button]")?.setAttribute("aria-expanded", "true");
         target.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus({ preventScroll: true });
