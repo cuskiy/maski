@@ -1741,10 +1741,19 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     }, 40);
   }
 
+  const loadRoomMembers = (): void => {
+    const roomId = activeRoomId ?? state().roomId;
+    if (roomId !== null) actions.loadMembers(roomId);
+  };
+
   const onDocumentToggle = (event: Event): void => {
     if (!(event instanceof ToggleEvent) || !(event.target instanceof HTMLElement)) return;
     const target = event.target;
     if (event.newState === "open") {
+      if (target.id === SURFACE.roomSettings) {
+        loadRoomMembers();
+        return;
+      }
       if (target.id === "search-scope") {
         document.querySelector<HTMLElement>("[data-search-scope-button]")?.setAttribute("aria-expanded", "true");
         target.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus({ preventScroll: true });
