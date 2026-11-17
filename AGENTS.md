@@ -1267,7 +1267,7 @@ Measured on 2026-11-16 on the working tree with user image packs, mentions and t
 This is the only current-status section; counts and claims in `advice.md`, `past/`, browser history and
 old commits are evidence, not status.
 
-- `npm run check` is green: **200 tests**, 9 generated pages, 352 catalog keys, 2 languages.
+- `npm run check` is green: **200 tests**, 9 generated pages, 361 catalog keys, 2 languages.
 - A password session renews its token itself: `src/worker/matrix.ts` calls
   `/_matrix/client/v3/refresh` before a start whose stored token is near expiry and repeats it on a
   timer, because the SDK only refreshes an OAuth2 client and `matrix.unredacted.org` issues
