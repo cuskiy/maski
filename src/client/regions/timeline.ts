@@ -82,6 +82,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   let pendingRoomId: string | null = activeRoomId;
   let rendered = new Map<string, MessageRow>();
   let painted = false;
+  // A message plays its effect once, however many times its row is patched afterwards.
+  const playedEffects = new Set<string>();
 
   let readRequest: string | null = null;
 
@@ -294,7 +296,10 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
           const id = row.dataset["id"];
           if (id === undefined || currentMessages.has(id)) continue;
           const effect = byId.get(id)?.effect ?? null;
-          if (effect !== null) playEffect(effect, region);
+          if (effect !== null && !playedEffects.has(id)) {
+            playedEffects.add(id);
+            playEffect(effect, region);
+          }
         }
       }
       rendered = nextRendered;
