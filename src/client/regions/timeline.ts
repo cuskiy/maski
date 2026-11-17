@@ -9,6 +9,7 @@ import type { Actions } from "../actions.ts";
 import type { LocaleId } from "../../core/locales.ts";
 import type { Store } from "../store.ts";
 import { markMultilineBubbles } from "../bubbleLayout.ts";
+import { schedulePaint } from "../paint.ts";
 import { bindSwipe } from "../swipe.ts";
 import { messagePermissions } from "../../core/permissions.ts";
 
@@ -332,18 +333,12 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
     }
   };
 
-  let layoutFrame = 0;
   const layout = (): void => {
     markMultilineBubbles(list);
     fitReactionWidths();
   };
-  const scheduleLayout = (): void => {
-    if (layoutFrame !== 0) return;
-    layoutFrame = requestAnimationFrame(() => {
-      layoutFrame = 0;
-      layout();
-    });
-  };
+  const paint = schedulePaint(layout);
+  const scheduleLayout = (): void => paint.schedule();
 
   const render = (): void => {
     const state = store.snapshot();
@@ -506,8 +501,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   render();
   return () => {
     unsubscribe();
+    paint.cancel();
     resizeObserver.disconnect();
-    if (layoutFrame !== 0) cancelAnimationFrame(layoutFrame);
     wrap.removeEventListener("scroll", onScroll);
     region.removeEventListener("click", onClick);
     region.removeEventListener("click", onSelectionClick, true);

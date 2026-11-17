@@ -4,6 +4,7 @@ import type { ChatState } from "../../core/types.ts";
 import { isSectionId } from "../../core/state.ts";
 import type { Actions } from "../actions.ts";
 import type { Store } from "../store.ts";
+import { schedulePaint } from "../paint.ts";
 import { bindSwipe } from "../swipe.ts";
 import { roomPermissions } from "../../core/permissions.ts";
 
@@ -201,14 +202,8 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
       }
     },
   });
-  let frame = 0;
-  const scheduleRender = (): void => {
-    if (frame !== 0) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      render();
-    });
-  };
+  const paint = schedulePaint(render);
+  const scheduleRender = (): void => paint.schedule();
   const unsubscribe = store.watch(
     ["rooms", "roomsLoading", "roomId", "sections", "openSpaces", "session", "phase", "notifications"],
     scheduleRender,
@@ -216,7 +211,7 @@ export function mountNavigation({ store, actions, c }: NavigationInput): () => v
   render();
   return () => {
     unsubscribe();
-    if (frame !== 0) cancelAnimationFrame(frame);
+    paint.cancel();
     unbindSwipe();
     root.removeEventListener("toggle", onToggle, true);
     root.removeEventListener("click", onClick);
