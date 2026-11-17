@@ -199,6 +199,7 @@ export interface CommandMap {
   readonly pat: {
     readonly roomId: string;
     readonly userId: string;
+    readonly effect: "pat" | "boop";
   };
   /** The avatar bytes stay a Blob; the worker strips, resizes and uploads them. */
   readonly setAvatar: {
@@ -1275,7 +1276,8 @@ function validSendMedia(fields: Record<string, unknown>): fields is CommandMap["
 }
 
 function validPat(fields: Record<string, unknown>): fields is CommandMap["pat"] {
-  return isRoomId(fields["roomId"]) && isUserId(fields["userId"]);
+  const effect = fields["effect"];
+  return isRoomId(fields["roomId"]) && isUserId(fields["userId"]) && (effect === "pat" || effect === "boop");
 }
 
 function validSetAvatar(fields: Record<string, unknown>): fields is CommandMap["setAvatar"] {
@@ -1508,7 +1510,11 @@ export function parseCommand(value: unknown): Command | null {
       };
     case "pat":
       if (!validPat(fields)) return null;
-      return { id, type, payload: { roomId: fields.roomId, userId: fields.userId } };
+      return {
+        id,
+        type,
+        payload: { roomId: fields.roomId, userId: fields.userId, effect: fields.effect },
+      };
     case "setAvatar":
       if (!validSetAvatar(fields)) return null;
       return { id, type, payload: { file: fields.file } };

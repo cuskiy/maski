@@ -161,8 +161,8 @@ export class MatrixTransport {
     return this.request("sendSticker", { roomId, messageId, transactionId, packId, shortcode });
   }
 
-  pat(roomId: string, userId: string): Promise<null> {
-    return this.request("pat", { roomId, userId });
+  pat(roomId: string, userId: string, effect: "pat" | "boop"): Promise<null> {
+    return this.request("pat", { roomId, userId, effect });
   }
 
   setAvatar(file: Blob): Promise<null> {

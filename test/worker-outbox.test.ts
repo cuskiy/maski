@@ -359,7 +359,7 @@ void test("a queued row interrupted by a restart uses a typed failure", async ()
     retryable: true,
     media: null,
     uploaded: null,
-    headpat: false,
+    effect: null,
   });
   await outbox.resume();
   assert.equal(backend.queued()[0]?.row.status, "failed");

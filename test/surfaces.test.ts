@@ -181,6 +181,7 @@ void test("the message menu offers source and forwarding offers rooms", () => {
   assert.deepEqual(actions, [
     "messageMenu.reply",
     "messageMenu.pat",
+    "messageMenu.boop",
     "messageMenu.react",
     "messageMenu.edit",
     "messageMenu.delete",

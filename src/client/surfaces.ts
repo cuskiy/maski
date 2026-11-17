@@ -597,7 +597,10 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       if (target !== null) {
         const permissions = messagePermissions(target, room(target.roomId), state().session?.userId ?? null);
         if (permissions.reply) allowed.add("messageMenu.reply");
-        if (capabilities.pat && target.sender !== (state().session?.userId ?? "")) allowed.add("messageMenu.pat");
+        if (capabilities.pat && target.sender !== (state().session?.userId ?? "")) {
+          allowed.add("messageMenu.pat");
+          allowed.add("messageMenu.boop");
+        }
         if (permissions.react) allowed.add("messageMenu.react");
         if (permissions.edit) allowed.add("messageMenu.edit");
         if (permissions.redact) allowed.add("messageMenu.delete");
@@ -941,7 +944,9 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     if (target === null) return;
     if (action === "messageMenu.reply") composer.showReply(target);
     else if (action === "messageMenu.pat") {
-      void actions.pat(target.roomId, target.sender).catch(() => undefined);
+      void actions.pat(target.roomId, target.sender, "pat").catch(() => undefined);
+    } else if (action === "messageMenu.boop") {
+      void actions.pat(target.roomId, target.sender, "boop").catch(() => undefined);
     } else if (action === "messageMenu.react") {
       if (!capabilities.react) return;
       const source = lastMenuSource;

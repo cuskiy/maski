@@ -279,6 +279,7 @@ export const en = {
   "settings.lowPriority": "Low priority",
   "settings.lowPriorityEmpty": "No low priority rooms.",
   "messageMenu.pat": "Pat",
+  "messageMenu.boop": "Boop",
   "messageMenu.reply": "Reply",
   "messageMenu.react": "React",
   "messageMenu.edit": "Edit",

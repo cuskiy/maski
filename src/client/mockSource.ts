@@ -320,7 +320,7 @@ export class MockSource implements ChatSource {
   markRead(_roomId: string, _eventId: string): void {}
 
   /** The review fixture shows the chosen image as this session's avatar. */
-  pat(_roomId: string, _userId: string): Promise<void> {
+  pat(_roomId: string, _userId: string, _effect: "pat" | "boop"): Promise<void> {
     return Promise.resolve();
   }
 

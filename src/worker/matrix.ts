@@ -977,12 +977,12 @@ export class MatrixSession implements SessionPort {
       roomId: input.roomId,
       messageId,
       transactionId: `pat-${crypto.randomUUID()}`,
-      body: `pats ${input.userId}`,
+      body: `${input.effect === "boop" ? "boops" : "pats"} ${input.userId}`,
       html: null,
       kind: "emote",
       media: null,
       replyTo: null,
-      headpat: true,
+      effect: input.effect,
     });
     void outbox.deliver(messageId).catch(() => undefined);
     this.scheduleRooms();
@@ -2016,7 +2016,8 @@ export class MatrixSession implements SessionPort {
               ...(row.html === null ? {} : { format: "org.matrix.custom.html" as const, formatted_body: row.html }),
               ...(record.replyTo === null ? {} : { "m.relates_to": { "m.in_reply_to": { event_id: record.replyTo } } }),
               ...(mentions.length === 0 ? {} : { "m.mentions": { user_ids: mentions } }),
-              ...(record.headpat ? { "fyi.cisnt.headpat": true } : {}),
+              ...(record.effect === "pat" ? { "fyi.cisnt.headpat": true } : {}),
+              ...(record.effect === "boop" ? { "fyi.cisnt.boop": true } : {}),
             },
             row.transactionId ?? undefined,
           );
