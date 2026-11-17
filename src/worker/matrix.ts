@@ -1,3 +1,4 @@
+import { MatrixError } from "matrix-js-sdk";
 import {
   ClientEvent,
   createClient,
@@ -1523,8 +1524,22 @@ export class MatrixSession implements SessionPort {
     return transactionId;
   }
 
+  /**
+   * The specification's error codes, read once, so a rate limit is not reported as a network failure
+   * and a deactivated account is not reported as a wrong password.
+   */
   private transportFailure(error: unknown): WorkerFailure {
     if (error instanceof WorkerFailure) return error;
+    const code = error instanceof MatrixError ? error.errcode : undefined;
+    if (code === "M_LIMIT_EXCEEDED") return new WorkerFailure("unavailable");
+    if (code === "M_USER_DEACTIVATED") return new WorkerFailure("not-signed-in");
+    if (code === "M_FORBIDDEN" || code === "M_UNAUTHORIZED" || code === "M_MISSING_TOKEN") {
+      return new WorkerFailure("auth");
+    }
+    if (code === "M_TOO_LARGE" || code === "M_FILE_TOO_LARGE") return new WorkerFailure("too-large");
+    if (code === "M_UNRECOGNIZED" || code === "M_NOT_JSON" || code === "M_BAD_JSON") {
+      return new WorkerFailure("invalid");
+    }
     return new WorkerFailure("network");
   }
 
