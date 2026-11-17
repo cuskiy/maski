@@ -146,6 +146,7 @@ export interface ChatSource {
   addRoom?(room: RoomSummary): void;
   createRoom?(name: string, topic: string, directUserId: string | null): Promise<string>;
   createSpace?(name: string, topic: string): Promise<string>;
+  spaceChild?(spaceId: string, roomId: string, add: boolean): Promise<void>;
   joinRoom?(roomIdOrAlias: string): Promise<string>;
   leaveRoom?(roomId: string): void;
   setRoomState?(roomId: string, patch: RoomStatePatch): void;

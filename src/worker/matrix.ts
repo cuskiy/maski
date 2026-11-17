@@ -1416,6 +1416,21 @@ export class MatrixSession implements SessionPort {
     return null;
   }
 
+  async spaceChild(spaceId: string, roomId: string, add: boolean): Promise<null> {
+    const client = this.requireClient();
+    const server = client.getUserId()?.split(":").slice(1).join(":") ?? "";
+    if (server === "") throw new WorkerFailure("unavailable");
+    try {
+      // The space lists the child with the servers that can resolve it, and the room keeps its parent.
+      await client.sendStateEvent(spaceId, EventType.SpaceChild, add ? { via: [server] } : {}, roomId);
+      await client.sendStateEvent(roomId, EventType.SpaceParent, add ? { via: [server] } : {}, spaceId);
+    } catch (error) {
+      throw this.transportFailure(error);
+    }
+    await this.emitRooms();
+    return null;
+  }
+
   async createSpace(name: string, topic: string): Promise<string> {
     const client = this.requireClient();
     let roomId: string;

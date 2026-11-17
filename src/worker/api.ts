@@ -181,6 +181,12 @@ export function createWorkerApi(session: SessionPort, emit?: (event: Event) => v
           ok: true,
           data: await session.answerInvite(command.payload.roomId, command.payload.accept),
         };
+      case "spaceChild":
+        return {
+          id,
+          ok: true,
+          data: await session.spaceChild(command.payload.spaceId, command.payload.roomId, command.payload.add),
+        };
       case "createSpace":
         return { id, ok: true, data: await session.createSpace(command.payload.name, command.payload.topic) };
       case "createRoom":

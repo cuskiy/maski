@@ -583,6 +583,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
           allowed.add("roomMenu.settings");
           allowed.add("roomMenu.mediaFiles");
           allowed.add("roomMenu.search");
+          if (capabilities.addRoom) allowed.add("roomMenu.addToSpace");
           if (permissions.invite) allowed.add("roomMenu.invite");
         }
       }
@@ -1289,6 +1290,30 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
       return;
     }
 
+    const spaceChildAdd = target.closest<HTMLElement>("[data-space-child-add]");
+    if (spaceChildAdd !== null) {
+      event.preventDefault();
+      const spaceId = spaceChildAdd.dataset["spaceChildAdd"] ?? "";
+      const roomId = state().roomId;
+      if (spaceId !== "" && roomId !== null) {
+        void actions.setSpaceChild(spaceId, roomId, true);
+        hide(SURFACE.spacePicker);
+      }
+      return;
+    }
+
+    const spaceChildRemove = target.closest<HTMLElement>("[data-space-child-remove]");
+    if (spaceChildRemove !== null) {
+      event.preventDefault();
+      const spaceId = spaceChildRemove.dataset["spaceChildRemove"] ?? "";
+      const roomId = state().roomId;
+      if (spaceId !== "" && roomId !== null) {
+        void actions.setSpaceChild(spaceId, roomId, false);
+        hide(SURFACE.spacePicker);
+      }
+      return;
+    }
+
     const memberTab = target.closest<HTMLElement>("[data-member-group]");
     if (memberTab !== null) {
       selectMemberTab(memberTab);
@@ -1599,6 +1624,14 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const target = event.target;
     if (!(target instanceof Element)) return;
     const keyboardPoint = lastInput === "keyboard";
+    const addToSpace = target.closest<HTMLElement>('[data-menu-key="roomMenu.addToSpace"]');
+    if (addToSpace !== null) {
+      event.preventDefault();
+      const dialog = document.getElementById(SURFACE.spacePicker);
+      if (dialog instanceof HTMLDialogElement) dialog.showModal();
+      return;
+    }
+
     const roomControl = target.closest<HTMLElement>("button[data-room], [data-space-toggle]");
     if (roomControl !== null) {
       event.preventDefault();

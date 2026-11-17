@@ -160,6 +160,7 @@ function harness(): Harness {
     answerInvite: () => Promise.resolve(null),
     createRoom: () => Promise.resolve(ROOM),
     createSpace: () => Promise.resolve(ROOM),
+    spaceChild: () => Promise.resolve(null),
     forward: () => Promise.resolve(null),
     memberAction: () => Promise.resolve(null),
     sendMedia: () =>

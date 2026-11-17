@@ -27,6 +27,7 @@ const TIMEOUTS: Partial<Record<CommandName, number>> = {
   resetIdentity: 120_000,
   createRoom: 60_000,
   createSpace: 60_000,
+  spaceChild: 60_000,
   joinRoom: 60_000,
   leaveRoom: 60_000,
   // An upload outlives the default; progress keeps the worker busy, not the main thread.
@@ -273,6 +274,10 @@ export class MatrixTransport {
 
   answerInvite(roomId: string, accept: boolean): Promise<string | null> {
     return this.request("answerInvite", { roomId, accept });
+  }
+
+  spaceChild(spaceId: string, roomId: string, add: boolean): Promise<null> {
+    return this.request("spaceChild", { spaceId, roomId, add });
   }
 
   createSpace(name: string, topic: string): Promise<string> {

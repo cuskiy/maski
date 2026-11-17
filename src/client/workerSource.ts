@@ -219,6 +219,10 @@ export class WorkerSource implements ChatSource {
     void this.transport.answerInvite(roomId, accept).catch(() => undefined);
   }
 
+  spaceChild(spaceId: string, roomId: string, add: boolean): Promise<void> {
+    return this.transport.spaceChild(spaceId, roomId, add).then(() => undefined);
+  }
+
   createSpace(name: string, topic: string): Promise<string> {
     return this.transport.createSpace(name, topic);
   }

@@ -66,6 +66,7 @@ export interface Actions {
   typing(roomId: string, typing: boolean): void;
   createRoom(name: string, topic: string): Promise<void>;
   createSpace(name: string, topic: string): Promise<void>;
+  setSpaceChild(spaceId: string, roomId: string, add: boolean): Promise<void>;
   joinRoom(value: string): Promise<"ok" | "notFound">;
   startDirect(userId: string): Promise<"ok" | "invalid" | "exists">;
   setNotification(roomId: string, mode: RoomSummary["notification"]): void;
@@ -383,6 +384,12 @@ export function createActions({ store, source, c, account }: Context): Actions {
     typing(roomId, typing) {
       if (!caps.typing) return;
       source.typing?.(roomId, typing);
+    },
+    async setSpaceChild(spaceId, roomId, add) {
+      if (!caps.addRoom) return;
+      if (source.spaceChild === undefined) return;
+      await source.spaceChild(spaceId, roomId, add).catch(() => undefined);
+      this.selectRoom(roomId);
     },
     async createSpace(name, topic) {
       if (!caps.addRoom) return;

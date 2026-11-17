@@ -174,6 +174,10 @@ function fakePort(calls: string[]): SessionPort {
       calls.push("answerInvite");
       return null;
     },
+    async spaceChild() {
+      calls.push("spaceChild");
+      return null;
+    },
     async createSpace() {
       calls.push("createSpace");
       return "!space:example.org";

@@ -21,6 +21,7 @@ export const SURFACE = {
   join: "surface-join",
   create: "surface-create",
   createSpace: "surface-create-space",
+  spacePicker: "surface-space-picker",
   settings: "surface-settings",
   roomSettings: "surface-room-settings",
   sas: "surface-sas",

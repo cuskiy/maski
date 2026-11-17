@@ -39,6 +39,7 @@ const MENU_ICONS = {
   "roomMenu.favorite": icons.star,
   "roomMenu.mute": icons.mute,
   "roomMenu.leave": icons.exit,
+  "roomMenu.addToSpace": icons.globe,
   "roomMenu.mediaFiles": icons.image,
   "roomMenu.search": icons.search,
   "roomMenu.invite": icons.invite,
@@ -454,6 +455,8 @@ export function surfaceBodyFor(
         ${submit(t(c, "surface.create.submit"))}
       </form>`
         : html``;
+    case SURFACE.spacePicker:
+      return spacePickerBody(c, state);
     case SURFACE.createSpace:
       return capabilities.addRoom
         ? html`<form class="form" method="post" data-surface="create-space">
@@ -481,6 +484,7 @@ export function surfaceBodyFor(
       if (capabilities.media && capabilities.search) keys.push("roomMenu.mediaFiles");
       if (capabilities.search) keys.push("roomMenu.search");
       if (capabilities.inviteUser) keys.push("roomMenu.invite");
+      if (capabilities.addRoom) keys.push("roomMenu.addToSpace");
       if (capabilities.leaveRoom) keys.push("roomMenu.leave");
       if (capabilities.setRoomState) keys.push("spaceMenu.settings");
       if (capabilities.leaveRoom) keys.push("spaceMenu.leave");
@@ -893,6 +897,29 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
     </section>
     </div>
   </div>`;
+}
+
+/** The reader picks the space a room belongs to; a room is added or removed from one space here. */
+function spacePickerBody(c: Catalog, state: ChatState): Html {
+  const room = state.rooms.find((entry) => entry.roomId === state.roomId) ?? null;
+  const spaces = state.rooms.filter((entry) => entry.roomType === "m.space");
+  if (room === null || spaces.length === 0) return html`<p class="note">${t(c, "surface.spacePicker.empty")}</p>`;
+  return html`<ul class="surface-rows" role="list">
+    ${spaces.map(
+      (space) => html`<li class="surface-row">
+        <span class="surface-row-name" dir="auto">${space.name}</span>
+        ${
+          room.spaceId === space.roomId
+            ? html`<button class="button-quiet" type="button" data-space-child-remove="${space.roomId}">
+                ${t(c, "surface.spacePicker.remove")}
+              </button>`
+            : html`<button class="button-quiet" type="button" data-space-child-add="${space.roomId}">
+                ${t(c, "surface.spacePicker.add")}
+              </button>`
+        }
+      </li>`,
+    )}
+  </ul>`;
 }
 
 function roomSettingsBody(c: Catalog, state: ChatState): Html {
