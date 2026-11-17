@@ -410,6 +410,8 @@ export class MatrixSession implements SessionPort {
   private lockUserId: string | null = null;
   private generation = 0;
   private roomsQueued = false;
+  private readonly pendingRooms = new Set<string>();
+  private fullRooms = true;
   private roomsRunning = false;
   private roomsAgain = false;
   private readonly directoryPublished = new Map<string, boolean>();
@@ -2299,7 +2301,14 @@ export class MatrixSession implements SessionPort {
       .finally(() => this.avatarRequests.delete(roomId));
   }
 
-  private scheduleRooms(): void {
+  /** Names one room whose projection changed; every room is projected when no room is named. */
+  private scheduleRooms(roomId?: string): void {
+    if (roomId === undefined) {
+      this.fullRooms = true;
+      this.pendingRooms.clear();
+    } else if (!this.fullRooms) {
+      this.pendingRooms.add(roomId);
+    }
     if (this.roomsRunning) {
       this.roomsAgain = true;
       return;
@@ -2345,6 +2354,13 @@ export class MatrixSession implements SessionPort {
   private async emitRooms(): Promise<void> {
     const account = this.account;
     if (account === null) return;
+    if (!this.fullRooms && this.pendingRooms.size > 0) {
+      await this.emitChangedRooms(account, [...this.pendingRooms]);
+      this.pendingRooms.clear();
+      return;
+    }
+    this.fullRooms = false;
+    this.pendingRooms.clear();
     const records = await account.readRooms();
     const lastOpened = new Map(records.map((record) => [record.room.roomId, record.lastOpened]));
     const client = this.client;
@@ -2404,6 +2420,62 @@ export class MatrixSession implements SessionPort {
       type: "rooms",
       payload: { rooms: sortRooms(rooms).map((record) => record.room), loading: false },
     });
+  }
+
+  /**
+   * Projects only the rooms whose events arrived. A message in one room must not cost a projection of
+   * every other room, which is what made a busy room slow the whole list down.
+   */
+  private async emitChangedRooms(account: AccountDatabase, roomIds: readonly string[]): Promise<void> {
+    const client = this.client;
+    if (client === null) return;
+    const own = client.getUserId() ?? "";
+    const direct = directRooms(client);
+    const spaces = spaceParents(client);
+    const current = await account.readRooms();
+    const merged = new Map(current.map((record) => [record.room.roomId, record]));
+    for (const roomId of roomIds) {
+      if (this.leftRooms.has(roomId)) {
+        merged.delete(roomId);
+        continue;
+      }
+      const room = client.getRoom(roomId);
+      if (room === null) continue;
+      const projected = projectRoom(
+        room,
+        own,
+        direct,
+        this.notificationFor(roomId),
+        this.directoryPublished.get(roomId) ?? false,
+      );
+      if (projected === null) {
+        merged.delete(roomId);
+        continue;
+      }
+      const avatar = this.roomAvatars.get(roomId);
+      const base = avatar === undefined ? projected : { ...projected, avatar };
+      const mxcAvatar = room.getMxcAvatarUrl();
+      if (mxcAvatar !== null) this.queueAvatar(roomId, mxcAvatar);
+      const summaryRoom = { ...base, spaceId: spaces.get(roomId) ?? base.spaceId };
+      const previous = merged.get(roomId);
+      const lastOpened = previous?.lastOpened ?? 0;
+      try {
+        const [marker, latest, queued] = await Promise.all([
+          account.readMarker(roomId),
+          account.readLatest(roomId, Math.max(WINDOW_LIMIT, 100)),
+          this.outbox === null ? Promise.resolve([]) : this.outbox.rows(roomId),
+        ]);
+        const projectedRoom = { ...projectRoomState(base, latest, queued, marker, own), spaceId: summaryRoom.spaceId };
+        await account.writeRoom({ room: { ...projectedRoom, avatar: null }, lastOpened });
+        merged.set(roomId, { room: projectedRoom, lastOpened });
+      } catch {
+        merged.set(roomId, { room: summaryRoom, lastOpened });
+      }
+    }
+    const visible = sortRooms(
+      [...merged.values()].filter((record) => record.room.membership === "join" || record.room.membership === "invite"),
+    );
+    this.emit({ type: "rooms", payload: { rooms: visible.map((record) => record.room), loading: false } });
   }
 
   private async persistEvent(row: MessageRow): Promise<readonly MessageRow[]> {
@@ -2530,7 +2602,7 @@ export class MatrixSession implements SessionPort {
     if (stored.length > 0) {
       void this.refreshSenderAvatars(room.roomId, stored).catch(() => undefined);
     }
-    this.scheduleRooms();
+    this.scheduleRooms(room.roomId);
   }
 
   private async handleDecrypted(event: MatrixEvent): Promise<void> {
@@ -2560,7 +2632,7 @@ export class MatrixSession implements SessionPort {
         },
       });
     }
-    this.scheduleRooms();
+    this.scheduleRooms(roomId);
   }
 
   private async handleTimelineReset(roomId: string): Promise<void> {
