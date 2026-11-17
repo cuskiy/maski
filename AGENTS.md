@@ -1282,6 +1282,8 @@ old commits are evidence, not status.
 - Navigation and timeline layout share one paint scheduler: the next frame, or a 120 ms timeout when
   frames are throttled. A stored account paints its cached room list at **252 ms**, and the newest
   server event reaches the timeline within a second.
+- Chromium reloaded the chat page with the network offline: the service worker served the shell and
+  the worker painted 11 rooms and 37 message rows from the account database, with the gate still ready.
 - One message projects only the room it belongs to: a marker read, a bounded row read, the outbox rows
   and a write for that room instead of for every room.
 - A room that a reader joins, a message they send and a headpat they give share the worker-owned outbox.
