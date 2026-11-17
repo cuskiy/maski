@@ -267,7 +267,13 @@ function messageStatus(event: MatrixEvent): MessageRow["status"] {
 
 export function projectMessage(room: Room, event: MatrixEvent, ownUserId: string): MessageRow | null {
   const type = event.getType();
-  if (type !== EventType.RoomMessage && type !== EventType.RoomMessageEncrypted && type !== EventType.Sticker) {
+  // A poll is its own event type, and the room renders it with the message it names.
+  if (
+    type !== EventType.RoomMessage &&
+    type !== EventType.RoomMessageEncrypted &&
+    type !== EventType.Sticker &&
+    type !== "m.poll.start"
+  ) {
     return null;
   }
   if (event.getRelation()?.rel_type === "m.replace") return null;
