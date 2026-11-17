@@ -506,6 +506,14 @@ export class Composer {
           void this.send("text");
           return;
         }
+        if (event.key === "Escape") {
+          // Escape leaves the reply or edit target without touching the draft.
+          if (this.replyTo !== null || this.editing !== null) {
+            event.preventDefault();
+            this.clearReplyState();
+            return;
+          }
+        }
         if (this.handleMentionKey(event)) return;
         if ((event.key === "Backspace" || event.key === "Delete") && this.deleteMention(event.key)) {
           event.preventDefault();
