@@ -260,6 +260,7 @@ function initKey(c: Catalog): void {
         showStatus(keyStatusText(c, gate));
       },
       (error: unknown) => {
+        if (completed) return;
         if (error instanceof Error && error.message === "locked") {
           document.querySelector<HTMLElement>("[data-key-paths]")?.setAttribute("hidden", "");
           showStatus(t(c, "auth.key.locked"));
@@ -272,7 +273,10 @@ function initKey(c: Catalog): void {
         showStatus(t(c, "auth.key.unavailable"));
       },
     )
-    .catch(() => showStatus(t(c, "auth.key.unavailable")));
+    .catch(() => {
+      if (completed) return;
+      showStatus(t(c, "auth.key.unavailable"));
+    });
 
   const unlock = form("unlock");
   unlock?.addEventListener("submit", (event) => {
