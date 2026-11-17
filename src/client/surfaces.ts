@@ -3,7 +3,7 @@ import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
 import type { ChatState, Media, MessageRow, RoomSummary } from "../core/types.ts";
-import { safeMediaUrl } from "../lib/safeUrl.ts";
+import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
 import { isRecord } from "../lib/json.ts";
 import { SURFACE } from "../core/regions.ts";
 import {
@@ -656,10 +656,19 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     profileTarget = { name, userId };
     const body = document.querySelector<HTMLElement>(`[data-region="${SURFACE.profile}-body"]`);
     if (body === null) return;
+    const avatar = safeAvatarUrl(
+      state().members.find((member) => member.userId === userId)?.avatar ??
+        state().messages.find((entry) => entry.sender === userId)?.senderAvatar ??
+        null,
+    );
     replaceHtml(
       body,
       html`<div class="profile-card">
-      <span class="profile-avatar" aria-hidden="true">${name.slice(0, 1)}</span>
+      <span class="profile-avatar" aria-hidden="true">${
+        avatar === null
+          ? name.slice(0, 1)
+          : html`<img src="${avatar}" alt="" width="48" height="48" decoding="async" />`
+      }</span>
       <h3 class="profile-name" dir="auto">${name}</h3>
       <p class="note" dir="ltr">${userId}</p>
       ${
