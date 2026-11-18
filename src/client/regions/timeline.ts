@@ -70,6 +70,20 @@ function patchChildren(list: HTMLOListElement, target: readonly HTMLElement[]): 
   while (list.children.length > target.length) list.lastElementChild?.remove();
 }
 
+const ARRIVE_DURATION_MS = 160;
+
+/** A message that arrives into the open room slides in; the first paint and a room switch do not. */
+function arrive(row: HTMLElement): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  row.animate(
+    [
+      { opacity: 0, transform: "translateY(0.35rem)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ],
+    { duration: ARRIVE_DURATION_MS, easing: "ease-out" },
+  );
+}
+
 export function mountTimeline({ store, actions, c, locale }: TimelineInput): () => void {
   const region = document.querySelector<HTMLElement>(`[data-region="${REGION.timeline}"]`);
   const wrap = region?.querySelector<HTMLElement>(".timeline-wrap") ?? null;
@@ -240,7 +254,8 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
   const reconcile = (next: HTMLElement): void => {
     // Only a message that arrives into a room already on screen animates in; the first paint and a
     // room switch appear at their final position.
-    const arriving = painted && list.children.length > 0;
+    // A hidden tab shows no frames, so an animation there would only play when the reader returns.
+    const arriving = painted && store.read("windowPatch") && list.children.length > 0 && !document.hidden;
     const nextList = next.querySelector<HTMLOListElement>(".timeline");
     if (nextList !== null) {
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -283,10 +298,7 @@ export function mountTimeline({ store, actions, c, locale }: TimelineInput): () 
           continue;
         }
         const copy = cloneElement(desired);
-        if (arriving && old === undefined) {
-          copy.classList.add("is-arriving");
-          copy.addEventListener("animationend", () => copy.classList.remove("is-arriving"), { once: true });
-        }
+        if (arriving && old === undefined) arrive(copy);
         ordered.push(copy);
       }
       patchChildren(list, ordered);

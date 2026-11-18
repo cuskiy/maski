@@ -370,6 +370,7 @@ export interface ChatState {
   readonly roomId: string | null;
   readonly messages: readonly MessageRow[];
   readonly windowLoading: boolean;
+  readonly windowPatch: boolean;
   readonly hasOlder: boolean;
   readonly olderLoading: boolean;
   readonly failure: "open" | "older" | "members" | null;

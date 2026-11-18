@@ -18,6 +18,7 @@ export function emptyChatState(): ChatState {
     roomId: null,
     messages: [],
     windowLoading: false,
+    windowPatch: false,
     hasOlder: false,
     olderLoading: false,
     failure: null,

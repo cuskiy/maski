@@ -852,6 +852,7 @@ export function wireSources(store: Store, source: ChatSource): () => void {
         } else {
           store.write("messages", messages.map(cleanRow));
         }
+        store.write("windowPatch", patch);
         store.write("hasOlder", hasOlder);
         if (!patch) {
           store.write("olderLoading", false);
