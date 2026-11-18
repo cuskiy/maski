@@ -23,6 +23,31 @@ const types: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
 };
 
+const COMPRESSIBLE: ReadonlySet<string> = new Set([".css", ".html", ".js", ".json", ".svg", ".wasm"]);
+
+function compressible(extension: string): boolean {
+  return COMPRESSIBLE.has(extension);
+}
+
+/** The worker and the crypto wasm are megabytes, so the preview pays for a round trip, not the wire. */
+function preferredEncoding(header: string | undefined): "br" | "gzip" | null {
+  if (header === undefined) return null;
+  if (/\bbr\b/u.test(header)) return "br";
+  if (/\bgzip\b/u.test(header)) return "gzip";
+  return null;
+}
+
+async function compressed(body: Buffer, encoding: "br" | "gzip"): Promise<Buffer> {
+  const zlib = await import("node:zlib");
+  const run = encoding === "br" ? zlib.brotliCompress : zlib.gzip;
+  return await new Promise<Buffer>((resolve, reject) => {
+    run(body, (error, result) => {
+      if (error) reject(error);
+      else resolve(result);
+    });
+  });
+}
+
 export interface ServeOptions {
   readonly reload?: boolean;
   readonly port?: number;
@@ -78,15 +103,18 @@ export function serve(options: ServeOptions = {}): Served {
     let file = join(base, normalize(pathname).replace(/^(\.\.(\/|\\|$))+/u, ""));
     try {
       if ((await stat(file)).isDirectory()) file = join(file, "index.html");
-      let body = await readFile(file);
+      let body: Buffer = await readFile(file);
       if (options.reload === true && extname(file) === ".html") {
         body = Buffer.from(body.toString("utf8").replace("</body>", '<script src="/__dev-reload.js"></script></body>'));
       }
       const asset = file.startsWith(join(root, "assets") + sep);
+      const encoding = compressible(extname(file)) ? preferredEncoding(request.headers["accept-encoding"]) : null;
+      if (encoding !== null) body = await compressed(body, encoding);
       response.writeHead(200, {
         ...securityHeaders,
         "content-type": types[extname(file)] ?? "application/octet-stream",
         "cache-control": asset ? "public, max-age=31536000, immutable" : "no-store",
+        ...(encoding === null ? {} : { "content-encoding": encoding, vary: "accept-encoding" }),
       });
       response.end(body);
     } catch {
