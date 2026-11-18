@@ -124,7 +124,7 @@ export function mountChat(c: Catalog, locale: LocaleId, source: ChatSource, base
     if (disposed) return;
     composer = new Composer({ store, actions, c, account });
     unwireInteractions = wireComposerInteractions(composer);
-    unwireSurfaces = wireSurfaces({ store, actions, c, composer });
+    unwireSurfaces = wireSurfaces({ store, actions, c, composer, locale });
   };
   // The composer's synchronous draft reads come from the mirror hydrated here first.
   void hydrateDrafts(account).then(mountComposer, mountComposer);

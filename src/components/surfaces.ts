@@ -3,6 +3,7 @@ import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html, type Html } from "../lib/html.ts";
 import { formatBytes } from "../lib/bytes.ts";
 import { safeAvatarUrl, safeMediaUrl } from "../lib/safeUrl.ts";
+import type { LocaleId } from "../core/locales.ts";
 import type {
   ChatState,
   Member,
@@ -438,6 +439,7 @@ export function surfaceBodyFor(
   id: string,
   state: ChatState,
   capabilities: SourceCapabilities = REVIEW_CAPABILITIES,
+  locale: LocaleId = "en",
 ): Html {
   switch (id) {
     case SURFACE.search:
@@ -473,7 +475,7 @@ export function surfaceBodyFor(
         ? textForm(c, "room-invite", "surface.roomInvite.label", "surface.roomInvite.submit")
         : html``;
     case SURFACE.settings:
-      return settingsBody(c, state, capabilities);
+      return settingsBody(c, state, capabilities, locale);
     case SURFACE.roomSettings:
       return capabilities.setRoomState ? roomSettingsBody(c, state) : html``;
     case SURFACE.roomMenu: {
@@ -618,7 +620,14 @@ function settingsTabs(
   return html`<nav class="settings-tabs" aria-label="${t(c, labelKey)}">${items.map((item) => html`<a href="${item.href}">${t(c, item.key)}</a>`)}</nav>`;
 }
 
-function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabilities): Html {
+/** A device row shows a local time, never the ISO string the server sent. */
+function lastSeen(value: string, locale: LocaleId): string {
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return "";
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(time);
+}
+
+function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabilities, locale: LocaleId): Html {
   const session = state.session;
   const sessionCapabilities = session?.capabilities ?? null;
   const accountAvatar = session === null ? null : safeAvatarUrl(session.avatar);
@@ -819,7 +828,7 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
                           : html``
                       }</strong
                     >
-                    <span class="note">${t(c, "settings.lastSeen")}: ${device.lastSeen}</span>
+                    <span class="note">${t(c, "settings.lastSeen")}: ${lastSeen(device.lastSeen, locale)}</span>
                   </div>
                   <div class="device-actions">
                     ${

@@ -1,4 +1,5 @@
 // One delegated lifecycle for every overlay keeps focus, popover placement and teardown consistent.
+import type { LocaleId } from "../core/locales.ts";
 import { t } from "../lib/catalog.ts";
 import type { Catalog, CatalogKey } from "../lib/catalog.ts";
 import { html } from "../lib/html.ts";
@@ -30,6 +31,7 @@ interface SurfacesInput {
   readonly actions: Actions;
   readonly c: Catalog;
   readonly composer: Composer;
+  readonly locale: LocaleId;
 }
 
 interface ProfileTarget {
@@ -451,7 +453,7 @@ function showSettingsError(message: string): void {
   error.hidden = false;
 }
 
-export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): () => void {
+export function wireSurfaces({ store, actions, c, composer, locale }: SurfacesInput): () => void {
   let activeRoomId: string | null = null;
   let activeMessageId: string | null = null;
   let profileTarget: ProfileTarget | null = null;
@@ -547,7 +549,7 @@ export function wireSurfaces({ store, actions, c, composer }: SurfacesInput): ()
     const scrollTop = body.scrollTop;
     const current = state();
     const target = overrideRoomId === undefined ? current : { ...current, roomId: overrideRoomId };
-    replaceHtml(body, surfaceBodyFor(c, id, target, capabilities));
+    replaceHtml(body, surfaceBodyFor(c, id, target, capabilities, locale));
     body.scrollTop = scrollTop;
     if (memberGroup !== null) {
       const tab = body.querySelector<HTMLElement>(`[data-member-group="${CSS.escape(memberGroup)}"]`);
