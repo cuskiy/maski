@@ -1934,6 +1934,8 @@ export class MatrixSession implements SessionPort {
     // room keys undecryptable. A gate that cannot decrypt is not ready.
     if (this.secretStorageKeys.size === 0) return "needs-recovery";
     const candidates = await this.secretStorageCandidates(client);
+    // The key descriptions arrive with account data, so an early check must not answer for them.
+    if (candidates.size === 0) return "unknown";
     let matches = false;
     for (const [id, info] of candidates) {
       const key = this.secretStorageKeys.get(id);
@@ -1947,10 +1949,9 @@ export class MatrixSession implements SessionPort {
         // A malformed key description is not a usable key.
       }
     }
-    if (!matches) {
-      this.secretStorageKeys.clear();
-      return "needs-recovery";
-    }
+    // A key that does not match is kept: the description may still be the pre-reset one, and the
+    // next account-data event has to be able to check it again.
+    if (!matches) return "needs-recovery";
     const master = await client.secretStorage.get("m.cross_signing.master").catch(() => undefined);
     const status = await crypto.getDeviceVerificationStatus(userId, deviceId);
     if (master === undefined) return "needs-recovery";
@@ -2755,6 +2756,18 @@ export class MatrixSession implements SessionPort {
       const type = event.getType();
       if (type === "m.image_pack.rooms" || type === "im.ponies.emote_rooms" || type === "im.ponies.user_emotes") {
         void this.refreshStickerPacks().catch(() => undefined);
+      }
+      // A key description that arrives after the first gate check decides the gate again.
+      if (
+        type.startsWith("m.secret_storage.") ||
+        type.startsWith("m.cross_signing.") ||
+        type === "m.megolm_backup.v1"
+      ) {
+        void this.refreshGate().then((gate) => {
+          if (gate === this.keyReady) return;
+          this.keyReady = gate;
+          this.emit({ type: "keys", payload: gate });
+        });
       }
     });
     client.on(RoomEvent.Timeline, (event: MatrixEvent, room: Room | undefined, toStart?: boolean) => {
