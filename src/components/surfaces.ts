@@ -620,6 +620,12 @@ function settingsTabs(
   return html`<nav class="settings-tabs" aria-label="${t(c, labelKey)}">${items.map((item) => html`<a href="${item.href}">${t(c, item.key)}</a>`)}</nav>`;
 }
 
+/** The account's recovery key exists once this device can use secret storage, not only while the
+ * one-time key that a reset shows is on screen. */
+function recoverySet(state: ChatState): boolean {
+  return state.phase === "ready" || state.phase === "verifying" || state.recoveryKey !== null;
+}
+
 /** A device row shows a local time, never the ISO string the server sent. */
 function lastSeen(value: string, locale: LocaleId): string {
   const time = Date.parse(value);
@@ -736,7 +742,7 @@ function settingsBody(c: Catalog, state: ChatState, capabilities: SourceCapabili
         <div class="setting-row">
           <span>${t(c, "settings.recovery")}</span>
           <span class="setting-value" data-setting-value="recovery"
-            >${t(c, state.recoveryKey === null ? "settings.recoveryNotSet" : "settings.recoveryShown")}</span
+            >${t(c, recoverySet(state) ? "settings.recoveryShown" : "settings.recoveryNotSet")}</span
           >
         </div>
         ${

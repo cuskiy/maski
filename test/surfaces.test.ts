@@ -399,3 +399,12 @@ void test("settings exposes the sticker pack toggle", () => {
   const tabs = new Set([...markup.matchAll(/href="#(settings-[^"]+)"/gu)].map((match) => match[1]));
   for (const section of sections) assert.ok(tabs.has(section), `settings section ${section} has no tab`);
 });
+
+void test("the settings recovery row says the key exists whenever the gate is usable", () => {
+  const ready = { ...emptyChatState(), phase: "ready" as const, recoveryKey: null };
+  const body = surfaceBodyFor(en, SURFACE.settings, ready, PRODUCTION_CAPABILITIES).value;
+  assert.match(body, /data-setting-value="recovery"\s*>Set</u);
+  const locked = { ...emptyChatState(), phase: "locked" as const, recoveryKey: null };
+  const missing = surfaceBodyFor(en, SURFACE.settings, locked, PRODUCTION_CAPABILITIES).value;
+  assert.match(missing, /data-setting-value="recovery"\s*>Not set</u);
+});
