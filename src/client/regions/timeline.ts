@@ -54,12 +54,16 @@ function cloneElement(element: HTMLElement): HTMLElement {
   throw new Error("a cloned row is not an element");
 }
 
-/** Moves list children into order without detaching a node that already sits in its place. */
+/** Moves list children into order without detaching a node that already sits in its place; a child the
+ * target does not name is removed first, so a replaced row cannot leave its old copy behind. */
 function patchChildren(list: HTMLOListElement, target: readonly HTMLElement[]): void {
-  const current = Array.from(list.children);
+  const keep = new Set<Element>(target);
+  for (const child of Array.from(list.children)) {
+    if (!keep.has(child)) child.remove();
+  }
   let index = 0;
   for (const node of target) {
-    const existing = current[index];
+    const existing = list.children.item(index);
     if (existing === node) {
       index += 1;
       continue;
@@ -67,7 +71,6 @@ function patchChildren(list: HTMLOListElement, target: readonly HTMLElement[]): 
     list.insertBefore(node, existing ?? null);
     index += 1;
   }
-  while (list.children.length > target.length) list.lastElementChild?.remove();
 }
 
 const ARRIVE_DURATION_MS = 160;
